@@ -29,4 +29,5 @@ i18n-applicable: "适用于"
 ``` {.include}
 docs/index.md
 docs/frontend/.index.md
+docs/memblock/.index.md
 ```
