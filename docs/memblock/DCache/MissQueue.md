@@ -2,6 +2,7 @@
 
 ## 功能描述
 负责处理miss的load、store和原子请求，包含16项Miss Entry, 每一项负责一个请求，通过一组状态寄存器控制其处理流程。
+
 * miss的load请求：
   Miss Queue为它分配一项空的Miss Entry，并且可以在一定条件下合并请求或拒绝请求，分配后在Miss Entry中记录相关信息。根据 way_en 所在的块是否有效, 判断是否需要替换，如果要替换则向 Main Pipe 发送 replace 请求；此外还会向 L2 发送 Acquire 请求，如果是对整个 block 的覆盖写则发送 AcquirePerm (L2 将会省去一次 sram 读操作)，否则发送 AcquireBlock；等待 L2 返回权限 (Grant) 或者数据加权限 (GrantData)；在收到 GrantData 每一个 beat 后要将数据转发给 Load Queue；在收到 Grant / GrantData 第一个 beat 后向 L2 返回 GrantAck；在收到 Grant / GrantData 最后一个 beat，并且 replace 请求已经完成后, 向 Refill Pipe 发送 refill 请求, 并等待应答, 完成数据回填；最后释放Miss Entry。
 
@@ -13,10 +14,13 @@
 
 ### 特性 1： MissQueue 入队处理
 MissQueue对于新入队请求，总的操作可分为响应和拒绝，而响应又可以分为分配和合并。Miss Queue 支持一定程度的请求合并, 从而提高 miss 请求处理的效率。
+
 * 空项分配：如果新的miss请求不符合合并或者拒绝条件，则为该请求分配新的 Miss Entry。
+
 * 请求合并条件：当已分配的 Miss Entry (请求 A) 和新的 miss 请求 B 的块地址相同时，在下述两种情况下可以将请求B合并：
   * 向L2的Acquire 请求还没有握手, 且 A 是 load 请求, B 是 load 或 store 请求，即A还未成功发起对L2的读请求前可以合并B，一起发送Acquire；
   * 向 L2 的 Acquire 已经发送出去，但是还没有收到 Grant(Data)，或收到 Grant(Data) 但还没有转发给 Load Queue，且 A 是 load 或 store 请求，B 是 load 请求，即新来的load请求可以在refill前合并，而store请求只能在acquire握手前合并。
+
 * 请求拒绝条件：下述三种情况下需要将新的miss请求拒绝，该请求会在一定时间后重新发出：
   * 新的 miss 请求和某个 Miss Entry 中请求的块地址相同, 但是不满足请求合并条件；
   * 新的 miss 请求的块和某个 Miss Entry 中请求的块地址不同, 但是在 DCache 中位于相同的slot (即具有相同的 set 和 way)；
@@ -38,6 +42,7 @@ MissQueue支持数据前递，如果，lsq重发信号有效（具体重发逻�
 
 ### 请求接口时序实例
 下图展示了一个load miss请求进入MissQueue之后的接口时序。请求到达后分配miss entry，下一拍向L2发送acquire请求，第二拍再向main pipe发送replace请求；接收到grant数据的第一个beat之后，向ldq返回load响应，接收到grant数据的最后一个beat之后，下一拍向refill pipe发出回填请求。
+
 ![MissQueue时序](./figure/DCache-MissQueue-Timing.png)
 
 #### MissEntry模块
