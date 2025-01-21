@@ -17,12 +17,13 @@ Kunminghu架构采用了64KB的VIPT cache，从而引入了 cache 别名问题�
 
 ## 整体框图
 
-![ProbeSnoop流程图](./figure/DCache-ProbeSnoop.png)
+![ProbeSnoop流程图](./figure/DCache-ProbeSnoop.svg)
 
 
 
 ## 接口时序
 ### 请求接口时序实例
+
 下图展示了Probe Queue处理一个probe请求的接口时序，Probe Queue首先收到来自L2的probe请求，转换成内部请求并为其分配一项空的Probe Entry；经过一拍的状态转换可以向 Main Pipe 发送 probe 请求, 但由于时序考虑该请求会再被延迟一拍（probe queue里选择一项有一个arbiter， mainpipe入口也有一个arbiter选择各来源的请求，两次仲裁在一拍完成比较困难，因此在这里先锁存一拍），因此两拍后pipe_req_valid拉高；再下一拍即认为MainPipe返回了应答（这里实际上不需要等mainpipe返回resp），直接释放Probe Entry。
 
 ![ProbeSnoop时序](./figure/DCache-ProbeSnoop-Timing.png)
