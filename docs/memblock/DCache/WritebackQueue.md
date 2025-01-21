@@ -28,7 +28,7 @@ TileLink 手册对并发事务的限制要求如果 master 有 pending Grant (�
 ```
 
 ## 整体框图
-![WritebackQueue流程图](./figure/DCache-WritebackQueue.png)
+![WritebackQueue流程图](./figure/DCache-WritebackQueue.svg)
 
 
 ## 接口时序
@@ -46,4 +46,4 @@ TileLink 手册对并发事务的限制要求如果 master 有 pending Grant (�
 | s_release_req  | 正在发送 Release 或者 ProbeAck 请求          |
 | s_release_resp | 等待ReleaseAck请求                       |
 
-![WriteBackEntry示意图](./figure/DCache-WritebackEntry.png)
+![WriteBackEntry示意图](./figure/DCache-WritebackEntry.svg)
