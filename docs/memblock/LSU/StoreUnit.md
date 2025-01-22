@@ -40,4 +40,6 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如下图StoreAddrPipe所�
 
 ### 接口时序实例
 
+store指令进入StoreUnit后，在stage 0 请求TLB，stage 1得到TLB返回的paddr。在stage 0将mask写入StoreQueue，stage 1向 RAW发送请求，并通过io_lsq将store指令的其他信息更新到LoadStoreQueue。在stage 2得到feedback相关信息，stage 4 通过stout写回。
+
 ![StoreUnit接口时序](./figure/StoreUnit-timing.svg)
