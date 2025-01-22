@@ -11,10 +11,13 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
 ### 特性 2：DCache Control Bank
 
 每一个 Control Bank 包含寄存器：ECCCTL、ECCEID、ECCMASK，每一个寄存器是 8 字节。
+
 ![CtrlBank排布](./figure/DCache-ECCCtrlBank.svg)
 
 * ECCCTL（ECC Control）：ECC 注入控制寄存器
+
   ![ECCCTL](./figure/DCache-ECCCTL.svg)
+
   * ese（error signaling enable）：表示注入有效，初始化为 0。当注入成功后，ese将拉低。
   * pst：支持注入信号。当pst=1时，ECCEID计数器减到0并且成功注入后，注入计时器会被恢复到上一次设置的ECCEID，重新注入；当pst==0时，只注入一次。
   * ede（error delay enable）：表示counter有效，初始化为0。如果
@@ -26,11 +29,13 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
   * bank：bank有效信号，初始化为0，bank中的位置位时，对应mask有效
 
 * ECCEID（ECC Error Inject Delay）：ECC 注入延迟控制器。
+
   ![ECCEID](./figure/DCache-ECCEID.svg)
 
   当 ese==1并且ede==1时，开始递减，直至减为0。目前采用和核频率相同的时钟，也可以分频。由于ECC注入依赖DCache的访问，所以EID的时间和ECC错误触发的时间可能不一致。
 
 * ECCMASK（ECC Mask）：ECC注入掩码寄存器。
+
   ![ECCMASK](./figure/DCache-ECCMASK.svg)
 
   0 表示不反转，1 表示翻转。tag注入只使用ECCMASK0中对应tag长度的位。
