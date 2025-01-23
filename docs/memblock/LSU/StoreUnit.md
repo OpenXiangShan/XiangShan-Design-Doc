@@ -10,6 +10,7 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如下图StoreAddrPipe所�
     * 计算VA地址
     * 地址Miss-Align 检查更新到uop.cf.exceptionVec(storeAddrMisaligned)
     * 发出DTLB读请求到总线tlb
+    * 发出DCache请求
     * 更新指令的Mask信息到总线s0_mask_out -> StoreQueue
     * 预测执行的Store有可能被ROB flush
 
@@ -22,6 +23,8 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如下图StoreAddrPipe所�
 * stage 2
     * mmio/PMP检查并更新总线lsq_replenish -> storeQueue
     * 更新DTLB结果到总线feedback_slow->RV
+    * 如果指令是misalign st，且跨16byte，需要发送请求到misalignBuffer
+    * 如果指令是nc/mmio，向DCache发送kill
 
 * stage 3
     * 违例检查延时
