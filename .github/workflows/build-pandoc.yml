@@ -9,31 +9,30 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/openxiangshan/docs-utils:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Setup environment variables
-        run: |
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          echo "$HOME/bin" >> $GITHUB_PATH
-
-      - name: Install dependency
-        run: |
-          ./utils/dependency.sh
-
       - name: build
+        env:
+          HOME: /root
         run: |
+          git config --global --add safe.directory $(pwd)
           make
-      
+
       - name: Upload built pdf
         uses: actions/upload-artifact@v4
         with:
           name: xiangshan-design-doc-pdf
           path: xiangshan-design-doc.pdf
-      
+
       - name: Upload built html
         uses: actions/upload-artifact@v4
         with:
