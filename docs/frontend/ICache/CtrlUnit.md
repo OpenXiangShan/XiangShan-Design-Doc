@@ -21,11 +21,38 @@ CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地
 | CSR | field | desp |
 | --- | --- | --- |
 | eccctrl | enable | ECC 错误校验使能，原 `sfetchctl(0)` |
-| eccctrl | inject | ECC 错误注入使能，写 1 即使能，读恒 0 |
-| eccctrl | itarget | ECC 错误注入目标<br>0: metaArray<br>1: rsvd<br>2: dataArray<br>3: rsvd |
-| eccctrl | istatus | ECC 错误注入状态（read-only）<br>0: idle：注入控制器闲置<br>1: working：收到注入请求，注入中<br>2: injected：注入完成，等待触发<br>3: rsvd<br>4: rsvd<br>5: rsvd<br>6: rsvd<br>7: error：注入出错 |
-| eccctrl | ierror | ECC 错误原因（read-only）<br>0: ECC 未使能 (i.e. `!eccctrl.enable`)  <br>1: inject 目标 SRAM 无效 (i.e. `eccctrl.itarget==rsvd`)  <br>2: inject 目标地址 (i.e. `ecciaddr.paddr`) 不在 ICache 中<br>3: rsvd  <br>4: rsvd  <br>5: rsvd  <br>6: rsvd  <br>7: rsvd |
+| eccctrl | inject | ECC 错误注入使能，写 1 开始注入，读恒 0 |
+| eccctrl | itarget | ECC 错误注入目标，见后表 |
+| eccctrl | istatus | ECC 错误注入状态（read-only），见后表 |
+| eccctrl | ierror | ECC 错误原因（read-only），仅在`eccctrl.istatus===error`时有效，见后表 |
 | ecciaddr | paddr | ECC 错误注入物理地址 |
+
+`eccctrl.itarget`:
+
+| value | target |
+| --- | --- |
+| 0 | metaArray |
+| 2 | dataArray |
+| 1/3 | rsvd |
+
+`eccctrl.istatus`:
+
+| value | status |
+| --- | --- |
+| 0 | idle |
+| 1 | working |
+| 2 | injected |
+| 7 | error |
+| 3-6 | rsvd |
+
+`eccctrl.ierror`:
+
+| value | error |
+| --- | --- |
+| 0 | ECC 未使能 (i.e. `!eccctrl.enable`) |
+| 1 | inject 目标 SRAM 无效 (i.e. `eccctrl.itarget==rsvd`) |
+| 2 | inject 目标地址 (i.e. `ecciaddr.paddr`) 不在 ICache 中 |
+| 3-7 | rsvd |
 
 ## 错误校验使能
 

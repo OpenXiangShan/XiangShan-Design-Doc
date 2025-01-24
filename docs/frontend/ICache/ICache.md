@@ -21,6 +21,7 @@
 | MSHR | Miss Status Holding Register | 缺失状态保持寄存器 |
 | a/(g)pf | Access / (Guest) Page Fault | 访问错误 / （客户机）页错误 |
 | v/(g)paddr | Virtual / (Guest) Physical Address | 虚拟地址 / （客户机）物理地址 |
+| PBMT | Page-Based Memory Types | 基于页的内存类型，见特权手册 Svpbmt 扩展 |
 
 ## 子模块列表
 
@@ -86,7 +87,32 @@ DataArray 中的 cacheline 默认分为 8 个 bank 存储，每个 bank 中存�
 
 ### （预）取指请求
 
-见[MainPipe 子模块文档](MainPipe.md)和[IPrefetchPipe 子模块文档](IPrefetchPipe.md)。
+FTQ 分别把（预）取指请求发送到（预）取指流水线进行处理。如前所述，由 IPrefetch 对 MetaArray 和 ITLB 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）在 IPrefetchPipe s1 流水级存储到 WayLookup 中，以供 MainPipe s0 流水级读取。
+
+在上电解复位/重定向时，由于 WayLookup 为空，而 FTQ 的 prefetchPtr、fetchPtr 复位到同一位置，MainPipe s0 流水级不得不阻塞等待 IPrefetchPipe s1 流水级的写入，这引入了一拍的额外重定向延迟。但随着 BPU 向 FTQ 填充预测块的进行和 MainPipe/IFU 因各种原因阻塞（e.g. miss、IBuffer 满），IPrefetchPipe 将工作在 MainPipe 前（`prefetchPtr > fetchPtr`），而 WayLookup 中也会有足够的元数据，此时 MainPipe s0 级和 IPrefetchPipe s0 级的工作将是并行的。
+
+![ICache 两条流水线的关系](../figure/ICache/ICache/icache_stages.png)
+
+详细的取指过程见[MainPipe 子模块文档](MainPipe.md)、[IPrefetchPipe 子模块文档](IPrefetchPipe.md)和[WayLookup 子模块文档](WayLookup.md)。
+
+### 异常传递/特殊情况处理
+
+ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），可能的异常和特殊情况有：
+
+| 来源 | 异常 | 描述 | 处理 |
+| --- | --- | --- | --- |
+| ITLB | af | 虚拟地址翻译过程出现访问错误 | 禁止取指，标记取指块为 af，经 IFU、IBuffer 发送到后端处理 |
+| ITLB | gpf | 客户机页错误 | 禁止取指，标记取指块为 gpf，经 IFU、IBuffer 发送到后端处理，将有效的 gpaddr 发送到后端的 GPAMem 以备使用 |
+| ITLB | pf | 页错误 | 禁止取指，标记取指块为 pf，经 IFU、IBuffer 发送到后端处理 |
+| PMP | af | 物理地址无权限访问 | 同 ITLB af |
+| MissUnit | L2 corrupt | L2 cache 响应 tilelink corrupt （可能是 L2 ECC 错误，亦可能是无权限访问总线地址空间导致 denied） | 同 ITLB af |
+
+| 来源 | 特殊情况 | 描述 | 处理 |
+| --- | --- | --- | --- |
+| PMP | mmio | 物理地址为 mmio 空间 | 禁止取指，标记取指块为 mmio，由 IFU 进行**非推测性**取指 |
+| ITLB | pbmt.NC | 页属性为不可缓存、幂等 | 禁止取指，由 IFU 进行**推测性**取指 |
+| ITLB | pbmt.IO | 页属性为不可缓存、非幂等 | 同 pmp mmio |
+| MainPipe | ECC error | 主流水检查发现 MetaArray/DataArray ECC 错误 | 见[ECC 一节](#ecc)，旧版同 ITLB af，新版做自动重取 |
 
 ### DataArray 分 bank 的低功耗设计
 
