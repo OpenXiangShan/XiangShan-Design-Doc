@@ -91,3 +91,17 @@ LoadUnit一共有4级流水线，根据不同阶段流水线进行功能描述�
 <!-- 请使用 svg -->
 
 ![LoadUnit整体框图](./figure/LoadUnit.svg)
+
+## 接口时序
+
+### LoadUnit接口时序实例
+
+![LoadUnit接口时序](./figure/LoadUnit-timing.svg)
+
+load指令进入LoadUnit后，在Load_s0 请求TLB和DCache，Load_s1得到TLB返回的paddr，Load_s2得到是否命中DCache。在Load_s2进行st-ld和ld-ld违例检查，Load_s3通过io_lsq_ldin更新LoadQueue。在Load_s3通过ldout写回。
+
+### Load_s0不同源仲裁时序实例
+
+![Load_s0不同源仲裁时序](./figure/LoadUnit-s0-arb.svg)
+
+图中示例了不同来源的load指令在Load_s0的仲裁，第三个clk只有io_ldin_valid有效，且握手成功，在下一拍进入Load_s1。第五个clk中io_ldin_valid和io_replay_valid同时有效，由于replay请求比标量load的优先级高，所以replay请求获得仲裁，进入Load_s1。
