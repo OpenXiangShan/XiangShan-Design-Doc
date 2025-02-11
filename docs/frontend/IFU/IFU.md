@@ -122,11 +122,13 @@ F3 流水级最终得到经过扩展的 32 位指令码，以及 16 条指令中
 
 ### 特性 14：Trigger 实现对于 PC 的硬件断点功能
 
-在 IFU 的 FrontendTrigger 模块里共 4 个 Trigger，编号为 0-3，每个 Trigger 的配置信息（断点类型、匹配地址等）保存在 tdata 寄存器中。
+在 IFU 的 FrontendTrigger 模块里共 4 个 Trigger，编号为 0-3，每个 Trigger 的配置信息（断点类型、匹配地址等）保存在 `tdata` 寄存器中。
 
-当软件向 CSR 寄存器 tselect、tdata1/2 写入特定的值时，CSR 会向 IFU 发送 tUpdate 请求，更新 FrontendTrigger 内的 tdata 寄存器中的配置信息。目前前端的 Trigger 仅可以配置成 PC 断点（mcontrol(tdata1)寄存器的 select 位为 0；当 select=1 时，该 Trigger 将永远不会命中，且不会产生异常）。
+当软件向 CSR 寄存器 `tselect`、`tdata1/2` 写入特定的值时，CSR 会向 IFU 发送 tUpdate 请求，更新 FrontendTrigger 内的 `tdata` 寄存器中的配置信息。目前前端的 Trigger 仅可以配置成 PC 断点（`mcontrol.select` 寄存器为 0；当 `mcontrol.select`=1 时，该 Trigger 将永远不会命中，且不会产生异常）。
 
-在取指时，IFU 的 F3 流水级会向 FrontendTrigger 模块发起查询并在同一周期得到结果。后者会对取指块内每一条指令在每一个 Trigger 上做检查，当指令的 PC 和 tdata2 寄存器内容的关系满足 mcontrol 的 match 位所指示的关系（香山支持 match 位为 0、2、3，对应等于、大于、小于）时，该指令会被标记为 Trigger 命中，随着执行在后端产生断点异常，进入 M-Mode 或调试模式。前端的 Trigger 支持 Chain 功能。当它们对应的 Chain 位被置时，只有当该 Trigger 和编号在它后面一位的 Trigger 同时命中，且 timing 配置相同时，处理器才会产生异常。
+在取指时，IFU 的 F3 流水级会向 FrontendTrigger 模块发起查询并在同一周期得到结果。后者会对取指块内每一条指令在每一个 Trigger 上做检查，当不处于 debug 模式时，指令的 PC 和 `tdata2` 寄存器内容的关系满足 `mcontrol.match` 位所指示的关系（香山支持 `mcontrol.match` 位为 0、2、3，对应等于、大于、小于）时，该指令会被标记为 Trigger 命中，随着执行在后端产生断点异常，进入 M-Mode 或调试模式。前端的 Trigger 支持 Chain 功能。当它们对应的 `mcontrol.chain` 位被置时，只有当该 Trigger 和编号在它后面一位的 Trigger 同时命中时，处理器才会产生异常[^trigger_timing]。
+
+[^trigger_timing]: 在过去（riscv-debug-spec-draft，对应 XiangShan 2024.10.05 合入的 [PR#3693](https://github.com/OpenXiangShan/XiangShan/pull/3693) 前）的版本中，Chain 还需要满足两个 Trigger 的 `mcontrol.timing` 是相同的。而在新版（riscv-debug-spec-v1.0.0）中，`mcontrol.timing` 被移除。目前 XiangShan 的 scala 实现仍保留了这一位，但其值永远为 0 且不可写入，编译生成的 verilog 代码中没有这一位。参考：[https://github.com/riscv/riscv-debug-spec/pull/807](https://github.com/riscv/riscv-debug-spec/pull/807)。
 
 ## 总体设计
 
