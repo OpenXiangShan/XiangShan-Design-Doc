@@ -24,7 +24,7 @@ meta 信息包括 ptag，vtag，state，cohCount，missqReplayCount，具体功�
 
 ### 特性 1：sbuffer的入队逻辑
 
-* 每一拍最多处理两个从 StoreQueue 发来的请求，然后检查请求是否需要分配新的 entry，如果两个都需要分配新的 entry 则按奇偶选出两个空闲项进行分配。
+* 每一拍最多处理两个从 StoreQueue 发来的请求，然后检查请求是否需要分配新的 entry，如果两个都需要分配新的 entry 则按奇偶选出两个空闲项进行分配。如果两个请求的ptag相同，则分配到同一个空闲项。
 
 * 如果已经有相同 cacheline 的项就不需要分配新的项，直接合并到相同项内；如果这个相同的 cacheline 已经被发给 dcache 了( state_inflight 为 true )，就不能进行合并，需要重新分配一项，并且记录新分配的项依赖 inflight 的项( 设置 w_sameblock_inflight 为 true，waitInflightMask 为 inflight 项的 id )，记录依赖的目的是让 inflight 的项写到 dcache 之后才能让新的这一项写到 dcache，保证 store 的顺序。
 
@@ -68,16 +68,16 @@ meta 信息包括 ptag，vtag，state，cohCount，missqReplayCount，具体功�
 
 当io_in_*_valid与io_in_*_ready握手时，sbuffer接收到storeQueue的写请求，使用地址去做检查，要么新分配一项要么合并到已有一项中，利用io_in_*_bits的信息去更新项目。
 
-![接收store指令写入时序](./figure/sbuffer-stin.png)
+![接收store指令写入时序](./figure/sbuffer-stin.svg)
 
 ### 写入到dcache时序实例
 
 当io_dcache_req_ready和io_dcache_req_valid握手时，将io_dcache_req_bits_* 给到dcache，将请求传递过去让dcache处理。
 
-![写入到dcache时序](./figure/sbuffer-en-dcache-timing.png)
+![写入到dcache时序](./figure/sbuffer-en-dcache-timing.svg)
 
 ### 前递请求时序实例
 
-前递请求不需要ready信号，一旦io_forward_* _valid为高，就需要处理这个请求，利用请求的paddr和varddr来进行查询，数据和其他信息在io_forward_*_valid为高的下一拍有效。例如上图在8268801拍前递查询请求有效，在8268802拍得到前递查询的数据。
+前递请求不需要ready信号，一旦io_forward_* _valid为高，就需要处理这个请求，利用请求的paddr和varddr来进行查询，数据和其他信息在io_forward_*_valid为高的下一拍有效。
 
-![前递请求时序](./figure/sbuffer-fwdtiming.png)
+![前递请求时序](./figure/sbuffer-fwdtiming.svg)
