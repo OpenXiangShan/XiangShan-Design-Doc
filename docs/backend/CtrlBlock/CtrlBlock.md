@@ -9,48 +9,83 @@
 
 Table: 术语说明
 
-| 缩写 | 全称 | 描述 |
-| --- | --- | --- |
-| - | Decode Unit | 译码单元 |
-| - | Fusion Decoder | 指令融合 |
-| ROB | Reorder Buffer | 重排序缓存 |
-| RAT | Register Alias Table | 重命名映射表 |
-| - | Rename | 重命名 |
-| LSQ | Load Store Queue | 访存指令队列 |
-| SSIT | Store Set Identifier Table | 存储指令符号表 |
-| - | Wait Table | 加载指令等待表 |
-| - | Dispatch | 派遣 |
-| IntDq | Int Dispatch Queue | 定点派遣队列 |
-| fpDq | Float Point Dispatch Queue | 浮点派遣队列 |
-| lsDq | Load Store Dispatch Queue | 访存派遣队列 |
-| - | Redirect | 指令重定向 |
-| pcMem | PC MEM | 指令地址缓存 |
-| jalrTargetMem | Jalr Target Mem | 跳转目标地址缓存 |
+| 缩写  | 全称                       | 描述         |
+| ----- | -------------------------- | ------------ |
+| -     | Decode Unit                | 译码单元     |
+| -     | Fusion Decoder             | 指令融合     |
+| ROB   | Reorder Buffer             | 重排序缓存   |
+| RAT   | Register Alias Table       | 重命名映射表 |
+| -     | Rename                     | 重命名       |
+| LSQ   | Load Store Queue           | 访存指令队列 |
+| -     | Dispatch                   | 派遣         |
+| IntDq | Int Dispatch Queue         | 定点派遣队列 |
+| fpDq  | Float Point Dispatch Queue | 浮点派遣队列 |
+| lsDq  | Load Store Dispatch Queue  | 访存派遣队列 |
+| -     | Redirect                   | 指令重定向   |
+| pcMem | PC MEM                     | 指令地址缓存 |
 
 ## 子模块列表
 
 Table: 子模块列表
 
-| 子模块 | 描述 |
-| --- | --- |
+| 子模块        | 描述            |
+| ------------- | --------------- |
+| dispatch      | 指令派遣模块    |
+| decode        | 指令译码模块    |
+| fusionDecoder | 指令融合模块    |
+| rat           | 重命名表        |
+| rename        | 重命名模块      |
+| redirectGen   | 重定向生成模块  |
+| pcMem         | 指令地址缓存    |
+| rob           | 重排序缓冲      |
+| trace         | 指令 trace 模块 |
+| snpt          | 快照模块        |
 
 ## 设计规格
 
-- TODO
+译码宽度：6
+
+重命名宽度：6
+
+分派宽度：6
+
+rob 提交宽度：8
+
+rab 提交宽度：6
+
+rob 大小：160
+
+快照大小：4 项
+
+整型物理寄存器数：224
+
+浮点物理寄存器数：192
+
+向量物理寄存器数：128
+
+向量 v0 物理寄存器数：22
+
+向量 vl 物理寄存器数：32
+
+支持重命名快照
+
+支持 trace 扩展
 
 ## 功能
 
-CtrlBlock 模块包含指令译码（Decode）、寄存器重命名（Rename，RenameTable）、指令分派（Dispatch，DispatchQueue）、提交部件（ROB）、重定向处理和快照重命名恢复。
+CtrlBlock 模块包含指令译码（Decode）、指令融合（FusionDecoder）、寄存器重命名（Rename，RenameTable）、指令分派（Dispatch）、提交部件（ROB）、重定向处理（RedirectGenerator）和快照重命名恢复（SnapshotGenerator）。
 
-译码功能部件在每个时钟周期会从指令队列头部取出 6 条指令进行译码。译码过程是将指令码翻译为方便功能部件处理的内部码，标识出指令类型、所需要操作的寄存器号以及指令码中可能包含的立即数，用于接下来的寄存器重命名阶段。对于复杂指令，选出后通过 DecodeCompunit（一次一条）进行指令拆分，对于 vset 指令存储到 Vtype 中知道指令拆分。最后以复杂指令在前，简单指令在后每周期选出 6 个 uop 传递到重命名阶段。译码阶段还包括发出读 RenameTable 请求。
+译码功能部件在每个时钟周期会从指令队列头部取出 6 条指令进行译码。译码过程是将指令码翻译为方便功能部件处理的内部码，标识出指令类型、所需要操作的寄存器号以及指令码中可能包含的立即数，用于接下来的寄存器重命名阶段。对于复杂指令，选出后通过复杂译码器 DecodeCompunit 一次一条进行指令拆分，对于 vset 指令存储到 Vtype 中指导指令拆分。最后以复杂指令在前，简单指令在后每周期选出 6 个 uop 传递到重命名阶段。译码阶段还包括发出读 RenameTable 请求。
+
+指令融合会对指令译码得到的 6 个 uop 凑成（uop0, uop1）, (uop1, uop2), (uop2, uop3), (uop3, uop4）, (uop4, uop5) 的至多 5 对待融合指令对。然后判断每一对指令是否能够进行指令融合。当前我们支持两种类型的指令融合，分别是融合成为一个带有新的控制信号的指令，以及将第一条指令的操作编码替换为另一个的形式。在判断可以进行指令融合后，我们会对 uop 的操作数，如逻辑寄存器号重新赋值，选择新的操作数。另外，HINT 类指令不支持被指令融合，例如 fence 指令不能够被融合。
 
 重命名阶段负责管理和维护寄存器与物理寄存器之间的映射，通过对逻辑寄存器的重命名，实现指令间依赖的消除，完成指令的乱序调度。重命名模块主要包含 Rename、RenameTable 两个模块，分别负责 Rename 流水级的控制、(体系结构/推测)重命名表的维护，Rename 中包括 FreeList 以及 CompressUnit 两个模块，负责空闲寄存器的维护以及 Rob 压缩。
 
-派遣阶段包括两级流水级，第一级 Dispatch 负责将指令分类并发送至定点、浮点与访存三类派遣队列，第二级 DispatchQueue 负责将派遣队列中对应类型的指令进一步根据不同的运算操作类型派遣至不同的 Dispatch2IQ。
+派遣阶段将重命名后的指令根据指令类型分发到 4 个调度器中，分别对应于整型，浮点，向量和访存。每个调度器中根据不同的运算操作类型又分为若干的发射队列（issue queue），每个发射队列的入口大小为 2。
 
-指令流在 CtrlBlock 的传递过程为：CtrlBlock 读取 Frontend 传入的 6 条指令对应 ctrlflow，经过 decode 增加译码逻辑寄存器、运算操作符等信息，复杂指令经过 DecodeComp 添加指令拆分信息，每周期选出六条 uop 输出，并发出读 RAT 请求。对于可以进行指令融合的 uop，在进入 rename 时进行融合以及清除。之后经过 rename 增加物理寄存器信息以及 rob 压缩信息后传入 dispatch，最后通过 dispatch 进到 rob / rab / vtype 申请 entry，根据指令类型输出到 dispatch queue。这些模块只有 dispatch queue 顺序进，乱序出，其他模块都是顺序进，顺序出。
+指令流在 CtrlBlock 的传递过程为：CtrlBlock 读取 Frontend 传入的 6 条指令对应 ctrlflow，经过 decode 增加译码逻辑寄存器、运算操作符等信息，复杂指令经过 DecodeComp 添加指令拆分信息，每周期选出六条 uop 输出，并发出读 RAT 请求。对于可以进行指令融合的 uop，在进入 rename 时进行融合以及清除。之后经过 rename 增加物理寄存器信息以及 rob 压缩信息后传入 dispatch，最后通过 dispatch 进到 rob / rab / vtype 申请 entry，根据指令类型输出到 issue queue。这些模块中只有 issue queue 顺序进，乱序出，其他模块都是顺序进，顺序出。
 
-（图）
+![CtrlBlock 总览](./figure/CtrlBlock-Overview.svg)
 
 ### 译码
 
@@ -65,8 +100,6 @@ CtrlBlock 模块包含指令译码（Decode）、寄存器重命名（Rename，R
 译码阶段除了接受来自前端的指令流，还需要接受来自 rob 的 Vtype 相关：walk，commit，vsetvl 信息，指导向量复杂指令译码。
 
 #### 译码输出
-
-与 MemCtrl：译码阶段还会发出 ssit waittable 读请求，与 memCtrl 进行交互，在下一拍输出给 rename。
 
 与 fusionDecode：输出指令流以及控制指令融合是否开启。
 
@@ -94,159 +127,99 @@ RenameTable（RAT）被用作整数寄存器的重命名表，其中维护了逻
 
 与 snapshot：enqdata，允许生成快照。
 
-### 分派
-
-Dispatch 模块对 Rename 后的 6 条指令进行进一步的解析和分类，将不同类型的指令送至不同的 Dispatch Queue 中。
-
-Dispatch 对重命名后的指令按指令类型进行分派，每次分派 6 条指令。输入端为 Rename 模块，输出端为 toIntDq，toFpDq，toLsDq 三类分派队列，以及重排序队列（ROB）和 LSQ（只有 load / store 指令），其中向量指令和浮点指令公用 FpDq。
-
-Dispatch Queue 有三种类型，整数队列 IntDq，浮点队列 FpDq，访存 LsDq，其中 IntDq  和FpDq 的 size 是 16，LsDq 的 size 是 18；IntDq 的出队宽度 DeqWidth 是 8，FpDq 和 LsDq 的出队宽度 DeqWidth 是 6。
-
-该模块的处理分为四部分。
-
-第一部分进行指令鉴别，判断从 Rename 传入的指令类型是否是整型指令、是否是分支指令、是否是浮点指令、是否是向量指令，是否是标量访存指令、是否是标量存储指令、是否是向量访存指令、是否是向量存储指令、是否是 AMO 指令、是否被阻塞、是否等待执行。
-
-第二部分根据第一部分得到的类型信号更新 uop 的信息，包括 load 指令延迟信号、单步调试信息。其中针对 lui 指令，将 psrc(0) 的值设为 0。如果发生重定向，singleStep 状态拉低，如果开启了 singleStep，Rename 发来了第一条指令，且第一条指令可以进入 ROB，singleStep 状态置高。同时使用 checkpoint_id 寄存器计数来自 Rename 的指令个数。此外，当来自 Rename 的指令有效，同时 uop 的 storeSetHit 拉高，Dispatch 模块向 lfst 模块发送请求，并将指令是否是 store 指令信号，uop 的 ssid 信号，uop 的 robidx 信号传给 lfst。如果配置了 StoreSetEnable 参数，lfst 响应的 shouldWait 信号反馈给 uop 的 loadWaitBit 信号，lfst 响应的 robidx 信号反馈给 uop 的 waitForRobIdx 信号；如果没有配置 StoreSetEnable 参数，同时指令是访存指令，但不是 store 指令，来自 Rename 的 loadWaitBit 为高时，uop 的 loadWaitBit 置高。如果开启了 singleStep，会将 singleStep 置位。
-
-第三部分，判断指令是否被派遣，只有当所有资源都是充足的（DQ 由足够空项、ROB 有足够空项等），需要的资源都已经 ready，没有被阻塞，指令才能派遣到下一级。
-
-第四部分，进入 DQ 的指令更新 Rename 的 receive 信号，表示 uop 被派遣队列接收。此外，Dispatch 还会向 BusyTable 发出信号。如果分配了非零整数寄存器，则将 isInt 信号置高；如果分配了浮点寄存器或向量寄存器，则会将 isFp 置高。物理寄存器的地址也一并传给 BusyTable。
-
-如果一条指令能够进入 ROB，那么就将对应指令与 Rename 握手的 ready 信号拉高。如果 Rename 没有发送一条有效指令给 Dispatch，ready 信号也拉高。
-
-#### 输入
-
-来自rename的流水输入。来自rob的resp。
-
-Rob / dispatchqueue / lsq canaccept。
-
-#### 输出
-
-输出到 Rob / dispatchqueue / lsq canaccept 才能输出。
-
-### 重排序缓存
-
-在处理器核中，指令被顺序译码和重命名、乱序发射和执行，但是要有序提交（commit）。重定序队列负责指令的有序结束，它从寄存器重命名模块获取程序指令序信息，并有序地保存流水线中所有已经完成寄存器重命名但未提交的指令。指令在功能部件执行完毕并写回（writeback）后，重定序队列按照程序指令序顺序提交这些指令。
-
-ROB 的本质是一个循环队列，从出队指针处提交，从入队指针处进入。
-
-ROB 包括 6 个主要模块：
-
-- Rab，负责维护commit或walk时各个rat的状态，和rename交互。
-- RobEnqPtrWrapper，维护入队指针。
-- NewRobDeqPtrWrapper，维护出队指针。
-- ExceptionGen，异常产生模块。
-- SnapshotGenerator，快照产生模块。
-- VTypeBuffer，维护Vtype的类似Rab的结构，和decode交互。
-
-Rob，Rab，VTypeBuffer 都是需要进行 walk 的模块，由 Rob 给其它两个模块发送 walk 相关的信息，其它两个模块内部自己 walk。
-
-目前 RobSize 为 160。首先初始化一个 RobSize 大小的循环队列，出/入队指针（RobPtr）通过 value 和 flag 两个变量来模拟循环队列，由于队列的大小为 RobSize，因此当 value 的值在 RobSize - 1 的基础上增加 1 之后，会被置为 0，此时需要反转 flag 位来标记该过程，每当发生 value = RobSize - 1，value++ 或 value = 0，value-- 的时候，都会通过翻转 flag 来标记。当循环队列为空的时候，deqptr.value = enqptr.value，deqptr.flag = enqptr.flag，循环队列满的时候 deqptr.value = enqptr.value, deqptr.flag =/= enqptr.flag。
-
-Rob 中有一个大小为 RobSize 的 RobEntries 用来存放 RobEntry 的数据，包含如下信号：其中 vxsat 表示向量定点溢出标志位，realDestSize 表示这个 entry 包含的指令写目的寄存器的个数，uopNum 表示这个 entry 包含的 uop 个数，debug_* 是一些 debug 信号。
-
-ROB 采用分 8 个 Bank 读的设计，根据 robidx 的最低 3 bit 分 bank 每次读取 RobEntry 数据的时候，使用一个独热的 Line 指针（20 bit），从 8 个 Bank 中读出当前 Line 和下一 Line 的数据（共 16 个），结合当拍的写回信息更新后，写到 8 个 robDeqGroup 寄存器中，指令提交时从 8 个 robDeqGroup 中读数据进行提交。
-
-hasCommitted 表示当前行每一条指令是否已经提交，作为其它指令是否可以提交的条件之一，allCommitted 表示当前行全部提交，是切换行指针的控制信号，allCommitted 为 1 时，读出的 16 个数据的第二行，也就是后 8 个数据更新后写入到 robDeqGroup。
-
-目前 Ctrlblock 新增加了 Gpamem 模块类似于 Pcmem，存储前端的 ftq 与对应的 gpaddr（startAddr & nextLineAddr）信息。Rob 在 exception 输出的前一拍发出 gpaddr 读请求以读地址的 ftq 信息，第二拍得到返回的 gpaddr 信息。最终通过 robio 与 csr 直接交互。
-
 ### Redirect
 
 在 ctrlblock 中主要负责 redirect 的生成以及发往各个模块。
 
 #### redirect 的生成
 
-Ctrlblock 中生成的 Redirect 主要包括两部分：通过 redirectgen 汇总的处理器执行时发生的错误（分支预测，访存违例）（后面称这部分重定向为 exuredirect）；以及来自 rob exceptiongen 生成的 robflush：中断（csr）/异常/刷流水（csr+fence+load+store+varith+vload+vstore）+前端异常。Rob 中发来的异常/中断/刷流水重定向处理类似。
+Ctrlblock 中生成的 Redirect 主要包括两个来源：
 
-对于redirectgen汇总的重定向：
+* 通过 redirectgen 汇总的处理器执行时发生的错误(包含分支预测和访存违例)（后面称这部分重定向为exuredirect）；
+* 以及来自 rob exceptiongen 生成的 robflush : 中断(csr)/异常/刷流水（csr+fence+load+store+varith+vload+vstore）+前端异常。Rob中发来的异常/中断/刷流水重定向处理类似。
 
-- 功能单元写回的 redirect（jump, brh）在打一拍且没有被更老的已经处理过 redirect 取消的情况下输入到 redirectgen 模块。
-- Memblock 写回的 violation（访存违例）在打一拍且没有被更老的已经处理过的 redirect 取消的情况下输入到 redirectgen。
-- Redirectgen 选择最老的 redirect 在输入后等待一拍接受 pcMem 传回的重取指数据再输出。
-- 对于 robflush 信号，在 s0 接收到后，需要等待一拍到 s1 以接收 pcmem 传回的重新取指数据。
+对于 redirectgen 汇总的重定向：
 
-Ctrlblock 生成 Redirect 时会优先重定向 robflush 信号，当不存在 robflush 时才会处理 exuredirect。Redirect 信号主要包括：valid 控制是否需要取消；robidx；发送给前端的 CFIupdate：发生异常的 pc 值，正确的目的地址 pc，预译码信息；发送给前端的发生异常的 ftqidx 值；用于访存违例更新访存违例预测 mdp 的 stftqidx。
+* 功能单元写回的 redirect(jump, brh) 在打一拍且没有被更老的已经处理过 redirect 取消的情况下输入到 redirectgen 模块。
+* Memblock 写回的 violation（访存违例）在打一拍且没有被更老的已经处理过的 redirect 取消的情况下输入到 redirectgen。
+
+Redirectgen 选择最老的 redirect 在输入后等待一拍，加上从 pcMem 读回的数据后再输出。
+
+对于 robflush 信号，在接收到后，同样需要等待一拍加上从 pcMem 读回的数据。
+
+Ctrlblock 生成 Redirect 时会优先重定向 robflush 信号，当不存在 robflush 时才会处理 exuredirect。
 
 上述部分整体框图如下：
 
-(图)
+![redirect 的生成](./figure/Redirect-Gen.svg)
 
 #### redirect 分发
 
-Ctrlblock在生成出Redirect信号后，向流水级各个模块分发重定向信号。
+Ctrlblock 在生成出 Redirect 信号后，向流水级各个模块分发重定向信号。
 
-对于decode发送当前redirect或redirectpending（即decode等待直到Ctrlblock发给前端的redirect准备完成，使得前端有正确指令流到达之后才可继续流水）；
+* 对于 decode发送当前 redirect 或 redirectpending（即 decode 等待直到 Ctrlblock 发给前端的 redirect 准备完成，使得前端有正确指令流到达之后才可继续流水）；
+* 对于 rename，rat，rob，dispatch，snpt，mem 发送当前 redirect；
+* 对于issueblock，datapath，exublock 发送打一拍后的 redirect。
 
-对于rename，rat，rob，dispatch，mem发送当前redirect；
+其中比较特殊的是发送给前端的 redirect。发送给前端的重定向以及造成的影响，总共包括三部分：rob_commit, redirect，ftqIdx(readAhead，seloh)。
 
-对于dispatchqueue，issueblock，datapath，exublock发送打一拍后的redirect（时序）。
+##### 对于 rob commit
 
-其中比较特殊的是发送给前端的redirect以及redirect对于访存违例预测mdp的更新。
+由于向前端传递的 flush 信号可能会延迟几个周期，并且如果在 flush 前继续提交，可能会导致提交后 flush 的错误。因此，我们将所有的 flush 视为异常，确保前端的处理行为一致，当 ROB 提交一条带 flush 信号的指令时，我们需要在 ctrlblock 直接刷掉带有 robflush 的 commit，告知前端进行 flush，但是不进行提交。
 
-##### 发送给前端的重定向以及造成的影响
+而对于 exuredirect，其对应的指令需要在写回 rob 等待 walk 完毕后才可以提交，因此这两类 redirect 不需要再特殊处理，其提交一定在其写回之后。
 
-总共包括三部分：rob_commit, redirect，ftqIdx(readAhead，seloh)。
+##### 对于 redirect：
 
-对于robcommit：由于传递给前端的robflush需要等待六拍，需要避免携带robflush的指令提前提交导致的，提交在flush之前的错误，因此在ctrlblock直接刷掉带有robflush的commit。对于exuredirect，携带exuredirect指令需要写回rob后等待walk完毕才可以提交（至少walk两拍以上），因此commit一定在exuredirect之后写回前端。
+发送给前端的 redirect 信号还包括额外的 CFIupdate，而 ftq 信息通过额外的 readAhead 以及 seloh 更新。
 
-对于redirect：发送给前端的redirect信号包括额外的CFIupdate,ftq信息通过额外的readAhead以及seloh更新。
+对于 exuredirect，它们的 CFIupdate 和 ftqidx 等信息在从功能单元传递回来的时候已经包含在里面了，因此无需进行特殊处理。
 
-首先exuredirect(jmp.brh,loadreplay)部分，这部分的CFIupdate以及ftqidx信息在功能单元传递过来的时候已经包括在里面，因此无需进行特殊处理。
+对于 rob 发出的 flush，exception 对 CFI 更新的目的地址需要等待从 CSR 中得到：首先 rob 发出 flush 信号，产生 exception，向 CSR 发送 redirect 表示有 exception 产生，并从 CSR 得到 Trap Target 返回给 ctrlblock，最后再向前端发出 redirect。
 
-其次rob发出的flush中， exception对CFI更新的目的地址需要等待从csr中得到：
+其余的冲刷流水导致的目的地址更新，base pc 通过之前与 pcmem 交互得到，并在 ctrlblock 中根据是否刷自身加上偏移来生成目的地址。
 
-T0：rob发出flush（异常/中断/刷流水）；T1：rob发出exception（异常/中断）；T2：exception在exuunit5被打两拍; T3：csr接收到exception，生成traptarget；T4：csr 发出traptarget，ctrlblock接收到target；T5：ctrlblock发往前端的cfiupdate.target。因此对于robflush生成的发送给前端的redirect信号统一在T6时发送。
+其中比较特殊的是 CSR 发出的冲刷流水中 XRet，这种情况下目的地址更新也需要从 CSR 中得到，不过 CSR 生成 Xret 的通路不需要再依赖 rob 发回的 exception，可以直接与 Ctrlblock 通过 csrio 交互。
 
-剩下的冲刷流水导致的目的地址更新，在ctrlblock中根据是否刷新自身来选择生成目的地址更新，pc值通过之前与pcmem交互得到。其中比较特殊的是csr发出的冲刷流水中XRet，这种情况下目的地址更新也需要从csr中得到，不过csr生成Xret的通路不需要依赖rob发回的exception，可以直接与Ctrlblock通过csrio交互。
+##### 对于ftqIdx：
 
-对于ftqIdx：Ctrlblock主要发送两组数据ReadAhead以及SelOH。
+Ctrlblock 主要发送两组数据 ftqIdxAhead 以及 ftqIdxSelOH。
 
-其中ReadAhead用于前端提前一拍读取到重定向相关的ftqidx。ReadAhead中前四个是exuredirect(jmp,brh,load)，第五个是robflush。
+其中 ftqIdxAhead 用于前端提前一拍读取到重定向相关的 ftqidx。ftqIdxAhead 是一个大小为 3 的 FtqPtr 向量，其中第一个是执行的 redirect（jmp/brh），第二个是 load 的redirect，第三个是 robflush。
 
-SelOH，用于选择有效的ftqidx：前四个通过redirectgen输出的独热码选择，第五个通过T6发送到前端的redirect是否有效选择。
+ftqIdxSelOH 用于选择有效的 ftqidx：前两个通过 redirectgen 输出的独热码选择，第三个通过发送到前端的 redirect 是否有效选择。
 
 上述部分整体框图如下：
 
-(图)
+![发向前端的 redirect](./figure/Redirect-ToFrontend.svg)
 
-##### 对于访存违例预测 mdp 的更新
+#### 保证 redirect 发出的顺序
 
-Ctrlblock对mdp的更新，首先在redirectgen模块在s1得到访存违例指令的重新取指数据，s2得到store_pc的重取指数据。之后通过memctrl模块对mdp的ssit和waittable更新。
+为了保证执行正确，较新的 redirect 不能先于较老的 redirect 分发。以下分四类情况说明：
 
-#### 保证 redirect 发出顺序（新到旧，或最旧）
+（1）新的 exuredirect 在旧的 robflush 之后发出：
 
-##### 新的exuredirect在旧的robflush之后发出
+exuredirect 在写回时，会往前看是否已经有更老的 redirect。
 
-Exuredirect写回时，往前看三拍是否有更老的redirect。
+在 robflush 到来时，对于较晚生成的 exuredirect，会直接在 exublock 中被刷掉；对于较早生成，还未来得及被 robflush 刷掉的 exuredirect，会检查是否有较老的 redirect，如果有则也会被刷掉。
 
-假设在S0时刻，一条最老的robflush到来，在s2时刻redirect发送到exublock。此时s3之后的较新的exuredirect在exublock被刷新，即不会出现s3之后较新的exuredirect写回。
+（2）新的 exuredirect 在旧的 exuredirect 之后：
 
-对于s0-s2返回的较新的exuredirect：s0到来的exuredirect在redirectGen被上一条robflush刷新，s1，s2返回的exuredirect，在数据写回时向前看三排是否有更老的redirect从而被s1,s2,s3 rob_flush刷新。
+exuredirect 在写回时，会往前看是否已经有更老的 redirect。
 
-##### 新的exuredirect在旧的exuredirect之后
+在发生 redirect 时，对于较晚生成的 exuredirect，同样也会直接在 exublock 中被刷掉；对于较早生成，还未来得及被当前 redirect 刷掉的 exuredirect，会检查是否有较老的 redirect，如果有则也会被取消。
 
-Exuredirect写回时，往前看两拍是否有更老的redirect。
+（3）新的 robflush 在旧的 redirect 之后
 
-假设在s0时刻一条最老的exuredirect写回，在s3时刻发回exublock。此时s4之后不会有较新的exuredirect写回。
+这种情况，rob 保证了不会出现，robflush 输出结果是当前 robdeq 的指令带有异常/中断标志，而 robdeq 即当前最老的 robidx，一定比现有的 redirect 更老。
 
-对于s0写回的exuredirect，会在redirectGen模块中保证最老。
+（4）新的 robflush 在旧的 robflush 之后
 
-对于s1写回的exuredirect，会在redirectGen中被上一条取消。
-
-对于s2，s3写回的exuredirect，会在写回时被s2，s3redirect取消。
-
-##### 新的robflush在旧的redirect之后
-
-这种情况，rob保证了不会出现，robflush输出结果是当前robdeq的指令带有异常/中断标志，而robdeq即当前最老的robidx，一定比现有的redirect更老。
-
-##### 新的robflush在旧的robflush之后
-
-这一部分主要在rob中保证，exceptionGen获得最老robflush，同时robflush发出时检查上一条flushout。S2之后的robflush均被取消。
+这一部分主要在 rob 中保证，exceptionGen 获得最老 robflush，同时 robflush 发出时检查上一条 flushout，较新的 robflush 会被取消。
 
 ### 快照恢复
 
-对于重命名恢复，目前昆明湖采用了快照恢复阶段：在重定向时不一定恢复到arch状态，而是可能会恢复到某一个快照状态。快照即根据一定规则，在重命名阶段保存的spec state，包括ROB enqptr；Vtypebuffer enqptr；RAT spec table；freelist Headptr（出队指针）以及ctrlblock用于总体控制 robidx。目前上述模块均各自维护四份快照。
+对于重命名恢复，目前昆明湖采用了快照恢复阶段：在重定向时不一定恢复到 arch 状态，而是可能会恢复到某一个快照状态。快照即根据一定规则，在重命名阶段保存的spec state，包括ROB enqptr；Vtypebuffer enqptr；RAT spec table；freelist Headptr（出队指针）以及ctrlblock用于总体控制 robidx。目前上述模块均各自维护四份快照。
 
 #### 快照的创建
 
@@ -256,7 +229,7 @@ Rename模块会对输出的六条uop都打上snapshot标志，表示uop是否需
 
 Rat，freelist，以及ctrlblock的快照创建均通过rename模块输出的snapshot标志控制。存储数据由各个模块自己管理。
 
-Rob，vtype的快照创建除了rename输出流到rob的snapshot标志还需要考虑非blockbackward以及rab，rob，vtypebuffer没有满。这里我们可以看到rob，vtype的快照创建和前述模块的快照写入并不在一个周期，但通过snapshot标志随着rename输出流到rob我们可以保证写入的robidx相同即可同步。
+Rob，vtype的快照创建除了rename输出流到rob的snapshot标志还需要考虑非blockbackward以及rab，rob，vtypebuffer没有满。rob，vtype的快照创建和前述模块的快照写入可能并不在一个周期，但通过snapshot标志随着rename输出流到rob我们可以保证写入的robidx相同即可同步。
 
 #### 快照的删除
 
@@ -274,13 +247,43 @@ Ctrlblock通过自身维护一个存储robidx的快照副本，在重定向到�
 
 上述部分整体框图：
 
-(图)
+![snapshot 的生成、删除和管理](./figure/Snapshot-Gen.svg)
+
+### Trace
+
+#### 功能描述
+
+ctrlBlock的trace子模块用来收集指令trace的信息，其接收来自rob指令提交时的信息，在rob压缩的基础上进行二次压缩（将不需要pc的指令和需要pc的指令压缩到一起存入trace buffer），以减小对pcMem的读压力。
+
+##### feature支持
+
+当前KMH核内trace的实现只支持指令trace。核内收集的指令trace信息包括：priv，cause，tval，itype，iretire，ilastsize，iaddr；其中itype字段支持所有类型。
+
+##### trace 各级流水线功能：
+
+在ctrlBlock里有三拍：
+
+* Stage 0: 将 rob commitInfo 打一拍；
+* Stage 1: commitInfo压缩，阻塞提交信号产生；
+* Stage 2: 根据压缩后的ftqptr从pcmem中读出basePc，从csr获取当前提交的指令对应的priv，xcause，xtval；
+
+memBlock
+
+* Stage 3: 通过ftqOffest和从pcmem读到的basePc算出最终的iaddr；
+
+#### 整体框图
+
+![trace 示意图](./figure/trace.svg)
+
+#### trace buffer 压缩机制
+
+当每一组commitInfo进入trace buffer之前, 都需要做压缩，即把每一个需要pc的commitinfo项和其前面的项压缩成一项，送入trace buffer，在进trace buffer之前，会计算当前拍进入trace buffer之后，在下一拍能不能全部出队，如果不能则去block rob的提交，该block会一直block到产生该block信号的commitInfo从trace buffer完全出队。产生blockCommit信号的commitInfo会无脑进trace buffer，但是其下一拍的commitinfo一定会被堵住。
 
 ## 总体设计
 
 ### 整体框图
 
-（图）
+![CtrlBlock 总览](./figure/CtrlBlock-Overview.svg)
 
 ### 接口列表
 
@@ -292,75 +295,99 @@ Ctrlblock通过自身维护一个存储robidx的快照副本，在重定向到�
 
 #### 功能
 
-RedirectGenerator 模块负责汇总处理器执行时发生的错误，包括分支预测错误，访存违例，并进行比较得到最老的错误，以生成Redirect数据，控制各个模块是否需要取消等。
+RedirectGenerator 模块管理不同来源的重定向信号（如执行单元和 load ），并决定是否发生重定向，如何刷新相关信息。它通过多级寄存器和同步机制确保数据流的正确性，且通过地址转换和错误检测保证指令执行的正确性。
 
-该模块主要包括三级流水：
+将当前最老的执行 redirect 的 fullTarget 和 cfiUpdate.target 拼接得到 fullTarget 字段。另外如果当前最老的执行 redirect 不是来自于 CSR，则还需要基于指令地址的翻译类型检查 IAF，IPF 和 IGPF 等地址的合法性。
 
-S0：接受输入的三个exuredirect即分支预测错误，加上一个 loadReplay 访存违例。判断得到最老的错误，同时也判断这些指令不会被之前的redirect刷掉（stage2redirect），或者被rob的异常刷掉。
-
-同时发出最老redirect指令的重新取指信号，等待PcMem返回。
-
-S1：PcMem返回，根据当前最老redirect类型生成target，将pc，target，Predecode信息写入到redirect cfiUpdata中，输出stage2redirect并检查是否被rob异常刷掉。
-
-同时如果最老redirect是访存违例，发出对store_pc的重新取指信号，等待PcMem返回
-
-S2：store_pc取指返回，如果最老redirect是访存违例，根据返回数据更新wait table ssit，输出memPredUpdate 更新。
+然后从最老的执行 redirect 和 load redirect 中选出一个最老的 redirect，同时还需要保证这个最老的 redirect 不会被 robFlush 或者之前的 redirect 刷掉。
 
 #### 整体框图
 
-（图）
+![redirect 总览](./figure/Redirect-Overview.svg)
 
 #### 接口列表
 
 见接口文档
 
-### 二级模块SnapshotGenerator
+### 二级模块 SnapshotGenerator
 
 #### 功能
 
-SnapshotGenerator模块主要用于生成快照，存储维护。其本质是一个循环队列，每个snapshotGenerator循环队列维护最多四份快照。
+SnapshotGenerator 模块主要用于生成快照，存储维护。其本质是一个循环队列，维护最多四份快照。
 
-入队：在循环队列不满，且入队信号未被redirect取消的情况下，下一拍在enqptr入队，更新enqptr。
+入队：在循环队列不满，且入队信号未被 redirect 取消的情况下，下一拍在 enqptr 入队，更新 enqptr。
 
-出队：在出队信号未被redirect取消的情况下，下一拍在deqptr出队，更新deqptr。
+出队：在出队信号未被 redirect 取消的情况下，下一拍在 deqptr 出队，更新 deqptr。
 
 Flush：根据刷新向量在下一拍刷新掉对应的快照。
 
-更新enqptr：如果有空的快照，选择离deqptr最近的作为新的enq指针
+更新 enqptr：如果有空的快照，选择离deqptr最近的作为新的 enq 指针
 
-Snapshots: snapshots队列寄存器直出
+Snapshots: snapshots 队列寄存器直出
 
 #### 整体框图
 
-（图）
+![snapshots 总览](./figure/Snapshot-Overview.svg)
 
 #### 接口列表
 
 见接口文档
 
-### 二级模块 MemCtrl
+### 二级模块 FusionDecoder
 
-MemCtrl模块主要用于与mdp访存违例预测相关模块交互，包括StoreSet中的LSFT,SSIT 以及waittable模块。
+#### 功能
 
-SSIT/waittable：
+指令融合模块负责找出译码模块译码后的 uop 是否存在一定的联系，从而可以将多个 uop （当前仅支持两条指令的融合）需要做的事情融合为一条 uop 能够完成的事情。
 
-Update:将RedirectGenerator s2阶段输出的由于访存违例需要对预测进行更新的：memPredUpdate信号打一拍后送入update。
+指令融合会对指令译码得到的 6 个 uop 凑成（uop0, uop1）, (uop1, uop2), (uop2, uop3), (uop3, uop4）, (uop4, uop5) 形式的至多 5 对待融合指令对。然后判断每一对指令是否能够进行指令融合。当前我们支持两种类型的指令融合，分别是融合成为一个带有新的控制信号的指令，以及将第一条指令的操作编码替换为另一个的形式。在判断可以进行指令融合后，我们会对 uop 的操作数，如逻辑寄存器号重新赋值，选择新的操作数。另外，HINT 类指令不支持被指令融合，例如 fence 指令不能够被融合。
 
-冲刷控制：将csr中的lvpred\_timeout等打一拍输入.
+例如，slli r1, r0, 32 和 srli r1, r1, 32 将 r0 中的数左移 32 位后存入 r1，然后再次右移 32 位。其等价于 add.uw r1, r0, zero （伪指令 zext.w r1, r0），即将 r0 中的数扩展后移动到 r1 中。
 
-读请求：来自译码阶段用来读ssit和waittable请求，读请求同步，当拍输入，下一拍得到，传入rename阶段。
+输入为译码后的至多 6 条 uop 以及他们的原始指令编码，以及相应的 valid 信号，这里输入 inready 只有 5 位（即译码宽度减一），因为我们需要将 uop 错位两两配对为至多 5 对待融合指令。inReady[i] 表示已经准备好可以接受 in(i+1)。
 
-LSFT：
+输出宽度为译码宽度减一，包括指令融合替换，需要替换 fuType，fuOpType，lsrc2（第二个操作数的逻辑寄存器号，如有），src2Type（第二个操作数的类型），selImm（立即数类型）。以及指令融合信息，如 rs2 来自于 rs1/rs2/zero。同时还需要输出一组译码宽度的布尔向量 clear，表征该 uop 是否被指令融合需要被清除掉，当前设想每条指令融合后会将第二条指令清除掉。第 0 个 uop 的 clear 是不会为 true 的，因为我们默认将后面的指令融合到前面的指令上，因此无论是否融合，uop 0 始终不会因为指令融合而消失。
 
-与dispatch进行交互：通过req进行输入，resp输出。Dispatch req打一拍输入，resp当拍输出。
-
-Redirect刷新：传入打一拍后的redirect信号
-
-Storeissue：通过storeissue接口通知lfst指令被issued，打一拍后传入
+输出有效要求：指令对有效（从译码模块传来的 uop 对有效），不能被指令融合清除掉，有可行的指令融合结果，以及不能是 Hint 类指令。同时将 fuType，src2Type，rs2FromZero ……等信息赋值
 
 #### 整体框图
 
-（图）
+![fusion decoder 总览](./figure/Fusion-Decoder-Overview.svg)
+
+#### 接口列表
+
+见接口文档
+
+### 二级模块 pcMem
+
+#### 功能
+
+pcMem 实质上是例化了一个 SyncDataModuleTemplate，并需要提供多个读口，1 个写口。大小为 64 项，每一项主要包括 startAddr 和 nextLineAddr。
+
+当前配置下，需要提供 15 个读口，为 redirect，memPred，robFlush 各自提供 1 个读口，为 bjuPC 和 bjuTarget 各自提供 3 个读口，为 load 提供 3 个读口，以及为 trace 提供 3 个读口。
+
+输入包括来自前端 Ftq 的写入使能，写入地址和写入数据，以及不同来源的读请求和读地址，分别输出读结果。
+
+#### 整体框图
+
+![PCMem 总览](./figure/PCMem-Overview.svg)
+
+#### 接口列表
+
+见接口文档
+
+### 二级模块 GPAMem
+
+#### 功能
+
+GPAMem 模块类似于 pcMem，例化了一个 SyncDataModuleTemplate，但是只需要提供 1 个读口和 1 个写口，大小为 64 项。每一项主要包括一个 gpaddr，存储前端的 ftq 对应的 gpaddr 信息。
+
+Rob 在 exception 输出的前一拍发出 gpaddr 读请求以读地址的 ftq 信息，第二拍得到返回的 gpaddr 信息。最终通过 robio 与 csr直接交互。
+
+输入包括来自前端 IFU 的写入使能，写入地址和写入数据，以及来自 rob 的读请求和读地址，向 rob 输出读结果。
+
+#### 整体框图
+
+![GPAMem 总览](./figure/GPAMem-Overview.svg)
 
 #### 接口列表
 
