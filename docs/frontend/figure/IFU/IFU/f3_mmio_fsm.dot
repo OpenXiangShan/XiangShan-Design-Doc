@@ -1,0 +1,17 @@
+digraph IFU_F3_MMIO_FSM {
+  m_idle -> m_waitLastCmt [label="f3_req_is_mmio && f3_pbmt =/= Pbmt.NC"]
+  m_idle -> m_sendReq [label="f3_req_is_mmio && f3_pbmt === Pbmt.NC"]
+  m_waitLastCmt -> m_sendReq [label="last_commit"]
+  m_sendReq -> m_waitResp [label="uncache.req.fire"]
+  m_waitResp -> m_waitCommit [label="uncache.resp.fire && !needResend"]
+  m_waitResp -> m_sendTLB [label="uncache.resp.fire && needResend"]
+  m_sendTLB -> m_tlbResp [label="tlb.req.fire"]
+  m_tlbResp -> m_sendPMP [label="tlb.resp.fire && !exception"]
+  m_tlbResp -> m_waitCommit [label="tlb.resp.fire && exception"]
+  m_sendPMP -> m_resendReq [label="!exception"]
+  m_sendPMP -> m_waitCommit [label="exception"]
+  m_resendReq -> m_waitResendResp [label="uncache.req.fire"]
+  m_waitResendResp -> m_waitCommit [label="uncache.resp.fire"]
+  m_waitCommit -> m_commited [label="rob.commited"]
+  m_commited -> m_idle
+}

@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="641pt" height="932pt" viewBox="0.00 0.00 641.00 932.00">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 928)">
+<title>IFU_F3_MMIO_FSM</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-928 637,-928 637,4 -4,4"/>
+<!-- m_idle -->
+<g id="node1" class="node">
+<title>m_idle</title>
+<ellipse fill="none" stroke="black" cx="353" cy="-906" rx="37.86" ry="18"/>
+<text text-anchor="middle" x="353" y="-901.8" font-family="Times,serif" font-size="14.00">m_idle</text>
+</g>
+<!-- m_waitLastCmt -->
+<g id="node2" class="node">
+<title>m_waitLastCmt</title>
+<ellipse fill="none" stroke="black" cx="93" cy="-817.2" rx="73.26" ry="18"/>
+<text text-anchor="middle" x="93" y="-813" font-family="Times,serif" font-size="14.00">m_waitLastCmt</text>
+</g>
+<!-- m_idle&#45;&gt;m_waitLastCmt -->
+<g id="edge1" class="edge">
+<title>m_idle-&gt;m_waitLastCmt</title>
+<path fill="none" stroke="black" d="M314.69,-905.77C249.11,-906.16 119.64,-902.67 91.04,-870 85.56,-863.74 84.29,-855.25 84.91,-846.95"/>
+<polygon fill="black" stroke="black" points="88.36,-847.54 86.55,-837.1 81.46,-846.39 88.36,-847.54"/>
+<text text-anchor="middle" x="215.02" y="-857.4" font-family="Times,serif" font-size="14.00">f3_req_is_mmio &amp;&amp; f3_pbmt =/= Pbmt.NC</text>
+</g>
+<!-- m_sendReq -->
+<g id="node3" class="node">
+<title>m_sendReq</title>
+<ellipse fill="none" stroke="black" cx="194" cy="-728.4" rx="56.63" ry="18"/>
+<text text-anchor="middle" x="194" y="-724.2" font-family="Times,serif" font-size="14.00">m_sendReq</text>
+</g>
+<!-- m_idle&#45;&gt;m_sendReq -->
+<g id="edge2" class="edge">
+<title>m_idle-&gt;m_sendReq</title>
+<path fill="none" stroke="black" d="M350.96,-887.63C349.09,-877.04 345.57,-863.59 339,-853.2 311.14,-809.15 262.69,-772.46 229.53,-750.73"/>
+<polygon fill="black" stroke="black" points="231.77,-748.01 221.46,-745.56 227.99,-753.9 231.77,-748.01"/>
+<text text-anchor="middle" x="451.72" y="-813" font-family="Times,serif" font-size="14.00">f3_req_is_mmio &amp;&amp; f3_pbmt === Pbmt.NC</text>
+</g>
+<!-- m_waitLastCmt&#45;&gt;m_sendReq -->
+<g id="edge3" class="edge">
+<title>m_waitLastCmt-&gt;m_sendReq</title>
+<path fill="none" stroke="black" d="M112.47,-799.46C127.8,-786.29 149.36,-767.77 166.45,-753.08"/>
+<polygon fill="black" stroke="black" points="168.48,-755.95 173.78,-746.78 163.92,-750.64 168.48,-755.95"/>
+<text text-anchor="middle" x="187.15" y="-768.6" font-family="Times,serif" font-size="14.00">last_commit</text>
+</g>
+<!-- m_waitResp -->
+<g id="node4" class="node">
+<title>m_waitResp</title>
+<ellipse fill="none" stroke="black" cx="194" cy="-639.6" rx="59.32" ry="18"/>
+<text text-anchor="middle" x="194" y="-635.4" font-family="Times,serif" font-size="14.00">m_waitResp</text>
+</g>
+<!-- m_sendReq&#45;&gt;m_waitResp -->
+<g id="edge4" class="edge">
+<title>m_sendReq-&gt;m_waitResp</title>
+<path fill="none" stroke="black" d="M194,-710.25C194,-698.56 194,-682.79 194,-669.22"/>
+<polygon fill="black" stroke="black" points="197.5,-669.52 194,-659.52 190.5,-669.52 197.5,-669.52"/>
+<text text-anchor="middle" x="239.08" y="-679.8" font-family="Times,serif" font-size="14.00">uncache.req.fire</text>
+</g>
+<!-- m_waitCommit -->
+<g id="node5" class="node">
+<title>m_waitCommit</title>
+<ellipse fill="none" stroke="black" cx="401" cy="-106.8" rx="71.66" ry="18"/>
+<text text-anchor="middle" x="401" y="-102.6" font-family="Times,serif" font-size="14.00">m_waitCommit</text>
+</g>
+<!-- m_waitResp&#45;&gt;m_waitCommit -->
+<g id="edge5" class="edge">
+<title>m_waitResp-&gt;m_waitCommit</title>
+<path fill="none" stroke="black" d="M135.27,-636.32C78.17,-630.57 0,-611.76 0,-551.8 0,-551.8 0,-551.8 0,-194.6 0,-130.15 200.4,-113.44 317.86,-109.19"/>
+<polygon fill="black" stroke="black" points="317.92,-112.69 327.8,-108.85 317.68,-105.69 317.92,-112.69"/>
+<text text-anchor="middle" x="98.35" y="-369" font-family="Times,serif" font-size="14.00">uncache.resp.fire &amp;&amp; !needResend</text>
+</g>
+<!-- m_sendTLB -->
+<g id="node6" class="node">
+<title>m_sendTLB</title>
+<ellipse fill="none" stroke="black" cx="206" cy="-550.8" rx="59.32" ry="18"/>
+<text text-anchor="middle" x="206" y="-546.6" font-family="Times,serif" font-size="14.00">m_sendTLB</text>
+</g>
+<!-- m_waitResp&#45;&gt;m_sendTLB -->
+<g id="edge6" class="edge">
+<title>m_waitResp-&gt;m_sendTLB</title>
+<path fill="none" stroke="black" d="M196.37,-621.45C197.99,-609.76 200.17,-593.99 202.04,-580.42"/>
+<polygon fill="black" stroke="black" points="205.48,-581.09 203.39,-570.71 198.55,-580.14 205.48,-581.09"/>
+<text text-anchor="middle" x="297.09" y="-591" font-family="Times,serif" font-size="14.00">uncache.resp.fire &amp;&amp; needResend</text>
+</g>
+<!-- m_commited -->
+<g id="node11" class="node">
+<title>m_commited</title>
+<ellipse fill="none" stroke="black" cx="517" cy="-18" rx="61.99" ry="18"/>
+<text text-anchor="middle" x="517" y="-13.8" font-family="Times,serif" font-size="14.00">m_commited</text>
+</g>
+<!-- m_waitCommit&#45;&gt;m_commited -->
+<g id="edge14" class="edge">
+<title>m_waitCommit-&gt;m_commited</title>
+<path fill="none" stroke="black" d="M423.09,-89.27C441.02,-75.85 466.51,-56.78 486.4,-41.9"/>
+<polygon fill="black" stroke="black" points="488.26,-44.88 494.17,-36.08 484.07,-39.27 488.26,-44.88"/>
+<text text-anchor="middle" x="508.46" y="-58.2" font-family="Times,serif" font-size="14.00">rob.commited</text>
+</g>
+<!-- m_tlbResp -->
+<g id="node7" class="node">
+<title>m_tlbResp</title>
+<ellipse fill="none" stroke="black" cx="225" cy="-462" rx="52.88" ry="18"/>
+<text text-anchor="middle" x="225" y="-457.8" font-family="Times,serif" font-size="14.00">m_tlbResp</text>
+</g>
+<!-- m_sendTLB&#45;&gt;m_tlbResp -->
+<g id="edge7" class="edge">
+<title>m_sendTLB-&gt;m_tlbResp</title>
+<path fill="none" stroke="black" d="M209.75,-532.65C212.31,-520.96 215.76,-505.19 218.74,-491.62"/>
+<polygon fill="black" stroke="black" points="222.15,-492.41 220.87,-481.89 215.31,-490.91 222.15,-492.41"/>
+<text text-anchor="middle" x="246.74" y="-502.2" font-family="Times,serif" font-size="14.00">tlb.req.fire</text>
+</g>
+<!-- m_tlbResp&#45;&gt;m_waitCommit -->
+<g id="edge9" class="edge">
+<title>m_tlbResp-&gt;m_waitCommit</title>
+<path fill="none" stroke="black" d="M225,-443.71C225,-426.19 225,-398.31 225,-374.2 225,-374.2 225,-374.2 225,-194.6 225,-147.53 276.27,-125.98 323.47,-116.12"/>
+<polygon fill="black" stroke="black" points="324.06,-119.57 333.23,-114.25 322.75,-112.69 324.06,-119.57"/>
+<text text-anchor="middle" x="298.87" y="-280.2" font-family="Times,serif" font-size="14.00">tlb.resp.fire &amp;&amp; exception</text>
+</g>
+<!-- m_sendPMP -->
+<g id="node8" class="node">
+<title>m_sendPMP</title>
+<ellipse fill="none" stroke="black" cx="401" cy="-373.2" rx="60.41" ry="18"/>
+<text text-anchor="middle" x="401" y="-369" font-family="Times,serif" font-size="14.00">m_sendPMP</text>
+</g>
+<!-- m_tlbResp&#45;&gt;m_sendPMP -->
+<g id="edge8" class="edge">
+<title>m_tlbResp-&gt;m_sendPMP</title>
+<path fill="none" stroke="black" d="M254.06,-446.67C283.14,-432.33 328.09,-410.16 360.62,-394.11"/>
+<polygon fill="black" stroke="black" points="361.94,-397.37 369.36,-389.81 358.84,-391.09 361.94,-397.37"/>
+<text text-anchor="middle" x="404.96" y="-413.4" font-family="Times,serif" font-size="14.00">tlb.resp.fire &amp;&amp; !exception</text>
+</g>
+<!-- m_sendPMP&#45;&gt;m_waitCommit -->
+<g id="edge11" class="edge">
+<title>m_sendPMP-&gt;m_waitCommit</title>
+<path fill="none" stroke="black" d="M401,-354.85C401,-310.31 401,-191.58 401,-136.55"/>
+<polygon fill="black" stroke="black" points="404.5,-136.73 401,-126.73 397.5,-136.73 404.5,-136.73"/>
+<text text-anchor="middle" x="428.21" y="-235.8" font-family="Times,serif" font-size="14.00">exception</text>
+</g>
+<!-- m_resendReq -->
+<g id="node9" class="node">
+<title>m_resendReq</title>
+<ellipse fill="none" stroke="black" cx="499" cy="-284.4" rx="64.14" ry="18"/>
+<text text-anchor="middle" x="499" y="-280.2" font-family="Times,serif" font-size="14.00">m_resendReq</text>
+</g>
+<!-- m_sendPMP&#45;&gt;m_resendReq -->
+<g id="edge10" class="edge">
+<title>m_sendPMP-&gt;m_resendReq</title>
+<path fill="none" stroke="black" d="M419.43,-355.87C434.26,-342.74 455.3,-324.11 472.02,-309.3"/>
+<polygon fill="black" stroke="black" points="474.02,-312.2 479.18,-302.95 469.38,-306.96 474.02,-312.2"/>
+<text text-anchor="middle" x="488.32" y="-324.6" font-family="Times,serif" font-size="14.00">!exception</text>
+</g>
+<!-- m_waitResendResp -->
+<g id="node10" class="node">
+<title>m_waitResendResp</title>
+<ellipse fill="none" stroke="black" cx="517" cy="-195.6" rx="87.75" ry="18"/>
+<text text-anchor="middle" x="517" y="-191.4" font-family="Times,serif" font-size="14.00">m_waitResendResp</text>
+</g>
+<!-- m_resendReq&#45;&gt;m_waitResendResp -->
+<g id="edge12" class="edge">
+<title>m_resendReq-&gt;m_waitResendResp</title>
+<path fill="none" stroke="black" d="M502.56,-266.25C504.98,-254.56 508.25,-238.79 511.07,-225.22"/>
+<polygon fill="black" stroke="black" points="514.48,-225.99 513.08,-215.49 507.62,-224.57 514.48,-225.99"/>
+<text text-anchor="middle" x="554.69" y="-235.8" font-family="Times,serif" font-size="14.00">uncache.req.fire</text>
+</g>
+<!-- m_waitResendResp&#45;&gt;m_waitCommit -->
+<g id="edge13" class="edge">
+<title>m_waitResendResp-&gt;m_waitCommit</title>
+<path fill="none" stroke="black" d="M494.63,-177.86C476.87,-164.57 451.82,-145.83 432.1,-131.07"/>
+<polygon fill="black" stroke="black" points="434.22,-128.29 424.12,-125.1 430.03,-133.89 434.22,-128.29"/>
+<text text-anchor="middle" x="517.19" y="-147" font-family="Times,serif" font-size="14.00">uncache.resp.fire</text>
+</g>
+<!-- m_commited&#45;&gt;m_idle -->
+<g id="edge15" class="edge">
+<title>m_commited-&gt;m_idle</title>
+<path fill="none" stroke="black" d="M559.21,-31.53C592.37,-44.29 633,-67.69 633,-105.8 633,-818.2 633,-818.2 633,-818.2 633,-866.16 481.22,-890.55 401.16,-900.08"/>
+<polygon fill="black" stroke="black" points="400.93,-896.58 391.4,-901.21 401.73,-903.54 400.93,-896.58"/>
+</g>
+</g>
+</svg>
