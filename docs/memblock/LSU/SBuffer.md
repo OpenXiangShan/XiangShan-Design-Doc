@@ -1,5 +1,7 @@
 # Store 提交缓冲 SBuffer
 
+@zhanglinjuan review
+
 ## 功能描述
 
 sbuffer 每一项是一个 cacheline，每个 cacheline 是 64 bytes，也就是 4 个 vwords，每个 vwords 是 16 bytes。

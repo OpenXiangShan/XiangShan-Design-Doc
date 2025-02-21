@@ -1,6 +1,6 @@
-# Load 异常缓冲 LqExceptionBuffer
+# 错误处理与自定义故障注入指令
 
-@lihuijin
+@wulingyun
 
 ## 功能描述
 

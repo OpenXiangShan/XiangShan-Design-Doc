@@ -1,5 +1,7 @@
 # Store 地址执行单元 StoreUnit
 
+@wulingyun review 并添加向量有关内容
+
 ## 功能描述
 
 Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如下图StoreAddrPipe所示。接收store地址保留站发来的请求，处理完成之后需要给结果总线发响应，处理过程中需要给保留站反馈信息，给StoreQueue反馈信息，最后写回, 如果中间出现异常则从保留站重新发射。

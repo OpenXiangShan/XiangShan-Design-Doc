@@ -1,5 +1,8 @@
 # 数据高速缓存 DCache
 
+@liuziang review DCache 一章的全部内容
+@zhanglinjuan 补充 CAS 有关内容
+
 <!-- TODO: 填写版本信息 -->
 
 - 版本：V2R2

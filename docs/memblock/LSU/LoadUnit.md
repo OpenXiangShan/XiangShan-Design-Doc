@@ -1,5 +1,7 @@
 # Load 指令执行单元 LoadUnit
 
+@wulingyun review 并添加向量有关内容
+
 ## 功能描述
 load指令流水线，接收load发射队列发送的load指令，在流水线中处理完成后将结果写回LoadQueue和ROB，用于指令提交以及唤醒后续依赖本条指令的其他指令。同时，LoadUnit需要给发射队列、Load/StoreQueue反馈一些必要的信息。
 
