@@ -30,4 +30,5 @@ i18n-applicable: "适用于"
 docs/index.md
 docs/frontend/.index.md
 docs/memblock/.index.md
+docs/cache/.index.md
 ```
