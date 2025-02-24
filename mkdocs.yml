@@ -44,3 +44,17 @@ nav:
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
+  - 访存:
+    - 内存管理单元 MMU: 
+      - memblock/MMU/index.md
+      - L1TLB: memblock/MMU/L1TLB.md
+      - Repeater: memblock/MMU/Repeater.md
+      - L2TLB:
+        - memblock/MMU/L2TLB/index.md
+        - Page Cache: memblock/MMU/L2TLB/PageCache.md
+        - Page Table Walker: memblock/MMU/L2TLB/PTW.md
+        - Last Level Page Table Walker: memblock/MMU/L2TLB/LLPTW.md
+        - Hypervisor Page Table Walker: memblock/MMU/L2TLB/HPTW.md
+        - Miss Queue: memblock/MMU/L2TLB/MissQueue.md
+        - Prefetcher: memblock/MMU/L2TLB/Prefetcher.md
+      - PMP & PMA: memblock/MMU/PMP-PMA.md
