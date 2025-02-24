@@ -42,14 +42,14 @@
 
 L2 Cache 目前默认的 ECC 校验码为 SECDED。同时，L2 Cache 支持 parity、SEC 等校验码，可在 Configs 中修改，编译时进行配置。相关[校验算法参考](https://github.com/OpenXiangShan/Utility/blob/master/src/main/scala/utility/ECC.scala)。
 
-SECDED 要求对于一个 𝑛 位的数据，所需的校验位数 r 需要满足：$ 2^r \geq n + r + 1 $
+SECDED 要求对于一个 n 位的数据，所需的校验位数 r 需要满足： 2^r \geq n + r + 1 
 
 #### ECC 处理流程
 
 L2 Cache 支持 ECC 功能。在 MainPipe 在 s3 向 Directory 和 DataStorage 重填数据时，会计算 tag 和 data 的校验码，前者与 tag 一起存入 Directory 中的 tagArray（SRAM），后者与 data 一起存入 DataStorage 中的 array（SRAM）。
 
-    1. 对于 tag，直接以 tag 为单元进行 ECC 编码/解码。
-    2. 对于 data，基于物理设计以及更好检测错误的需求，目前将 data 划分成 dataBankBits（128 bits）的单元进行 ECC 编码/解码。因而在 SECDED 算法要求下，对于 1 个 512 bits 的 cache line，应该有 4 * 8 = 32 bits 校验位。
+1. 对于 tag，直接以 tag 为单元进行 ECC 编码/解码。
+2. 对于 data，基于物理设计以及更好检测错误的需求，目前将 data 划分成 dataBankBits（128 bits）的单元进行 ECC 编码/解码。因而在 SECDED 算法要求下，对于 1 个 512 bits 的 cache line，应该有 4 * 8 = 32 bits 校验位。
     
 
 当访存请求读取 SRAM 时，会同步读取出对应的校验码。MainPipe 会在 s2 和 s5 分别获得 tag 和 data 的校验结果。当 MainPipe 检验到错误后，会在 s5 收集错误信息，CoupledL2 仲裁各个 Slice 错误信号，并上报至 BEU。
@@ -71,11 +71,12 @@ task.denied := c.corrupt && (c.opcode === ProbeAck || c.opcode === Release)
 #### CHI 总线
 
 L2 Cache 支持可配置的 Poison/DataCheck：
- - Poison 域：
+- Poison 域：
     - DAT 中每 8 bytes 设置 1 bit Poison 位
     - L2 Cache 中 Poison 采用 over poison 策略
     - Poison 错误 L2 Cache 不进行上报
- - DataCheck 域：
+
+- DataCheck 域：
     - DAT 中每 8 bits 设置 1 bit DataCheck 位
     - L2 Cache 中 DataCheck 默认采用奇校验
     - L2 Cache 中 DataCheck 仅对 data 进行校验，不对 packet 整体进行校验
@@ -83,16 +84,16 @@ L2 Cache 支持可配置的 Poison/DataCheck：
 
 当 L2 Cache 接收来自 L3 Cache 的数据时，若检测到错误：
 
-    1. respErr = NDERR，则 MainPipe 在 s3 写 Directory 时，将对应 meta 中 tagErr 置为 1
-    2. respErr = NDERR/DERR 或者 poison 域中任意一位为 1 或者 dataCheck 奇校验检验出错误时，则 MainPipe 在 s3 写 Directory 时，将对应 meta 中 dataErr 置为 1
-    3. dataCheck 检验出错误，则复用 ECC 错误上报流程，MainPipe 在 s5 收集错误信息后，上报 BEU
+1. respErr = NDERR，则 MainPipe 在 s3 写 Directory 时，将对应 meta 中 tagErr 置为 1
+2. respErr = NDERR/DERR 或者 poison 域中任意一位为 1 或者 dataCheck 奇校验检验出错误时，则 MainPipe 在 s3 写 Directory 时，将对应 meta 中 dataErr 置为 1
+3. dataCheck 检验出错误，则复用 ECC 错误上报流程，MainPipe 在 s5 收集错误信息后，上报 BEU
 
-当 L2 Cache 向 L3 Cache 传输数据时，
+当 L2 Cache 向 L3 Cache 传输数据时：
 
-    1. 若 L2 Cache 检测到 tag ECC 错误或者对应 meta 中 tagErr = 1，则将 respErr 置为 NDERR，将 poison 置为全 0
-    2. 若 L2 Cache 检测到 data ECC 错误或者对应 meta 中 dataErr = 1，则将 respErr 置为 DERR，并将 poison 域置为全 1
-    3. 若 L2 Cache 未检测到任何错误，则将 respErr 置为 OK，将 poison 置为全 0
-    4. dataCheck 域填充对 data 进行奇校验的校验码
+1. 若 L2 Cache 检测到 tag ECC 错误或者对应 meta 中 tagErr = 1，则将 respErr 置为 NDERR，将 poison 置为全 0
+2. 若 L2 Cache 检测到 data ECC 错误或者对应 meta 中 dataErr = 1，则将 respErr 置为 DERR，并将 poison 域置为全 1
+3. 若 L2 Cache 未检测到任何错误，则将 respErr 置为 OK，将 poison 置为全 0
+4. dataCheck 域填充对 data 进行奇校验的校验码
 
 
 ## Uncached 访存请求错误处理
@@ -101,14 +102,15 @@ CoupledL2 中 MMIOBridge 会将 TL 与 CHI 之间的错误处理相关域进行�
 
 CHI to TL（RXDAT）
     
-    1. 若 respErr = NDERR，则置 denied 为 1
-    2. 若 respErr = NDERR/DERR 或者 poison 域中任意一位为 1 或者 dataCheck 奇校验检验出错误时，则置 corrupt 为 1
-    3. 否则，denied 与 corrupt 均置为 0
+1. 若 respErr = NDERR，则置 denied 为 1
+2. 若 respErr = NDERR/DERR 或者 poison 域中任意一位为 1 或者 dataCheck 奇校验检验出错误时，则置 corrupt 为 1
+3. 否则，denied 与 corrupt 均置为 0
+
 - 当出现错误时，后续由 ICache 或 DCache 触发 access fault，上报软件处理
 
 
 TL to CHI（TXDAT）
 
-    1. 当 corrupt = 1 时，若 opcode = Release，则置 respErr 为 NDERR，否则置 respErr 为 DERR
-    2. 当 corrupt = 0 时，则置 respErr 为 OK
-    3. dataCheck 域填充对 data 进行奇校验的校验码
+1. 当 corrupt = 1 时，若 opcode = Release，则置 respErr 为 NDERR，否则置 respErr 为 DERR
+2. 当 corrupt = 0 时，则置 respErr 为 OK
+3. dataCheck 域填充对 data 进行奇校验的校验码
