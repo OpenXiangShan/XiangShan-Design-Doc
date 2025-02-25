@@ -16,4 +16,5 @@ RXSNP模块把来自RXSNP总线通道的Snoop请求进行处理，转化为内�
 2. 如果MSHR的所有向Core的probe都完成了，Snoop应该嵌套MSHR。
 3. 当MSHR是一笔CMO操作，在产生的所有Probe操作完成前Snoop都被屏蔽。
 
+## 整体框图
 ![RXSNP](./figure/RXSNP.svg)
