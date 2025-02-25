@@ -14,5 +14,5 @@ TXRSP 模块接收来自 MainPipe 和 MSHR 两个模块发往 SRSP 通道的请�
 MSHR 发出请求的当拍 MainPipe 可能没有请求和 MSHR 竞争，但是 MainPipe 中有请求还在 s1/s2 级，MSHR 请求有可能抢占了队列中本属于 MainPipe 的空闲项，导致 MainPipe 中的请求到达 s3/s4/s5 级时队列项数不够。所以这种情况也需要阻塞住 MainPipe 的请求。
 
 ## 整体框图
-![TXRSP整体框图] (./figure/TXRSP.svg)
+![TXRSP](./figure/TXRSP.svg)
 
