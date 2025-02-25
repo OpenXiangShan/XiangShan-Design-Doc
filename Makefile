@@ -22,6 +22,7 @@ PANDOC_FLAGS += --metadata=include-auto
 PANDOC_FLAGS += --lua-filter=utils/pandoc_filters/replace_variables.lua
 PANDOC_FLAGS += --lua-filter=utils/pandoc_filters/remove_md_links.lua
 PANDOC_FLAGS += --filter pandoc-crossref
+PANDOC_FLAGS += --metadata-file=variables.yml
 
 PANDOC_LATEX_FLAGS += --top-level-division=part
 PANDOC_LATEX_FLAGS += --pdf-engine=xelatex

@@ -1,6 +1,7 @@
 build/
 site/
 venv/
+.venv/
 *.aux
 *.log
 *.pdf

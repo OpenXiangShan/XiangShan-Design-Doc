@@ -87,7 +87,7 @@ CtrlBlock 模块包含指令译码（Decode）、指令融合（FusionDecoder）
 
 ![CtrlBlock 总览](./figure/CtrlBlock-Overview.svg)
 
-### 译码
+# 译码
 
 标量指令的译码过程同南湖。
 
@@ -95,11 +95,11 @@ CtrlBlock 模块包含指令译码（Decode）、指令融合（FusionDecoder）
 
 由于除了 i2f 的标量浮点指令现在使用向量浮点模块运行，因此 fpdecoder 中的译码信号只使用其中用到的 4 种（typeTagOut、wflags、typ、rm），用法与南湖相同。使用向量浮点模块运行的浮点指令，需要在向量译码单元中获得使用的 futype 以及 fuoptype，并使用 1bit isFpToVecInst 信号区分，该浮点指令是浮点指令还是向量浮点指令，从而在共用向量运算单元时能进行区分。
 
-#### 译码阶段输入
+## 译码阶段输入
 
 译码阶段除了接受来自前端的指令流，还需要接受来自 rob 的 Vtype 相关：walk，commit，vsetvl 信息，指导向量复杂指令译码。
 
-#### 译码输出
+## 译码输出
 
 与 fusionDecode：输出指令流以及控制指令融合是否开启。
 
@@ -107,7 +107,23 @@ CtrlBlock 模块包含指令译码（Decode）、指令融合（FusionDecoder）
 
 与 RAT：译码发出读推测重命名请求。
 
-### 寄存器重命名
+# FusionDecoder
+
+指令融合模块负责找出译码模块译码后的 uop 是否存在一定的联系，从而可以将多个 uop （当前仅支持两条指令的融合）需要做的事情融合为一条 uop 能够完成的事情。
+
+指令融合会对指令译码得到的 6 个 uop 凑成（uop0, uop1）, (uop1, uop2), (uop2, uop3), (uop3, uop4）, (uop4, uop5) 形式的至多 5 对待融合指令对。然后判断每一对指令是否能够进行指令融合。当前我们支持两种类型的指令融合，分别是融合成为一个带有新的控制信号的指令，以及将第一条指令的操作编码替换为另一个的形式。在判断可以进行指令融合后，我们会对 uop 的操作数，如逻辑寄存器号重新赋值，选择新的操作数。另外，HINT 类指令不支持被指令融合，例如 fence 指令不能够被融合。
+
+例如，slli r1, r0, 32 和 srli r1, r1, 32 将 r0 中的数左移 32 位后存入 r1，然后再次右移 32 位。其等价于 add.uw r1, r0, zero （伪指令 zext.w r1, r0），即将 r0 中的数扩展后移动到 r1 中。
+
+输入为译码后的至多 6 条 uop 以及他们的原始指令编码，以及相应的 valid 信号，这里输入 inready 只有 5 位（即译码宽度减一），因为我们需要将 uop 错位两两配对为至多 5 对待融合指令。inReady[i] 表示已经准备好可以接受 in(i+1)。
+
+输出宽度为译码宽度减一，包括指令融合替换，需要替换 fuType，fuOpType，lsrc2（第二个操作数的逻辑寄存器号，如有），src2Type（第二个操作数的类型），selImm（立即数类型）。以及指令融合信息，如 rs2 来自于 rs1/rs2/zero。同时还需要输出一组译码宽度的布尔向量 clear，表征该 uop 是否被指令融合需要被清除掉，当前设想每条指令融合后会将第二条指令清除掉。第 0 个 uop 的 clear 是不会为 true 的，因为我们默认将后面的指令融合到前面的指令上，因此无论是否融合，uop 0 始终不会因为指令融合而消失。
+
+输出有效要求：指令对有效（从译码模块传来的 uop 对有效），不能被指令融合清除掉，有可行的指令融合结果，以及不能是 Hint 类指令。同时将 fuType，src2Type，rs2FromZero ……等信息赋值
+
+![fusion decoder 总览](./figure/Fusion-Decoder-Overview.svg)
+
+# 寄存器重命名
 
 Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码信息为指令分配 robIdx 和物理寄存器，通过操作数查询对应的物理寄存器。同时，该模块还会根据指令译码信息、指令提交信息和来自 RenameTable 的寄存器释放信息维护 freeList 的状态，以及根据指令译码信息和指令提交信息向 RenameTable 发送写请求，以更新推测执行时的寄存器映射状态。此外，该模块还会处理来自 ROB 的重定向请求，根据重定向信息重新更新 freeList 的状态。在完成重命名后，Rename 将重命名后的指令信息发送至 Dispatch 模块。
 
@@ -115,11 +131,11 @@ RenameTableWrapper 共有 12 个整数寄存器读端口、18 个浮点寄存器
 
 RenameTable（RAT）被用作整数寄存器的重命名表，其中维护了逻辑整数寄存器与物理整数寄存器的映射关系。其有 12 个读推测重命名表端口、6 个写推测重命名表端口和 6 个写体系结构重命名表端口，内部则由 32 个宽度为 8 的寄存器来实际维护映射关系。
 
-#### 重命名输入
+## 重命名输入
 
 除了来自译码阶段输入，还需要接受 RAT 的推测重名数据返回；指令融合信息，以及根据指令融合情况修改译码输入指令流；ssit，waittable信息；Ctrlblock snapshot 控制信息及出入队指针；rab 提交信息。
 
-#### 重命名输出
+## 重命名输出
 
 与 rat：写重命名信息。
 
@@ -127,11 +143,21 @@ RenameTable（RAT）被用作整数寄存器的重命名表，其中维护了逻
 
 与 snapshot：enqdata，允许生成快照。
 
-### Redirect
+# Redirect
 
 在 ctrlblock 中主要负责 redirect 的生成以及发往各个模块。
 
-#### redirect 的生成
+## RedirectGenerator
+
+RedirectGenerator 模块管理不同来源的重定向信号（如执行单元和 load ），并决定是否发生重定向，如何刷新相关信息。它通过多级寄存器和同步机制确保数据流的正确性，且通过地址转换和错误检测保证指令执行的正确性。
+
+将当前最老的执行 redirect 的 fullTarget 和 cfiUpdate.target 拼接得到 fullTarget 字段。另外如果当前最老的执行 redirect 不是来自于 CSR，则还需要基于指令地址的翻译类型检查 IAF，IPF 和 IGPF 等地址的合法性。
+
+然后从最老的执行 redirect 和 load redirect 中选出一个最老的 redirect，同时还需要保证这个最老的 redirect 不会被 robFlush 或者之前的 redirect 刷掉。
+
+![redirect 总览](./figure/Redirect-Overview.svg)
+
+## redirect 的生成
 
 Ctrlblock 中生成的 Redirect 主要包括两个来源：
 
@@ -153,7 +179,7 @@ Ctrlblock 生成 Redirect 时会优先重定向 robflush 信号，当不存在 r
 
 ![redirect 的生成](./figure/Redirect-Gen.svg)
 
-#### redirect 分发
+## redirect 分发
 
 Ctrlblock 在生成出 Redirect 信号后，向流水级各个模块分发重定向信号。
 
@@ -163,13 +189,15 @@ Ctrlblock 在生成出 Redirect 信号后，向流水级各个模块分发重定
 
 其中比较特殊的是发送给前端的 redirect。发送给前端的重定向以及造成的影响，总共包括三部分：rob_commit, redirect，ftqIdx(readAhead，seloh)。
 
-##### 对于 rob commit
+![发向前端的 redirect](./figure/Redirect-ToFrontend.svg)
+
+### 对于 rob commit
 
 由于向前端传递的 flush 信号可能会延迟几个周期，并且如果在 flush 前继续提交，可能会导致提交后 flush 的错误。因此，我们将所有的 flush 视为异常，确保前端的处理行为一致，当 ROB 提交一条带 flush 信号的指令时，我们需要在 ctrlblock 直接刷掉带有 robflush 的 commit，告知前端进行 flush，但是不进行提交。
 
 而对于 exuredirect，其对应的指令需要在写回 rob 等待 walk 完毕后才可以提交，因此这两类 redirect 不需要再特殊处理，其提交一定在其写回之后。
 
-##### 对于 redirect：
+### 对于 redirect：
 
 发送给前端的 redirect 信号还包括额外的 CFIupdate，而 ftq 信息通过额外的 readAhead 以及 seloh 更新。
 
@@ -181,7 +209,7 @@ Ctrlblock 在生成出 Redirect 信号后，向流水级各个模块分发重定
 
 其中比较特殊的是 CSR 发出的冲刷流水中 XRet，这种情况下目的地址更新也需要从 CSR 中得到，不过 CSR 生成 Xret 的通路不需要再依赖 rob 发回的 exception，可以直接与 Ctrlblock 通过 csrio 交互。
 
-##### 对于ftqIdx：
+### 对于ftqIdx：
 
 Ctrlblock 主要发送两组数据 ftqIdxAhead 以及 ftqIdxSelOH。
 
@@ -189,11 +217,7 @@ Ctrlblock 主要发送两组数据 ftqIdxAhead 以及 ftqIdxSelOH。
 
 ftqIdxSelOH 用于选择有效的 ftqidx：前两个通过 redirectgen 输出的独热码选择，第三个通过发送到前端的 redirect 是否有效选择。
 
-上述部分整体框图如下：
-
-![发向前端的 redirect](./figure/Redirect-ToFrontend.svg)
-
-#### 保证 redirect 发出的顺序
+## 保证 redirect 发出的顺序
 
 为了保证执行正确，较新的 redirect 不能先于较老的 redirect 分发。以下分四类情况说明：
 
@@ -217,101 +241,11 @@ exuredirect 在写回时，会往前看是否已经有更老的 redirect。
 
 这一部分主要在 rob 中保证，exceptionGen 获得最老 robflush，同时 robflush 发出时检查上一条 flushout，较新的 robflush 会被取消。
 
-### 快照恢复
+# 快照恢复
 
 对于重命名恢复，目前昆明湖采用了快照恢复阶段：在重定向时不一定恢复到 arch 状态，而是可能会恢复到某一个快照状态。快照即根据一定规则，在重命名阶段保存的spec state，包括ROB enqptr；Vtypebuffer enqptr；RAT spec table；freelist Headptr（出队指针）以及ctrlblock用于总体控制 robidx。目前上述模块均各自维护四份快照。
 
-#### 快照的创建
-
-对于快照创建时机，目前在rename中进行管理。由于注意到对性能造成主要影响的重定向来源仍然是分支错误造成的重定向，因此选择在分支跳转指令处创建快照；同时为了在没有分支跳转的情况下其他的重定向也能用到快照恢复，因此固定每隔commitwidth\*4=32条uop打一份快照。
-
-Rename模块会对输出的六条uop都打上snapshot标志，表示uop是否需要打上快照，在Ctrlblock中会把六条uop上的snapshot标志汇总到第一条uop。该操作为了解决快照机制在blockBackward下的正确性：即如果在六条uop中出现blockbackward，且在blockbackward之后需要打上snapshot，该snapshot会由于blockbackward而无法在rob中打上快照，将所有snapshot放到第一条就可以解决这个问题。
-
-Rat，freelist，以及ctrlblock的快照创建均通过rename模块输出的snapshot标志控制。存储数据由各个模块自己管理。
-
-Rob，vtype的快照创建除了rename输出流到rob的snapshot标志还需要考虑非blockbackward以及rab，rob，vtypebuffer没有满。rob，vtype的快照创建和前述模块的快照写入可能并不在一个周期，但通过snapshot标志随着rename输出流到rob我们可以保证写入的robidx相同即可同步。
-
-#### 快照的删除
-
-快照删除主要包括两种情况，一种在commit的时候删除掉过期的快照；另一种是redirect的时候删除掉错误路径上的快照。
-
-对于commit的时候删除快照：Ctrlblock通过控制deq信号删除快照：robcommit的八条uop有一条与当前deqptr指向的快照中第一条uop一致则删除过期快照。Ctrlblock将deq信号传递到上述各个模块中同步删除commit过期快照。
-
-对于redirect的时候：Ctrlblock通过提供flushvec信号删除错误路径上的快照：判断快照的第一条uop是否比当前redirect要新（这里要注意套圈的情况），如果老则把这条快照刷掉，即flushvec相应位置1。Ctrlblock将flushvec传递到上述模块同步刷新错误路径上的快照。
-
-#### 快照的管理
-
-Ctrlblock通过自身维护一个存储robidx的快照副本，在重定向到来时可以方便的向各个模块告知是否命中快照以及命中快照的编号。Ctrlblock遍历快照，在存在比当前redirect更老（或者不刷自己的情况下相等），允许使用快照恢复，并记录命中快照的编号，传递到上述模块中。
-
-通过快照恢复spec state由各个模块自身控制。
-
-上述部分整体框图：
-
-![snapshot 的生成、删除和管理](./figure/Snapshot-Gen.svg)
-
-### Trace
-
-#### 功能描述
-
-ctrlBlock的trace子模块用来收集指令trace的信息，其接收来自rob指令提交时的信息，在rob压缩的基础上进行二次压缩（将不需要pc的指令和需要pc的指令压缩到一起存入trace buffer），以减小对pcMem的读压力。
-
-##### feature支持
-
-当前KMH核内trace的实现只支持指令trace。核内收集的指令trace信息包括：priv，cause，tval，itype，iretire，ilastsize，iaddr；其中itype字段支持所有类型。
-
-##### trace 各级流水线功能：
-
-在ctrlBlock里有三拍：
-
-* Stage 0: 将 rob commitInfo 打一拍；
-* Stage 1: commitInfo压缩，阻塞提交信号产生；
-* Stage 2: 根据压缩后的ftqptr从pcmem中读出basePc，从csr获取当前提交的指令对应的priv，xcause，xtval；
-
-memBlock
-
-* Stage 3: 通过ftqOffest和从pcmem读到的basePc算出最终的iaddr；
-
-#### 整体框图
-
-![trace 示意图](./figure/trace.svg)
-
-#### trace buffer 压缩机制
-
-当每一组commitInfo进入trace buffer之前, 都需要做压缩，即把每一个需要pc的commitinfo项和其前面的项压缩成一项，送入trace buffer，在进trace buffer之前，会计算当前拍进入trace buffer之后，在下一拍能不能全部出队，如果不能则去block rob的提交，该block会一直block到产生该block信号的commitInfo从trace buffer完全出队。产生blockCommit信号的commitInfo会无脑进trace buffer，但是其下一拍的commitinfo一定会被堵住。
-
-## 总体设计
-
-### 整体框图
-
-![CtrlBlock 总览](./figure/CtrlBlock-Overview.svg)
-
-### 接口列表
-
-见接口文档
-
-## 模块设计
-
-### 二级模块 RedirectGenerator
-
-#### 功能
-
-RedirectGenerator 模块管理不同来源的重定向信号（如执行单元和 load ），并决定是否发生重定向，如何刷新相关信息。它通过多级寄存器和同步机制确保数据流的正确性，且通过地址转换和错误检测保证指令执行的正确性。
-
-将当前最老的执行 redirect 的 fullTarget 和 cfiUpdate.target 拼接得到 fullTarget 字段。另外如果当前最老的执行 redirect 不是来自于 CSR，则还需要基于指令地址的翻译类型检查 IAF，IPF 和 IGPF 等地址的合法性。
-
-然后从最老的执行 redirect 和 load redirect 中选出一个最老的 redirect，同时还需要保证这个最老的 redirect 不会被 robFlush 或者之前的 redirect 刷掉。
-
-#### 整体框图
-
-![redirect 总览](./figure/Redirect-Overview.svg)
-
-#### 接口列表
-
-见接口文档
-
-### 二级模块 SnapshotGenerator
-
-#### 功能
+## SnapshotGenerator
 
 SnapshotGenerator 模块主要用于生成快照，存储维护。其本质是一个循环队列，维护最多四份快照。
 
@@ -325,59 +259,49 @@ Flush：根据刷新向量在下一拍刷新掉对应的快照。
 
 Snapshots: snapshots 队列寄存器直出
 
-#### 整体框图
-
 ![snapshots 总览](./figure/Snapshot-Overview.svg)
 
-#### 接口列表
+## 快照的创建
 
-见接口文档
+对于快照创建时机，目前在rename中进行管理。由于注意到对性能造成主要影响的重定向来源仍然是分支错误造成的重定向，因此选择在分支跳转指令处创建快照；同时为了在没有分支跳转的情况下其他的重定向也能用到快照恢复，因此固定每隔commitwidth\*4=32条uop打一份快照。
 
-### 二级模块 FusionDecoder
+Rename模块会对输出的六条uop都打上snapshot标志，表示uop是否需要打上快照，在Ctrlblock中会把六条uop上的snapshot标志汇总到第一条uop。该操作为了解决快照机制在blockBackward下的正确性：即如果在六条uop中出现blockbackward，且在blockbackward之后需要打上snapshot，该snapshot会由于blockbackward而无法在rob中打上快照，将所有snapshot放到第一条就可以解决这个问题。
 
-#### 功能
+Rat，freelist，以及ctrlblock的快照创建均通过rename模块输出的snapshot标志控制。存储数据由各个模块自己管理。
 
-指令融合模块负责找出译码模块译码后的 uop 是否存在一定的联系，从而可以将多个 uop （当前仅支持两条指令的融合）需要做的事情融合为一条 uop 能够完成的事情。
+Rob，vtype的快照创建除了rename输出流到rob的snapshot标志还需要考虑非blockbackward以及rab，rob，vtypebuffer没有满。rob，vtype的快照创建和前述模块的快照写入可能并不在一个周期，但通过snapshot标志随着rename输出流到rob我们可以保证写入的robidx相同即可同步。
 
-指令融合会对指令译码得到的 6 个 uop 凑成（uop0, uop1）, (uop1, uop2), (uop2, uop3), (uop3, uop4）, (uop4, uop5) 形式的至多 5 对待融合指令对。然后判断每一对指令是否能够进行指令融合。当前我们支持两种类型的指令融合，分别是融合成为一个带有新的控制信号的指令，以及将第一条指令的操作编码替换为另一个的形式。在判断可以进行指令融合后，我们会对 uop 的操作数，如逻辑寄存器号重新赋值，选择新的操作数。另外，HINT 类指令不支持被指令融合，例如 fence 指令不能够被融合。
+## 快照的删除
 
-例如，slli r1, r0, 32 和 srli r1, r1, 32 将 r0 中的数左移 32 位后存入 r1，然后再次右移 32 位。其等价于 add.uw r1, r0, zero （伪指令 zext.w r1, r0），即将 r0 中的数扩展后移动到 r1 中。
+快照删除主要包括两种情况，一种在commit的时候删除掉过期的快照；另一种是redirect的时候删除掉错误路径上的快照。
 
-输入为译码后的至多 6 条 uop 以及他们的原始指令编码，以及相应的 valid 信号，这里输入 inready 只有 5 位（即译码宽度减一），因为我们需要将 uop 错位两两配对为至多 5 对待融合指令。inReady[i] 表示已经准备好可以接受 in(i+1)。
+对于commit的时候删除快照：Ctrlblock通过控制deq信号删除快照：robcommit的八条uop有一条与当前deqptr指向的快照中第一条uop一致则删除过期快照。Ctrlblock将deq信号传递到上述各个模块中同步删除commit过期快照。
 
-输出宽度为译码宽度减一，包括指令融合替换，需要替换 fuType，fuOpType，lsrc2（第二个操作数的逻辑寄存器号，如有），src2Type（第二个操作数的类型），selImm（立即数类型）。以及指令融合信息，如 rs2 来自于 rs1/rs2/zero。同时还需要输出一组译码宽度的布尔向量 clear，表征该 uop 是否被指令融合需要被清除掉，当前设想每条指令融合后会将第二条指令清除掉。第 0 个 uop 的 clear 是不会为 true 的，因为我们默认将后面的指令融合到前面的指令上，因此无论是否融合，uop 0 始终不会因为指令融合而消失。
+对于redirect的时候：Ctrlblock通过提供flushvec信号删除错误路径上的快照：判断快照的第一条uop是否比当前redirect要新（这里要注意套圈的情况），如果老则把这条快照刷掉，即flushvec相应位置1。Ctrlblock将flushvec传递到上述模块同步刷新错误路径上的快照。
 
-输出有效要求：指令对有效（从译码模块传来的 uop 对有效），不能被指令融合清除掉，有可行的指令融合结果，以及不能是 Hint 类指令。同时将 fuType，src2Type，rs2FromZero ……等信息赋值
+## 快照的管理
 
-#### 整体框图
+Ctrlblock通过自身维护一个存储robidx的快照副本，在重定向到来时可以方便的向各个模块告知是否命中快照以及命中快照的编号。Ctrlblock遍历快照，在存在比当前redirect更老（或者不刷自己的情况下相等），允许使用快照恢复，并记录命中快照的编号，传递到上述模块中。
 
-![fusion decoder 总览](./figure/Fusion-Decoder-Overview.svg)
+通过快照恢复spec state由各个模块自身控制。
 
-#### 接口列表
+上述部分整体框图：
 
-见接口文档
+![snapshot 的生成、删除和管理](./figure/Snapshot-Gen.svg)
 
-### 二级模块 pcMem
+# pcMem
 
-#### 功能
+pcMem 实质上是例化了一个 SyncDataModuleTemplate，并需要提供多个读口，1 个写口。大小为 64 项，每一项仅包括 startAddr。
 
-pcMem 实质上是例化了一个 SyncDataModuleTemplate，并需要提供多个读口，1 个写口。大小为 64 项，每一项主要包括 startAddr 和 nextLineAddr。
+pcMem 读出来的是 base PC，还需要再加上 Ftq Offset 得到完整的 PC。
 
-当前配置下，需要提供 15 个读口，为 redirect，memPred，robFlush 各自提供 1 个读口，为 bjuPC 和 bjuTarget 各自提供 3 个读口，为 load 提供 3 个读口，以及为 trace 提供 3 个读口。
+当前配置下，需要提供 14 个读口，为 redirect，robFlush 各自提供 1 个读口，为 bjuPC 和 bjuTarget 各自提供 3 个读口，为 load 提供 3 个读口，以及为 trace 提供 3 个读口。
 
 输入包括来自前端 Ftq 的写入使能，写入地址和写入数据，以及不同来源的读请求和读地址，分别输出读结果。
 
-#### 整体框图
-
 ![PCMem 总览](./figure/PCMem-Overview.svg)
 
-#### 接口列表
-
-见接口文档
-
-### 二级模块 GPAMem
-
-#### 功能
+# GPAMem
 
 GPAMem 模块类似于 pcMem，例化了一个 SyncDataModuleTemplate，但是只需要提供 1 个读口和 1 个写口，大小为 64 项。每一项主要包括一个 gpaddr，存储前端的 ftq 对应的 gpaddr 信息。
 
@@ -385,10 +309,30 @@ Rob 在 exception 输出的前一拍发出 gpaddr 读请求以读地址的 ftq �
 
 输入包括来自前端 IFU 的写入使能，写入地址和写入数据，以及来自 rob 的读请求和读地址，向 rob 输出读结果。
 
-#### 整体框图
-
 ![GPAMem 总览](./figure/GPAMem-Overview.svg)
 
-#### 接口列表
+# Trace
 
-见接口文档
+ctrlBlock的trace子模块用来收集指令trace的信息，其接收来自rob指令提交时的信息，在rob压缩的基础上进行二次压缩（将不需要pc的指令和需要pc的指令压缩到一起存入trace buffer），以减小对pcMem的读压力。
+
+![trace 示意图](./figure/trace.svg)
+
+## feature支持
+
+当前KMH核内trace的实现只支持指令trace。核内收集的指令trace信息包括：priv，cause，tval，itype，iretire，ilastsize，iaddr；其中itype字段支持所有类型。
+
+## trace 各级流水线功能：
+
+在ctrlBlock里有三拍：
+
+* Stage 0: 将 rob commitInfo 打一拍；
+* Stage 1: commitInfo压缩，阻塞提交信号产生；
+* Stage 2: 根据压缩后的ftqptr从pcmem中读出basePc，从csr获取当前提交的指令对应的priv，xcause，xtval；
+
+memBlock
+
+* Stage 3: 通过ftqOffest和从pcmem读到的basePc算出最终的iaddr；
+
+## trace buffer 压缩机制
+
+当每一组commitInfo进入trace buffer之前, 都需要做压缩，即把每一个需要pc的commitinfo项和其前面的项压缩成一项，送入trace buffer，在进trace buffer之前，会计算当前拍进入trace buffer之后，在下一拍能不能全部出队，如果不能则去block rob的提交，该block会一直block到产生该block信号的commitInfo从trace buffer完全出队。产生blockCommit信号的commitInfo会无脑进trace buffer，但是其下一拍的commitinfo一定会被堵住。

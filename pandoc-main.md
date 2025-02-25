@@ -8,8 +8,6 @@ title-line2: "设计文档"
 # title-line3: "Design Document"
 author: "香山团队·北京开源芯片研究院"
 date: "\\today"
-replace_variables:
-  processor_name: "昆明湖 V2R2"
 figureTitle: "图"
 tableTitle: "表"
 listingTitle: "代码"

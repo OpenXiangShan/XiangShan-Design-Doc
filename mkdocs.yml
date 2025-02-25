@@ -1,34 +1,8 @@
+INHERIT: utils/mkdocs-base.yml
+
 site_name: 香山开源处理器设计文档
-theme:
-  name: material
-  features:
-    - navigation.indexes
-
-extra_css:
-  - stylesheets/extra.css
-
-markdown_extensions:
-  - admonition
-  - pymdownx.details
-  - pymdownx.superfences
-  - footnotes
-  - abbr
-  - pymdownx.snippets
-  - attr_list
-  - md_in_html
-  - def_list
-  - markdown_grid_tables
-  - markdown_captions     # for image caption, use alt as caption
-  - table_captions:       # for table caption, use Table: xxxx
-      numbering: false
-  - remove_references
-  - remove_include
-  - replace_variables:
-      variables:
-        processor_name: "昆明湖 V2R2"
-
-plugins:
-
+repo_url: https://github.com/OpenXiangShan/XiangShan-Design-Doc
+repo_name: XiangShan-Design-Doc
 
 nav:
   - 前端:
@@ -44,3 +18,17 @@ nav:
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
+  - 访存:
+    - 内存管理单元 MMU: 
+      - memblock/MMU/index.md
+      - L1TLB: memblock/MMU/L1TLB.md
+      - Repeater: memblock/MMU/Repeater.md
+      - L2TLB:
+        - memblock/MMU/L2TLB/index.md
+        - Page Cache: memblock/MMU/L2TLB/PageCache.md
+        - Page Table Walker: memblock/MMU/L2TLB/PTW.md
+        - Last Level Page Table Walker: memblock/MMU/L2TLB/LLPTW.md
+        - Hypervisor Page Table Walker: memblock/MMU/L2TLB/HPTW.md
+        - Miss Queue: memblock/MMU/L2TLB/MissQueue.md
+        - Prefetcher: memblock/MMU/L2TLB/Prefetcher.md
+      - PMP & PMA: memblock/MMU/PMP-PMA.md

@@ -23,6 +23,10 @@ make
 MkDocs 用来构建部署于互联网的静态网站。
 
 ```bash
+# 创建并激活 Python 虚拟环境（推荐）
+python3 -m venv .venv
+source .venv/bin/activate
+
 # 安装依赖
 pip install -r requirements.txt
 

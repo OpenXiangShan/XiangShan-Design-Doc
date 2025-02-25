@@ -25,6 +25,10 @@ make
 MkDocs is used to build and deploy a static website on the internet
 
 ```bash
+# Create and Activate Python Virtual Environments (Recommended)
+python3 -m venv .venv
+source .venv/bin/activate
+
 # Install dependencies
 pip install -r ./utils/requirements.txt
 
