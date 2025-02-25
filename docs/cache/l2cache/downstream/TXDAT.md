@@ -11,4 +11,4 @@ TXDAT 模块需要对 MainPipe 入口即 s0/s1 级进行反压。
 1. 对 s1 级反压是因为 RXSNP 收到的 snoop 可能会直接在 MainPipe 上完成处理，然后进入 TXDAT 通道，所以需要对 s1 的 sinkB 请求做反压
 2. 对 s0 级反压是因为一部分 MSHR task 需要进入 TXDAT 通道，MSHR task 是在 s0 进入流水线的，所以需要对 s0 的 mshrTask 做反压
 
-![TXDAT] (/figure/TXDAT.svg)
+![TXDAT] (./figure/TXDAT.svg)
