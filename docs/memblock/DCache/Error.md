@@ -2,8 +2,7 @@
 
 ## 功能描述
 
-CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一个memory map的寄存器控制的控制器，每一个支持ECC的硬件单元设置一个Control Bank。
-Bank寄存器配置完成之后，L1 DCache会对第一次读取DCache触发ecc错误（比如load指令或者MainPipe）。
+CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一个memory map的寄存器控制的控制器，每一个支持ECC的硬件单元设置一个Control Bank。通过MMIO访存指令读写CtrlUnit中的配置寄存器。寄存器配置完成之后，L1 DCache会对第一次读取DCache触发ecc错误（比如load指令或者MainPipe）。
 
 ### 特性 1：地址空间
 
@@ -13,7 +12,7 @@ Bank寄存器配置完成之后，L1 DCache会对第一次读取DCache触发ecc�
 
 如图\ref{fig:CtrlBank}所示，每一个 Control Bank 包含寄存器：ECCCTL、ECCEID、ECCMASK，每一个寄存器是 8 字节。
 
-![CtrlBank排布](./figure/DCache-ECCCtrlBank.svg){#fig:CtrlBank width=25%}
+![CtrlBank排布](./figure/DCache-ECCCtrlBank.svg){#fig:CtrlBank width=17%}
 
 * ECCCTL（ECC Control）：ECC 注入控制寄存器
 
@@ -74,45 +73,77 @@ Bank寄存器配置完成之后，L1 DCache会对第一次读取DCache触发ecc�
 
 #### 普通访存指令
 
-对于普通的访存指令，例如 Load 指令，在执行时只会触发tag或者data的ECC 错误，并将错误
+* 对于普通的访存指令，例如 Load 指令，在执行时只会触发tag或者data的ECC 错误，并将错误
 报送给 BEU，并且报告 Hardware Error(19)。
 
 #### Probe/Snoop
 
-对于 Probe/Snoop
+* 对于 Probe/Snoop
 
-* 如果出现 tag ecc error，不需要更改 cache 状态，并且需要向 l2 返回 corrupt=1 的 ProbeAck请求。
+  * 如果出现 tag ecc error，不需要更改 cache 状态，并且需要向 l2 返回 corrupt=1 的 ProbeAck请求。
 
-* 如果出现 data ecc error，按规则更改 cache 状态，如果需要返回数据，则需要向 l2 返回 corrupt=1 的 ProbeAckData请求。
+  * 如果出现 data ecc error，按规则更改 cache 状态，如果需要返回数据，则需要向 l2 返回 corrupt=1 的 ProbeAckData请求。
 
 #### Replace/Evict
 
-对于 Replace/Evict，
+* 对于 Replace/Evict，
 
-* 如果出现 tag ecc error, 需要向l2返回corrupt=1的Release请求。
+  * 如果出现 tag ecc error, 需要向l2返回corrupt=1的Release请求。
 
-* 如果出现 data ecc error, 需要向 l2 返回 corrupt=1 的 ReleaseData请求。
+  * 如果出现 data ecc error, 需要向 l2 返回 corrupt=1 的 ReleaseData请求。
 
 #### Store to DCache
 
-对于 Sbuffer 写入数据至 DCache
+* 对于 Sbuffer 写入数据至 DCache
 
-* 如果出现 tag ecc error，则根据 Repalce/Evict 流程释放 cacheline，并将数据写入 dcache 中，不向 l2 报送错误。
+  * 如果出现 tag ecc error，则根据 Repalce/Evict 流程释放 cacheline，并将数据写入 dcache 中，不向 l2 报送错误。
 
-* 如果出现 data ecc error，则直接写入数据，不向 l2 报送错误
+  * 如果出现 data ecc error，则直接写入数据，不向 l2 报送错误
 
 #### Atomics
 
-对于 Atomic，不向 l2 报送错误
+* 对于 Atomic，不向 l2 报送错误
 
 ## 整体框图
 
-![Error架构](./figure/DCache-CtrlUnit.svg){#fig:CtrlUnit width=50%}
+![Error架构](./figure/DCache-CtrlUnit.svg){#fig:CtrlUnit width=40%}
 
 ## 接口时序
 
-### 读写配置寄存器时序
+### 配置寄存器时序
+
+* 可以通过tilelink接口读写配置寄存器，如图\ref{fig:DCache-Error-Config-Timing}, A通道传递写地址和数据。
+
+  * 配置地址为0x38022010的EccMask0寄存器，写入的数据为0xff;
+
+  * 配置地址为0x38022008的EccEid寄存器，写入的数据为0x4;
+
+  * 配置地址为0x38022000的EccCtl寄存器，写入的数据为0x5
+
+![配置寄存器时序](./figure/DCache-Error-Config-Timing.svg){#fig:DCache-Error-Config-Timing width=80%}
 
 ### Tag注入时序
 
+* 如图\ref{fig:DCache-Error-TagInj-Timing}所示，当配置好寄存器（EccCtl, EccEid和EccMask0）之后，当计时器计时到0，开始注入：
+
+  * tag注入接口io_pseudoError_0_valid拉高，
+
+  * 当注入成功后（即io_pseudoError_0_valid && io_pseudoError_0_ready == 1），EccCtl的ese位将清零，结束注入；
+
+  * 以MainPipe为例，s1_tag_error、s2_tag_error和s3_tag_error逐级拉高，最后通过io_error端口向BEU报告错误信息
+
+![Tag注入时序](./figure/DCache-Error-TagInj-Timing.svg){#fig:DCache-Error-TagInj-Timing width=80%}
+
+\newpage
+
 ### Data注入时序
+
+* 如图\ref{fig:DCache-Error-DataInj-Timing}所示，当配置好寄存器（EccCtl, EccEid和EccMask2）之后，当计时器计时到0，开始注入：
+
+  * tag注入接口io_pseudoError_1_valid拉高，
+
+  * 当注入成功后（即io_pseudoError_1_valid && io_pseudoError_1_ready == 1），EccCtl的ese位将清零，结束注入；
+
+  * 以MainPipe为例，s2_data_error和s3_data_error逐级拉高，最后通过io_error端口向BEU报告错误信息
+
+![Data注入时序](./figure/DCache-Error-DataInj-Timing.svg){#fig:DCache-Error-DataInj-Timing width=80%}
