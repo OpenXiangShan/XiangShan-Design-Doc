@@ -169,11 +169,103 @@ Table: 寄存器堆规格
 
 ### 二级模块 RegCache
 
-#### 功能
-
-
 #### 整体框图
 
+![RegCache整体框图](./figure/regcache.png)
+
+#### 功能
+
+Reg Cache 作为 Reg File 的子集，保存部分 EXU 最近的写回结果，承担一部分原来 DataSource 为 reg 类型的读数据请求，减少 Reg File 的读口数量。
+
+目前仅对整数寄存器堆设置 Reg Cache，只保存4个 ALU 所在的 EXU 和3个 LDU 的写回结果。
+
+##### 数据部分（RC Data Module）
+
+数据部分流水线位置与 Reg File 相同，都是 OG0 阶段发读请求，OG1 阶段拿到数据。
+
+数据部分分为两部分，RC_INT 负责存放4个 ALU 所在的 EXU 的结果，RC_LS 负责存放3个 LDU 的结果。
+
+每个部分内部都采用全相连结构，整个 Reg Cache 的寻址采用统一寻址，使用 5 bit，最高位为 0 代表 RC_INT，为 1 代表 RC_LS。
+
+Reg Cache 的具体参数配置如下表所示。
+
+Table: Reg Cache 规格
+
+| Reg Cache  | 容量  | 位宽    | 读口数量  | 写口数量  |
+| ---------- | ---- | ------- | -------- | -------- |
+| RC_INT     | 16   |  64-bit |  23      |   4      |
+| RC_LS      | 12   |  64-bit |  23      |   3      |
+
+(1) RC data 的读取
+
+指令读取 RC 数据与读取寄存器堆类似，在数据通路的 OG0 阶段，数据来源为 RC 类型的操作数向 RC 发起读数据请求，将对应的 RC 地址发送出去。
+
+在数据通路的 OG1 阶段，得到 RC 数据结果，该结果会传送到 BypassNetwork 中，根据数据来源类型多路选择出最终数据。
+
+读取 RC 时不设置仲裁，每个可以读整数寄存器堆的操作数都设立一个独占的读口。
+
+(2) RC data 的写入
+
+RC data 使用 BypassNetwork 里 bypass 阶段的数据进行写入，写入时的地址使用发出唤醒信号时携带的 RC 地址。
+
+由于发出唤醒到写回数据到达 bypass 阶段有3拍的间隔，需要在 RC 里将选出的替换项地址打3拍后用于写入数据。
+
+##### 年龄部分（RC Age Timer）
+
+年龄部分分为年龄计数器和年龄矩阵两个模块。年龄计数器模块对 RC 每项设立一个 2bit 的年龄计数器，根据 RC 项的读写情况进行更新。
+
+同时对 RC_INT 和 RC_LS 分别维护一个年龄矩阵，用于每周期分别选出4、3个待替换的项，将它们的 RC_Idx 传给4个 ALU 的 WakeUpQueue 和3个 LDU 的 WakeUpQueue。每个 WakeUpQueue 在发出快速唤醒的时刻携带对应的 RC_Idx，告知其消费者应当从该位置获取数据。
+
+对于 N 项的 RC，其年龄矩阵是一个 N x N 的方阵，每项 Age[i][j] 表示 i 项和 j 项的相对年龄次序，为1表示 i 项比 j 项更老，i 项应当先被换出。
+
+显然有 Age[i][j] = ~Age[j][i]（如果 i != j），同时我们规定如果 i == j，Age[i][j] = 1。这样，实际需要存储的部分是矩阵的上三角，有 N * (N - 1) / 2 bit。
+
+(1) 替换算法
+
+年龄矩阵通过以下方式维护：
+
+ - 在 T0 时刻根据各项的状态，通过一个年龄比较函数得到两两之间的年龄次序，写入年龄矩阵
+ - 在 T1 时刻根据每行中1的数量，超过阈值的项认为被选中替换
+
+如果要选出 M 项替换，那么1的数量 >= N - M + 1 的项则被选中。根据1的数量 = N - M + 1 到 N 选出这 M 项的位置，即可得到 RC_Idx。
+
+(2) 年龄更新
+
+RC 每项维护一个 AgeTimer，更新规则如下：
+
+ - 当该项被更新时，清零计数器
+ - 当前有读请求，保持不变（包括发了读请求但指令被取消的情况）
+ - 计数器已达到最大值，维持不变
+ - 其余情况，计数器+1
+
+``` c
+if (wen):
+    AgeTimerNext = 0
+else if (hasReadReq):
+    AgeTimerNext = AgeTimer
+else if (AgeTimer == 3):
+    AgeTimerNext = 3
+else:
+    AgeTimerNext = AgeTimer + 1
+```
+
+(3) 年龄比较
+
+年龄比较函数根据 AgeTimerNext 进行比较，计数器越大认为越老，如果两项计数器值相同，认为序号越小的越老。
+
+``` c
+for(i = 0; i < N ; i++)
+    for(j = 0; j < N; j++)
+        if (i == j)
+            AgeNext[i][j] = 1
+        else if (i < j)
+            if (AgeTimerNext[i] >= AgeTimerNext[j])
+                AgeNext[i][j] = 1
+            else
+                AgeNext[i][j] = 0
+        else
+            AgeNext[i][j] = ~AgeNext[j][i]
+```
 
 #### 接口列表
 
