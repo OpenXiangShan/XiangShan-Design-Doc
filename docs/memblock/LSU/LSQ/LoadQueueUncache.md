@@ -1,9 +1,9 @@
 # Uncache Load 处理单元 LoadQueueUncache
 
-| 更新时间   | 代码版本                                                                                                                                                     | 更新人 | 备注     |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | -------- |
+| 更新时间   | 代码版本                                                                                                                                                     | 更新人                                      | 备注     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | -------- |
 | 2025.02.26 | [eca6983](https://github.com/OpenXiangShan/XiangShan/blob/eca6983f19d9c20aa907987dff616649c3d204a2/src/main/scala/xiangshan/mem/lsqueue/LoadQueueUncache.scala) | [Maxpicca-Li](https://github.com/Maxpicca-Li/) | 完成初版 |
-|            |                                                                                                                                                              |        |          |
+|            |                                                                                                                                                              |                                             |          |
 
 ## 功能描述
 
@@ -50,11 +50,132 @@ LoadQueueUncache 负责接收来自 LoadUnit 0、1、2 三个模块的请求，�
 
 ## 接口时序
 
-### XXXX 接口时序实例
+### 入队接口时序实例
 
-### XXXX 接口时序实例
+如下图所示，假设连续 5 个 NC 依次通过 LoadUnit 0\1\2 进入，当前 LoadQueueUncache 只有 4 项。故前四项正常分配现有空项。第 3 拍出现的 `r5` 因 buffer 满而无法分配项，故在第 5 拍产生回滚。注意，图中假设了每拍 NC 按顺序进入，即 `r1` < `r2` < `r3` 且 `r4` < `r5`；如果需要排序，将排序结果依次替换 `io_req` 即可，其余逻辑一致。
+![LoadQueueUncache 入队接口时序示意图](./figure/LoadQueueUncache-timing-enq.svg)
 
-### XXXX 接口时序实例
+<!-- 
+{
+  signal: [
+    {name: 'clk',                       wave: 'p.....'},
+    {name: 'io_req_0_valid',            wave: '01.0..'},
+    {name: 'io_req_1_valid',            wave: '01.0..'},
+    {name: 'io_req_2_valid',            wave: '010...'},
+    {name: 'io_req_0_bits*robIdx*',     wave: 'x36x..', data: ['r1','r4']},
+    {name: 'io_req_0_bits*robIdx*',     wave: 'x47x..', data: ['r2','r5']},
+    {name: 'io_req_0_bits*robIdx*',     wave: 'x5x...', data: ['r3']},
+    {},
+    {name: 'freeList_io_doAllocate_0',  wave: '0.1.0.'},
+    {name: 'freeList_io_doAllocate_1',  wave: '0.10..'},
+    {name: 'freeList_io_doAllocate_2',  wave: '0.10..'},
+    {},
+    {name: 'io_rollback_valid',         wave: '0...10'},
+    {name: 'io_rollback_bits*robIdx*',  wave: 'x...7x', data: ['r5']},
+  
+    // 先不绘制 freeList 和 Entry 的更新
+    // {name: 'freeList_io_canAllocate_0',  wave: '01.0|.....'},
+    // {name: 'freeList_io_canAllocate_1',  wave: '01.0|.....'},
+    // {name: 'freeList_io_canAllocate_2',  wave: '01.0|.....'},
+    // {name: 'freeList_io_allocateSlot_0', wave: 'x34x|.....', data: ['s1','s2']},
+    // {name: 'freeList_io_allocateSlot_1', wave: 'x34x|.....', data: ['s1','s2']},
+    // {name: 'freeList_io_allocateSlot_2', wave: 'x34x|.....', data: ['s1','s2']},
+    // {name: 'entries_0_req_valid',        wave: '01.0|.....'},
+    // {name: 'entries_1_req_valid',        wave: '01.0|.....'},
+    // {name: 'entries_2_req_valid',        wave: '01.0|.....'},
+    // {name: 'entries_3_req_valid',        wave: '01.0|.....'},
+    // {name: 'entries_0_req_bits*robIdx*', wave: 'x34x|.....', data: ['s1','s2']},
+    // {name: 'entries_1_req_bits*robIdx*', wave: 'x34x|.....', data: ['s1','s2']},
+    // {name: 'entries_2_req_bits*robIdx*', wave: 'x34x|.....', data: ['s1','s2']},
+    // {name: 'entries_3_req_bits*robIdx*', wave: 'x34x|.....', data: ['s1','s2']},
+  ],
+  config: { hscale: 1 },
+  head: {
+    text:'enq from LoadUnit',
+    tick:1,
+    every:1
+  },
+}
+ -->
+
+### 出队接口时序实例
+
+下图展示了 `mmioOut`、一拍只有一个 `ncOut` 和一拍同时有两个 `ncOut` 的情况。用第一个例子详细说明，第 2 拍选出写回项，并更新 freeList，寄存一拍，第 3 拍写回 LoadUnit。后续例子同理可得。
+
+![LoadQueueUncache 出队接口时序示意图](./figure/LoadQueueUncache-timing-writeback.svg)
+
+<!-- 
+{
+  signal: [
+    {name: 'clk',                 wave: 'p.............'},
+    {name: 'io_mmioOut_2_valid',  wave: '0.10|.........'},
+    {name: 'io_ncOut_1_valid',    wave: '0...|.10..|.10'},
+    {name: 'io_ncOut_2_valid',    wave: '0...|...10|.10'},
+    {},
+    {name: 'freeList_io_free',    wave: 'x3x.|4x5x.|6x.', data: ['0b0001', '0b0010','0b0100', '0b1001']},
+  ],
+  config: { hscale: 2 },
+  head: {
+    text:'writeback to LoadUnit',
+    tick:1,
+    every:1
+  },
+}
+ -->
+
+### uncache 接口时序实例
+
+（1）没有 outstanding 时，每段只能发出一个 uncache 访问（由 `io_uncache_req_ready` 控制流出量），直至收到 uncache 回复。如下图，在第 5 拍 `io_uncache_req_ready` 拉高时，uncache 请求发出，第 6 拍 Uncache 收到请求并在第 7 拍返回 `idResp`。经过一段时间访问，在第 10+n 拍收到 Uncache 访问结果。
+
+![LoadQueueUncache 与 Uncache 的接口时序示意图](./figure/LoadQueueUncache-timing-uncache.svg)
+
+<!--
+{
+  signal: [
+    {name: 'clk',                         wave: 'p.......|..'},
+    {name: 'io_uncache_req_ready',        wave: '0...1...|..'},
+    {name: 'io_uncache_req_valid',        wave: '01...0..|..'},
+    {name: 'io_uncache_req_bits_id',      wave: 'x3...x..|..', data:['m1','m2','m3','m4']},
+    {name: 'io_uncache_idResp_valid',     wave: '0.....10|..'},
+    {name: 'io_uncache_idResp_bits_mid',  wave: 'x.....3x|..', data: ['m1', 'm2', 'm3', 'm4']},
+    {name: 'io_uncache_idResp_bits_mid',  wave: 'x.....3x|..', data: ['s1', 's2', 's3', 's4']},
+    {name: 'io_uncache_resp_valid',       wave: '0.......|10'},
+    {name: 'io_uncache_resp_bits_id',     wave: '0.......|3x', data: ['s1', 's2']},
+  ],
+  config: { hscale: 1 },
+  head: {
+    text:'LSQ <=> Uncache',
+    tick:1,
+    every:1
+  },
+}
+-->
+
+（1）存在 outstanding 时，每段可发出多个 uncache 访问（由 `io_uncache_req_ready` 控制流出量）。如下图，连续发出 m1，m2，m3，m4 个请求，在第 4 拍和第 5 拍收到前2个请求的 Uncache 分派结果，此时 Uncache 满，m3 被中间寄存器寄存，m4 在等待 `io_uncache_req_ready` 拉高。第 9+n 拍 `io_uncache_req_ready` 拉高，m4 也发出了，并在第10+n、11+n拍分别收到 m3 和 m4 的 Uncache 分派结果。之后的拍数里将陆续收到 Uncache 的访问回复。
+
+![outstanding 时 LoadQueueUncache 与 Uncache 的接口时序示意图](./figure/LoadQueueUncache-timing-uncache-outstanding.svg)
+
+<!--
+{
+  signal: [
+    {name: 'clk',                         wave: 'p.....|。.......'},
+    {name: 'io_uncache_req_ready',        wave: '01..0.|.10.....'},
+    {name: 'io_uncache_req_valid',        wave: '01....|..0.....'},
+    {name: 'io_uncache_req_bits_id',      wave: 'x3456.|..x.....', data:['m1','m2','m3','m4']},
+    {name: 'io_uncache_idResp_valid',     wave: '0..1.0|..1.0...'},
+    {name: 'io_uncache_idResp_bits_mid',  wave: 'x..34x|..56x...', data: ['m1', 'm2', 'm3', 'm4']},
+    {name: 'io_uncache_idResp_bits_mid',  wave: 'x..34x|..56x...', data: ['s1', 's2', 's3', 's4']},
+    {name: 'io_uncache_resp_valid',       wave: '0.....|....1010'},
+    {name: 'io_uncache_resp_bits_id',     wave: 'x.....|....3x4x', data: ['s1', 's2']},
+  ],
+  config: { hscale: 1 },
+  head: {
+    text:'LSQ <=> Uncache when outstanding',
+    tick:1,
+    every:1
+  },
+}
+-->
 
 ## UncacheEntry 模块
 
@@ -65,7 +186,6 @@ UncacheEntry 负责独立处理一个请求的生命周期，并利用一组状�
 * `uncacheState`：记录该项当前的生命阶段。
 * `slaveAccept`、`slaveId`：记录该项是否分配到 Uncache Buffer 以及分配的 UnCache Buffer ID。
 * `needFlushReg`：指示该项是否需要延迟刷新。
-
 
 ### 特性 1：生命周期及状态机
 

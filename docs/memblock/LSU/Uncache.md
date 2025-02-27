@@ -111,10 +111,76 @@ Uncache 的 `uState`，表征忽视 outstanding 时一个请求项的各个状�
 
 ## 接口时序
 
-// TODO
+### LSQ 接口时序实例
 
-### XXXX 接口时序实例
+下图是一个比较详细的接口案例，共 4 个 uncache 访问。第 5 拍前陆续接收 m1、m2、m3，并在其请求发起的随后一拍返回 `idResp`。第 6 拍 Uncache 满，m4 被停滞。第 9+n 拍完成 s1 的所有访问并写回，释放了一个项。故第 10+n 拍 `io_lsq_req_ready` 拉高，m4 被接收。之后的拍数里陆续写回其他 uncache 访问请求。
+![Uncache 与 LSQ 的接口时序示意图](./figure/Uncache-timing-with-lsq.svg)
 
-### XXXX 接口时序实例
+<!--
+{
+  signal: [
+    {name: 'clk',                     wave: 'p......|.......'},
+    {name: 'io_lsq_req_valid',        wave: '0101...|..0....'},
+    {name: 'io_lsq_req_ready',        wave: '1....0.|.1.....'},
+    {name: 'io_lsq_req_bits_id',      wave: 'x3x456.|..x....', data:['m1','m2','m3','m4']},
+    {name: 'io_lsq_idResp_valid',     wave: '0.101.0|..10...'},
+    {name: 'io_lsq_idResp_bits_mid',  wave: 'x.3x45x|..6x...', data: ['m1', 'm2', 'm3', 'm4']},
+    {name: 'io_lsq_idResp_bits_sid',  wave: 'x.3x45x|..5x...', data: ['s1', 's2', 's3', 's4']},
+    {name: 'io_lsq_resp_valid',       wave: '0......|10.1010'},
+    {name: 'io_lsq_resp_bits_id',     wave: 'x......|3x.4x5x', data: ['s1', 's2', 's3']},
+  ],
+  config: { hscale: 1 },
+  head: {
+    text:'LSQ <=> Uncache',
+    tick:1,
+    every:1
+  },
+}
+-->
 
-### XXXX 接口时序实例
+### 总线 接口时序实例
+
+（1）没有 outstanding 时，每段只能发出一个 uncache 请求（由 `uState` 控制流出量），直至收到 d 通道回复，才能再次发起 uncache 请求。
+![Uncache 与总线的接口时序示意图](./figure/Uncache-timing-with-bus.svg)
+
+<!-- 
+{
+  signal: [
+    {name: 'clk',                           wave: 'p..|.....|...'},
+    {name: 'auto_client_out_a_ready',       wave: '1..|.....|...'},
+    {name: 'auto_client_out_a_valid',       wave: '010|...10|...'},
+    {name: 'auto_client_out_a_bits_source', wave: 'x3x|...4x|...', data: ['s1','s2']},
+    {name: 'auto_client_out_d_valid',       wave: '0..|10...|10.'},
+    {name: 'auto_client_out_d_bits_source', wave: 'x..|3x...|3x.', data: ['s1', 's2']},
+  ],
+  config: { hscale: 1 },
+  head: {
+    text:'Uncache <=> Bus',
+    tick:1,
+    every:1
+  },
+}
+ -->
+
+（2）有 outstanding 时，每段可发出多个 uncache 访问（由 `auto_client_out_a_ready` 控制流出量）。如下图，第 2、3拍连续发出两个请求，并在第 6+n、第 8+n拍收到访问结果。
+
+![outstanding 时 Uncache 与总线的接口时序示意图](./figure/Uncache-timing-with-bus-outstanding.svg)
+
+<!-- 
+{
+  signal: [
+    {name: 'clk',                           wave: 'p..|......'},
+    {name: 'auto_client_out_a_ready',       wave: '1..|......'},
+    {name: 'auto_client_out_a_valid',       wave: '01.0|.....'},
+    {name: 'auto_client_out_a_bits_source', wave: 'x34x|.....', data: ['s1','s2']},
+    {name: 'auto_client_out_d_valid',       wave: '0...|1010.'},
+    {name: 'auto_client_out_d_bits_source', wave: 'x...|3x4x.', data: ['s1', 's2']},
+  ],
+  config: { hscale: 1 },
+  head: {
+    text:'Uncache <=> Bus when outstanding',
+    tick:1,
+    every:1
+  },
+}
+ -->
