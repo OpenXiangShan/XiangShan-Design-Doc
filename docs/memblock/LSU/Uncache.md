@@ -1,24 +1,22 @@
 # Uncache 处理单元 Uncache
 
-| 更新时间   | xiangshan 版本                                                                                                                                       | 更新人 | 备注     |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- |
-| 2025.02.26 | [eca6983](https://github.com/OpenXiangShan/XiangShan/blob/eca6983f19d9c20aa907987dff616649c3d204a2/src/main/scala/xiangshan/cache/dcache/Uncache.scala) | 李燕琴 | 完成初版 |
-|            |                                                                                                                                                      |        |          |
+| 更新时间   | 代码版本                                                                                                                                             | 更新人                                      | 备注     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------- |
+| 2025.02.26 | [eca6983](https://github.com/OpenXiangShan/XiangShan/blob/eca6983f19d9c20aa907987dff616649c3d204a2/src/main/scala/xiangshan/cache/dcache/Uncache.scala) | [Maxpicca-Li](https://github.com/Maxpicca-Li/) | 完成初版 |
+|            |                                                                                                                                                      |                                             |          |
 
 ## 功能描述
 
-// @liyanqin 建议增加独立的小节整体介绍 Uncache 处理流程
-
-// 全局替换：ulq: uncache load 请求, usq: uncache store 请求
-
-Uncache 作为LSQ和总线的桥梁，主要用于处理 uncache 的请求和响应。目前 Uncache 不支持向量访问、非对齐访问、原子访问。
+Uncache 作为LSQ和总线的桥梁，主要用于处理 uncache 访问到总线的请求和响应。目前 Uncache 不支持向量访问、非对齐访问、原子访问。
 
 Uncache 的功能概述如下：
 
-1. 接收 LSQ 传过来的 uncache 请求，包括 LoadQueueUncache 传来的 ulq 和 StoreQueue 传来的 usq
+1. 接收 LSQ 传过来的 uncache 请求，包括 LoadQueueUncache 传来的 uncache load 请求 和 StoreQueue 传来的 uncache store 请求
 2. 选择候机的 uncache 请求发送到总线，等待并接收总线回复
 3. 将处理完的 uncache 请求返回给 LSQ
 4. 前递寄存的 uncache store 请求的数据给 LoadUnit 中正在执行的 load
+
+Uncache Buffer 结构上，目前有 4 项（项数可配）Entries 和 States，一个总的状态 `uState`。下列为各项具体细节。
 
 Uncache 的 Entry 结构如下：
 
@@ -38,6 +36,16 @@ Uncache 的 State 结构如下：
 * `inflight`：1 表示该项请求已经发往总线。
 * `waitSame`：1 表示当前 buffer 里存在与该项请求所访问数据块重合的其他请求，已经发往总线。
 * `waitReturn`：1 表示该项的请求已经接收到总线回复，等待写回 LSQ。
+
+Uncache 的 `uState`，表征忽视 outstanding 时一个请求项的各个状态：
+
+* `s_idle` 默认状态
+* `s_inflight` 已经发送了一个请求到总线上，但还未收到回复
+* `s_wait_return` 已经收到回复，但还未返回给 LSQ
+
+状态转换如下：
+
+![ustate 状态转换示意图](./figure/Uncache-uState.svg)
 
 ### 特性 1：入队逻辑
 
@@ -71,11 +79,7 @@ Uncache 的 State 结构如下：
 
 ### 特性 3：总线交互和 outstanding 逻辑
 
-Uncache 的 `uState`，表征忽视 outstanding 下一个请求项的各个状态：
-
-* `s_idle` 默认状态
-* `s_inflight` 已经发送了一个请求到总线上，但还未收到回复
-* `s_wait_return` 已经收到回复，但还未返回给 LSQ
+总线交互和 outstanding 逻辑分以下两个部分：
 
 （1）发起请求
 
@@ -103,7 +107,11 @@ Uncache 的 `uState`，表征忽视 outstanding 下一个请求项的各个状�
 
 <!-- 请使用 svg -->
 
+![ubuffer整体框图](./figure/Uncache.svg)
+
 ## 接口时序
+
+// TODO
 
 ### XXXX 接口时序实例
 
