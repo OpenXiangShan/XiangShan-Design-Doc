@@ -53,6 +53,7 @@ LoadQueueUncache 负责接收来自 LoadUnit 0、1、2 三个模块的请求，�
 ### 入队接口时序实例
 
 如下图所示，假设连续 5 个 NC 依次通过 LoadUnit 0\1\2 进入，当前 LoadQueueUncache 只有 4 项。故前四项正常分配现有空项。第 3 拍出现的 `r5` 因 buffer 满而无法分配项，故在第 5 拍产生回滚。注意，图中假设了每拍 NC 按顺序进入，即 `r1` < `r2` < `r3` 且 `r4` < `r5`；如果需要排序，将排序结果依次替换 `io_req` 即可，其余逻辑一致。
+
 ![LoadQueueUncache 入队接口时序示意图](./figure/LoadQueueUncache-timing-enq.svg)
 
 <!-- 
