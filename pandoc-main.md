@@ -11,16 +11,20 @@ date: "\\today"
 figureTitle: "图"
 tableTitle: "表"
 listingTitle: "代码"
-lofTitle: "# 图目录"
-lotTitle: "# 图目录"
-lolTitle: "# 代码目录"
+lofTitle: "图目录"
+lotTitle: "表目录"
+lolTitle: "代码目录"
 figPrefix: "图"
 eqnPrefix: "公式"
 tblPrefix: "表"
 lstPrefix: "代码"
 secPrefix: "§"
+linkReferences: true
 i18n-applicable: "适用于"
 # i18n-applicable: "Applicable to"
+lof: true
+lot: true
+break-after-section: true
 ---
 
 

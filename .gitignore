@@ -6,6 +6,8 @@ venv/
 *.log
 *.pdf
 *.toc
+*.lof
+*.lot
 *.tex
 *.html
 

@@ -14,7 +14,16 @@ Pandoc 用于构建 PDF 和单页 HTML 格式的文档。
 # 安装依赖
 bash ./utils/dependency.sh
 
-# 执行构建
+# 构建 PDF
+make pdf
+
+# 构建用于打印的 PDF
+make pdf TWOSIDE=1
+
+# 构建 HTML（暂不可用）
+make html
+
+# 执行默认构建（PDF）
 make
 ```
 

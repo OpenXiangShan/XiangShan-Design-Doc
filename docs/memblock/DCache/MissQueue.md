@@ -84,7 +84,6 @@ Table: MissEntry状态列表 {#tbl:MissEntry-state}
 | w_l2hint          | 表示当前miss请求已收到l2_hint信号, 可以唤醒, 向MainPipe发起乎提案请求 |
 | w_refill_resp     | 表示非原子操作的回填请求已完成, 可以释放MissEntry |
 
-
 ![MissEntry流程图](./figure/DCache-MissEntry.svg){#fig:DCache-MissEntry}
 
 ### 特征 3： MissEntry别名处理

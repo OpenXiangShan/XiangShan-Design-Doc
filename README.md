@@ -16,7 +16,16 @@ Pandoc is used to build PDF and single-page HTML documents.
 # Install dependencies
 bash ./utils/dependency.sh
 
-# Build
+# Build PDF
+make pdf
+
+# Build PDF for print
+make pdf TWOSIDE=1
+
+# Build HTML (not ready)
+make html
+
+# Build default format (PDF)
 make
 ```
 
