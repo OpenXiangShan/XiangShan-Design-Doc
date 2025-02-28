@@ -22,18 +22,18 @@ Virtualloadqueue对于每一个 entry 中的 load 指令都有若干状态位来
 
 ## 整体框图
 <!-- 请使用 svg -->
-![VirtualLoadQueue整体框图](./figure/VirtualLoadQueue.svg){#fig:VirtualLoadQueue width=80%}
+![VirtualLoadQueue整体框图](./figure/VirtualLoadQueue.svg)
 
 ## 接口时序
 
 ### 接收入队请求时序实例
 
-![VirtualLoadQueue-enqueue](./figure/VirtualLoadQueue-enqueue.svg){#fig:VirtualLoadQueue-enqueue width=80%}
+![VirtualLoadQueue-enqueue](./figure/VirtualLoadQueue-enqueue.svg)
 
 当io_enq_canAccept与io_enq_sqcanAccept为高时，表示可以接收派遣指令。当io_enq_req_*_valid为高时表示真实派遣指令到VirtualLoadQueue，派遣指令的信息为rob的位置、Virtualloadqueue的位置以及向量指令元素个数等。完成派遣后对应的allocated拉高，enqPtrExt根据派遣的req个数更新。
 
 ### 流水线writeback时序实例
 
-![VirtualLoadQueue-writeback](./figure/VirtualLoadQueue-writeback.svg){#fig:VirtualLoadQueue-writeback width=80%}
+![VirtualLoadQueue-writeback](./figure/VirtualLoadQueue-writeback.svg)
 
 当io_ldin_* _valid为高时表示load流水线的s3写回lq，具体内容为io_ldin_* _bits_*。allocated_5表示lq的第5项是否分配，当updateAddrValid，且没有replay时，committed_5在下一拍拉高。allocated和committed同时为高表示可以出队。每写回一个表项队尾指针+1。

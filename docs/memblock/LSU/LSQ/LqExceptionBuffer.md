@@ -14,4 +14,4 @@ LqExceptionBuffer用于跟踪load指令产生的异常情况，有三种来源�
 
 ## 整体框图
 <!-- 请使用 svg -->
-![LqExceptionBuffer整体框图](./figure/LqExceptionBuffer.svg){#fig:LqExceptionBuffer width=80%}
+![LqExceptionBuffer整体框图](./figure/LqExceptionBuffer.svg)
