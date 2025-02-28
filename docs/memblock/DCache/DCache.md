@@ -4,7 +4,7 @@
 
 - 版本：V2R2
 - 状态：WIP
-- 日期：2025/02/24
+- 日期：2025/02/28
   <!-- TODO: 填写 commit -->
 - commit：[b6c14329cbd4a204593ce03d130052f820439a08](https://github.com/OpenXiangShan/XiangShan/tree/b6c14329cbd4a204593ce03d130052f820439a08)
 
@@ -78,7 +78,9 @@
 
 ## 整体框图
 
-![DCache整体架构](./figure/DCache-DCache.svg)
+DCache模块整体架构如 [@fig:DCache-DCache] 所示。
+
+![DCache整体架构](./figure/DCache-DCache.svg){#fig:DCache-DCache}
 
 ## 功能描述
 ### 特征 1：Load请求处理

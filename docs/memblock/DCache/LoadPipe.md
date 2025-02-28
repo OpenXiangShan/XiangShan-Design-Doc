@@ -13,12 +13,14 @@
 
 ## 整体框图
 
-![LoadPipe访问DCache示意图](./figure/DCache-LoadPipe.svg)
+LoadPipe整体架构如[@fig:DCache-LoadPipe]所示。
+
+![LoadPipe访问DCache示意图](./figure/DCache-LoadPipe.svg){#fig:DCache-LoadPipe}
 
 ## 接口时序
 
 ### 请求接口时序实例
 
-如下图所示，req1第一拍被LoadPipe接收，读meta和tag；第二拍进行tag比较判断miss；第三拍向lsu返回响应，lsu_resp_miss拉高表示没有命中，暂时无法返回数据，同时向MissQueue发出miss请求；第四拍检查报告是否有ecc错误。req2和req3紧接着req1发出，同样在stage_0被接收，读meta和tag；第二拍发现命中，发出data读请求；第三拍获得data，向lsu返回带load数据的响应；第四拍更新PLRU，报告ecc错误。
+如[@fig:DCache-LoadPipe-Timing]所示，req1第一拍被LoadPipe接收，读meta和tag；第二拍进行tag比较判断miss；第三拍向lsu返回响应，lsu_resp_miss拉高表示没有命中，暂时无法返回数据，同时向MissQueue发出miss请求；第四拍检查报告是否有ecc错误。req2和req3紧接着req1发出，同样在stage_0被接收，读meta和tag；第二拍发现命中，发出data读请求；第三拍获得data，向lsu返回带load数据的响应；第四拍更新PLRU，报告ecc错误。
 
-![LoadPipe时序](./figure/DCache-LoadPipe-Timing.svg)
+![LoadPipe时序](./figure/DCache-LoadPipe-Timing.svg){#fig:DCache-LoadPipe-Timing}

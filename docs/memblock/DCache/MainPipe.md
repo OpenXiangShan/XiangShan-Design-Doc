@@ -56,14 +56,17 @@ MainPipe的写回请求在s3发起，对于需要向下层L2 Cache发起访问/�
 对于缓存别名和其他一些特殊的情况下，可能导致一次回填请求需要替换掉的Cacheline此时在一项有效的MSHR中，正在等待向L2 Acquire请求的响应。为了保证正确性与手册的规范，此时这条替换操作不能进行，对于该回填请求也通过s2_replay_to_mq通知对应的MSHR进行refill_req的重发，当前请求退出MainPipe，不再进行后续的数据操作。
 
 ## 整体框图
-![MainPipe访问DCache示意图](./figure/DCache-MainPipe.svg)
+
+MainPipe整体架构如[@fig:DCache-MainPipe]所示。
+
+![MainPipe访问DCache示意图](./figure/DCache-MainPipe.svg){#fig:DCache-MainPipe}
 
 ## 接口时序
 
 ### 请求接口时序实例
 
-接口时序如下图所示，req1为store请求，第一拍读meta和tag，第二拍进行tag比较发现请求miss，根据替换算法选出要替换的路，第三拍将miss请求发送给MissQueue，第四拍因为miss，不会向StoreBuffer返回响应。req2为probe请求，第一拍读meta和tag，第二拍读data，第三拍获取probe数据块结果，第四拍根据probe命令更新meta，并向WritebackQueue发起wb请求，返回probeAck应答。req3是amo指令，第一拍读meta和tag，第二拍进行tag比较命中，发出data读请求，第三拍获得data结果，第四拍和第五拍都处于stage_3流水级，第四拍执行指令运算，第五拍发出data写操作更新原数据块内容，并向AtomicsUnit返回响应。
+接口时序如[@fig:DCache-MainPipe-Timing]所示，req1为store请求，第一拍读meta和tag，第二拍进行tag比较发现请求miss，根据替换算法选出要替换的路，第三拍将miss请求发送给MissQueue，第四拍因为miss，不会向StoreBuffer返回响应。req2为probe请求，第一拍读meta和tag，第二拍读data，第三拍获取probe数据块结果，第四拍根据probe命令更新meta，并向WritebackQueue发起wb请求，返回probeAck应答。req3是amo指令，第一拍读meta和tag，第二拍进行tag比较命中，发出data读请求，第三拍获得data结果，第四拍和第五拍都处于stage_3流水级，第四拍执行指令运算，第五拍发出data写操作更新原数据块内容，并向AtomicsUnit返回响应。
 req4为req1对应的refill请求，MissQueue发来refill_req的第一拍读meta，由于此时req2正在进行meta写，而metaArray写优先于读，req4在stage_0停留一拍，下一拍才能成功握手；第三拍stage_1读data，同时获得PLRU提供的替换选择结果，由于此时req3正在进行data写，再在stage_1停留一拍；第五拍stage_2获取要被替换的数据块data，同时从MissQueue获得前递过来的回填数据；第六拍stage_3向WritebackQueue发起wb请求，尝试让替换块进入wb队列，同时将回填的数据写入存储单元，并向MissQueue返回refill完成响应。
 
 
-![MainPipe时序](./figure/DCache-MainPipe-Timing.svg)
+![MainPipe时序](./figure/DCache-MainPipe-Timing.svg){#fig:DCache-MainPipe-Timing}

@@ -15,20 +15,24 @@ Kunminghu架构采用了64KB的VIPT cache，从而引入了cache别名问题。�
 
 ## 整体框图
 
-![ProbeSnoop流程图](./figure/DCache-ProbeSnoop.svg)
+ProbeQueue整体架构如[@fig:DCache-ProbeSnoop]所示。
+
+![ProbeSnoop流程图](./figure/DCache-ProbeSnoop.svg){#fig:DCache-ProbeSnoop}
 
 
 
 ## 接口时序
 ### 请求接口时序实例
 
-下图展示了Probe Queue处理一个probe请求的接口时序，Probe Queue首先收到来自L2的probe请求，转换成内部请求并为其分配一项空的ProbeEntry；经过一拍的状态转换可以向MainPipe 发送probe请求, 但由于时序考虑该请求会再被延迟一拍（ProbeQueue里选择一项有一个arbiter， MainPipe入口也有一个arbiter选择各来源的请求，两次仲裁在一拍完成比较困难，因此在这里先锁存一拍），因此两拍后pipe_req_valid拉高；后续等接收到MainPipe的resp后，释放ProbeEntry。
+[@fig:DCache-ProbeSnoop-Timing]展示了Probe Queue处理一个probe请求的接口时序，Probe Queue首先收到来自L2的probe请求，转换成内部请求并为其分配一项空的ProbeEntry；经过一拍的状态转换可以向MainPipe 发送probe请求, 但由于时序考虑该请求会再被延迟一拍（ProbeQueue里选择一项有一个arbiter， MainPipe入口也有一个arbiter选择各来源的请求，两次仲裁在一拍完成比较困难，因此在这里先锁存一拍），因此两拍后pipe_req_valid拉高；后续等接收到MainPipe的resp后，释放ProbeEntry。
 
-![ProbeSnoop时序](./figure/DCache-ProbeSnoop-Timing.png)
+![ProbeSnoop时序](./figure/DCache-ProbeSnoop-Timing.png){#fig:DCache-ProbeSnoop-Timing}
 
 ## ProbeEntry模块
 
-Probe Entry由一系列状态寄存器进行控制，由一个状态机进行Probe事务的执行。下面的展示了每个Entry中包含的三个状态寄存器的含义以及状态机设计图：
+Probe Entry由一系列状态寄存器进行控制，由一个状态机进行Probe事务的执行。[@tbl:ProbeEntry-state]展示了每个Entry中包含的三个状态寄存器的含义，状态机设计如[@fig:DCache-ProbeEntry]所示：
+
+Table: ProbeEntry状态寄存器含义 {#tbl:ProbeEntry-state}
 
 | 状态              | 描述                                                     |
 |-------------------|-----------------------------------------------------------|
@@ -36,5 +40,5 @@ Probe Entry由一系列状态寄存器进行控制，由一个状态机进行Pro
 | s_pipe_req      | 已分配Probe请求，正在发送Main Pipe请求           |
 | s_wait_resp       | 已完成Main Pipe请求的发送，等待Main Pipe的应答 |
 
-![ProbeEntry状态机](./figure/DCache-ProbeEntry.svg)
+![ProbeEntry状态机](./figure/DCache-ProbeEntry.svg){#fig:DCache-ProbeEntry}
 
