@@ -30,13 +30,21 @@ PANDOC_LATEX_FLAGS += --lua-filter=utils/pandoc_filters/svg_to_pdf.lua
 PANDOC_LATEX_FLAGS += --template=utils/template.tex
 PANDOC_LATEX_FLAGS += --include-before-body=preface.tex
 
-PANDOC_HTML_FLAGS += --embed-resources
+ifneq ($(TWOSIDE),)
+	PANDOC_LATEX_FLAGS += --variable=twoside
+	DOC := $(DOC)-twoside
+endif
+
+# PANDOC_HTML_FLAGS += --embed-resources
 PANDOC_HTML_FLAGS += --shift-heading-level-by=1
 
-all: $(DOC).pdf $(DOC).html
+default: pdf
+
+pdf: $(DOC).pdf
+html: $(DOC).html
 
 clean:
-	rm -f $(DOC).tex $(DOC).pdf *.aux *.log *.toc
+	rm -f $(DOC).tex $(DOC).pdf *.aux *.log *.toc *.lof *.lot *.html
 	rm -rf build
 
 init:
@@ -62,4 +70,5 @@ $(DOC).pdf: $(DOC).tex $(PDF_FIGS)
 	xelatex $<
 	xelatex $<
 
-.PHONY: all clean
+.PHONY: default clean
+.PHONY: pdf html

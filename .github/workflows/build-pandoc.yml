@@ -25,17 +25,10 @@ jobs:
           HOME: /root
         run: |
           git config --global --add safe.directory $(pwd)
-          make
+          make pdf
 
       - name: Upload built pdf
         uses: actions/upload-artifact@v4
         with:
           name: xiangshan-design-doc-pdf
           path: xiangshan-design-doc.pdf
-
-      - name: Upload built html
-        if: false
-        uses: actions/upload-artifact@v4
-        with:
-          name: xiangshan-design-doc-html
-          path: xiangshan-design-doc.html

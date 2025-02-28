@@ -7,9 +7,9 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如下图StoreAddrPipe所�
 ### 特性 1：StoreUnit 各级流水线功能
 
 * stage 0:
-    * 计算VA地址
+    * 计算VA地址(向量store指令的vaddr是在vssplit中计算的)
     * 地址Miss-Align 检查更新到uop.cf.exceptionVec(storeAddrMisaligned)
-    * 发出DTLB读请求到总线tlb
+    * 发出DTLB读请求到总线tlb（如果是首次进入流水线的标量store或者向量store指令，还需要检查完整的虚拟地址）
     * 发出DCache请求
     * 更新指令的Mask信息到总线s0_mask_out -> StoreQueue
     * 预测执行的Store有可能被ROB flush
@@ -30,7 +30,8 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如下图StoreAddrPipe所�
     * 违例检查延时
 
 * stage 4
-    * 发起Write-Back请求到总线stout
+    * 标量store发起Write-Back请求到总线stout
+    * 向量store由总线vecstout发送到vsMergeBuffer进行merge后再写回
 
 ![StoreUnit流水线功能图](./figure/StoreUnit-pipeline.svg)
 
