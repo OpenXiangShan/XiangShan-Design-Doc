@@ -31,7 +31,16 @@ nav:
       - SBuffer.md: memblock/LSU/SBuffer.md
       - StdExeUnit.md: memblock/LSU/StdExeUnit.md
       - StoreUnit.md: memblock/LSU/StoreUnit.md
-    - 内存管理单元 MMU: 
+    - 数据缓存:
+      - memblock/DCache/index.md
+      - 数据高速缓存DCache: memblock/DCache/DCache.md
+      - Load访存流水线LoadPipe: memblock/DCache/LoadPipe.md
+      - 缺失队列MissQueue: memblock/DCache/MissQueue.md
+      - Probe队列ProbeQueue: memblock/DCache/ProbeQueue.md
+      - 主流水线MainPipe: memblock/DCache/MainPipe.md
+      - 写回队列WritebackQueue: memblock/DCache/WritebackQueue.md
+      - 错误处理与自定义故障注入指令: memblock/DCache/Error.md
+    - 内存管理单元 MMU:
       - memblock/MMU/index.md
       - L1TLB: memblock/MMU/L1TLB.md
       - Repeater: memblock/MMU/Repeater.md
