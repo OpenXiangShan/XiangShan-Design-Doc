@@ -157,7 +157,7 @@ ITLB 可能产生的异常包括 inst guest page fault、inst page fault 和 ins
 
 1. 与页表相关的异常
    1. 处于非虚拟化情况，或虚拟化的 VS-Stage 时，页表出现保留位不为 0 / 非对齐 / 写没有 w 权限等等（具体参见手册），需要上报 page fault
-   2. 处于虚拟化阶段的 G-Stage 时。页表出现保留位不为 0 / 非对齐 / 写没有 w 权限等等（具体参见手册），需要上报 guest page fault
+   2. 处于虚拟化阶段的 G-Stage 时，页表出现保留位不为 0 / 非对齐 / 写没有 w 权限等等（具体参见手册），需要上报 guest page fault
 2. 与虚拟地址或物理地址相关的异常
     1. 地址翻译过程中，与虚拟地址或物理地址相关的异常。这部分检查会在 L2 TLB 的 PTW 过程中进行。
        1. 处于非虚拟化情况，或虚拟化的 all-Stage 时，需要检查 G-stage 的 gvpn。如果 hgatp 的 mode 为 8（代表 Sv39x4），则需要 gvpn 的（41 - 12 = 29）位以上全部为 0；如果 hgatp 的 mode 为 9（代表 Sv48x4），则需要 gvpn 的（50 - 12 = 38）位以上全部为 0。否则，会上报 guest page fault。
@@ -194,6 +194,7 @@ ITLB 可能产生的异常包括 inst guest page fault、inst page fault 和 ins
 pointer masking 扩展的本质是将访存的 fullva 由“寄存器堆的值 + imm 立即数”这个原始值，变为“effective vaddr”这个高位可能被忽略的值。当 pmm 的值为 2 时，会忽略高 7 位；当 pmm 的值为 3 时，会忽略高 16 位。pmm 为 0 代表不忽略高位，pmm 为 1 是保留位。
 
 pmm 的值可能来自于 mseccfg/menvcfg/henvcfg/senvcfg 的 PMM（[33:32]）位，也可能来自于 hstatus 寄存器的 HUPMM（[49:48]）位。具体怎样选择如下：
+
 1. 对于前端取指请求，或者一条手册规定的 hlvx 指令，不会使用 pointer masking（pmm 为 0）
 2. 当前访存有效特权级（dmode）为 M 态，选择 mseccfg 的 PMM（[33:32]）位
 3. 非虚拟化场景，且当前访存有效特权级为 S 态（HS），选择 menvcfg 的 PMM（[33:32]）位
@@ -204,6 +205,7 @@ pmm 的值可能来自于 mseccfg/menvcfg/henvcfg/senvcfg 的 PMM（[33:32]）�
 由于 pointer masking 的只针对访存生效，并不适用于前端取指。因此 ITLB 不存在“effective vaddr”的概念，也不会在端口中引入 CSR 传入的这些信号。
 
 由于这些地址的高位只在上文提到的“原始地址中，虚拟地址或物理地址相关的异常”中被检查使用，因此对于屏蔽高位的情况，我们直接让其不会触发异常即可。具体地：
+
 1. 对于开启虚存的非虚拟化场景，或虚拟化场景的非 onlyStage2（vsatp 的 mode 不为 0）情况；根据 pmm 的值为 2 或 3，分别对地址的高 7 或 16 位做符号扩展
 2. 对于虚拟化场景的 onlyStage2 情况，或未开启虚存，根据 pmm 的值为 2 或 3，分别对地址的高 7 或 16 位做零扩展
 
@@ -311,6 +313,7 @@ Table: 获取 gpaddr 的新增 Reg
         3. DTLB 的 store 请求：如果出现 gpf 的 store 请求处于推测路径上，且发现出现错误的推测，则会通过 redirect 信号进行刷新（需要判断出现 gpf 的 robidx 与传入 redirect 的 robidx 的前后关系）；对于其他情况，由于 DTLB 会对该请求返回 miss，后端一定会调度该 store 指令再次重发该请求。
         4. DTLB 的 prefetch 请求：返回的 gpf 信号会拉高，代表该预取请求的地址发生 gpf，但不会写入 gpa* 一系列寄存器，不会触发查找 gpaddr 机制，无需考虑。
 2. 在目前的处理机制中，需要保证发生 gpf 且等待 gpa 的该 TLB 项在等待 gpa 过程中不会被替换出去。这里我们简单地在出现等待 gpa 情况时，阻止 TLB 的回填，从而避免替换操作发生。由于发生 gpf 时本就需要进行异常处理程序，且在此之后的指令会被重定向冲刷掉，因此在等待 gpa 过程中阻止回填并不会导致性能问题。
+
 ## 整体框图
 
 L1 TLB 的整体框图如 [@fig:L1TLB-overall] 所述，包括绿框中的 ITLB 和 DTLB。ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括 ICache 的 3 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 2 个请求（AtomicsUnit 占用 LoadUnit 的 1 个请求通道）、L1 Load Stream & Stride prefetch 的 1 个请求，StoreUnit 的 2 个请求，以及 SMSPrefetcher 的 1 个请求。
