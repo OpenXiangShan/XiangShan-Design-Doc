@@ -153,6 +153,60 @@ Table: ITLB 和 DTLB 的特权级
 
 ITLB 可能产生的异常包括 inst guest page fault、inst page fault 和 inst access fault，均交付给请求来源的 ICache 或 IFU 进行处理。DTLB 可能产生的异常包括：load guest page fault、load page fault、load access fault、store guest page fault、store page fault 和 store access fault，均交付给请求来源的 LoadUnits、StoreUnits 或 AtomicsUnit 进行处理。L1TLB 没有存储 gpaddr，所以出现客户机缺页时，需要重新进行 PTW。参见本文档的第 6 部分：异常处理机制。
 
+这里需要对虚实地址转换相关的异常做额外补充说明，我们这里将异常分类如下：
+
+1. 与页表相关的异常
+   1. 处于非虚拟化情况，或虚拟化的 VS-Stage 时，页表出现保留位不为 0 / 非对齐 / 写没有 w 权限等等（具体参见手册），需要上报 page fault
+   2. 处于虚拟化阶段的 G-Stage 时。页表出现保留位不为 0 / 非对齐 / 写没有 w 权限等等（具体参见手册），需要上报 guest page fault
+2. 与虚拟地址或物理地址相关的异常
+    1. 地址翻译过程中，与虚拟地址或物理地址相关的异常。这部分检查会在 L2 TLB 的 PTW 过程中进行。
+       1. 处于非虚拟化情况，或虚拟化的 all-Stage 时，需要检查 G-stage 的 gvpn。如果 hgatp 的 mode 为 8（代表 Sv39x4），则需要 gvpn 的（41 - 12 = 29）位以上全部为 0；如果 hgatp 的 mode 为 9（代表 Sv48x4），则需要 gvpn 的（50 - 12 = 38）位以上全部为 0。否则，会上报 guest page fault。
+       2. 在地址翻译得到页表时，页表的 PPN 部分高（48-12=36）位以上全部为 0。否则，会上报 access fault。
+    2. 原始地址中，虚拟地址或物理地址相关的异常，具体总结如下，这部分理论上均需要在 L1 TLB 做检查，但由于 ITLB 的 redirect 结果完全来自 Backend，因此 ITLB 相应的这部分异常会在 Backend 发送 redirect 给 Frontend 时做记录，并不会在 ITLB 中再次检查，请参考 Backend 对此处的说明。
+       1. Sv39 模式：包括开启虚存，且未开启虚拟化，此时 satp 的 mode 为 8；或开启虚存，且开启虚拟化，此时 vsatp 的 mode 为 8 这两种情况。此时需要满足 vaddr 的 [63:39] 位与 vaddr 的第 38 位符号相同，否则需要根据取指 / load / store 请求，分别报 instruction page fault，load page fault，store page fault。
+       2. Sv48 模式：包括开启虚存，且未开启虚拟化，此时 satp 的 mode 为 9；或开启虚存，且开启虚拟化，此时 vsatp 的 mode 为 9 这两种情况。此时需要满足 vaddr 的 [63:48] 位与 vaddr 的第 47 位符号相同，否则需要根据取指 / load / store 请求，分别报 instruction page fault，load page fault，store page fault。
+       3. Sv39x4 模式：开启虚存，且开启虚拟化，满足 vsatp 的 mode 为 0，且 hgatp 的 mode 为 8。（注：当 vsatp 的 mode 为 8 / 9，hgatp 的 mode 为 8 时，第二阶段地址翻译也为 Sv39x4 模式，也可能产生相应异常。但这部分属于“地址翻译过程中，与虚拟地址或物理地址相关的异常”，会在 L2 TLB 的页表遍历过程中进行处理，不属于 L1 TLB 的处理范畴。L1 TLB 只会额外处理“原始地址中，虚拟地址或物理地址相关的异常”）此时需要满足 vaddr 的 [63:41] 位全部为 0，否则需要根据取指 / load / store 请求，分别报 instruction guest page fault，load guest page fault，store guest page fault。
+       4. Sv48x4 模式：开启虚存，且开启虚拟化，满足 vsatp 的 mode 为 0，且 hgatp 的 mode 为 9。（注：当 vsatp 的 mode 为 8 / 9，hgatp 的 mode 为 9 时，第二阶段地址翻译也为 Sv48x4 模式，也可能产生相应异常。但这部分属于“地址翻译过程中，与虚拟地址或物理地址相关的异常”，会在 L2 TLB 的页表遍历过程中进行处理，不属于 L1 TLB 的处理范畴。L1 TLB 只会额外处理“原始地址中，虚拟地址或物理地址相关的异常”）此时需要满足 vaddr 的 [63:50] 位全部为 0，否则需要根据取指 / load / store 请求，分别报 instruction guest page fault，load guest page fault，store guest page fault。
+       5. Bare 模式：未开启虚存，此时 paddr = vaddr。由于香山处理器的物理地址目前限定为 48 位，因此对 vaddr 要求 [63:48] 位全部为 0，否则需要根据取指 / load / store 请求，分别报 instruction access fault，load access fault，store access fault。
+
+为了支持对上述“原始地址中”的异常处理，L1 TLB 需要添加 fullva（64 bits）和 checkfullva（1 bit）的 input 信号。同时需要在 output 中添加 vaNeedExt 具体地：
+
+1. checkfullva 并非 fullva 的控制信号。也就是说，fullva 的内容并不止在 checkfullva 拉高时才有效。
+2. checkfullva 何时有效（需要拉高）
+    1. 对于 ITLB，checkfullva 始终为 false，因此 chisel 生成 verilog 时，可能会将 checkfullva 优化掉，不会体现在 input 中。
+    2. 对于 DTLB，对于所有 load / store / amo / vector 指令，在第一次由 Backend 发送至 MemBlock 时，需要做 checkfullva 检查。这里额外说明，“原始地址中，虚拟地址或物理地址相关的异常”是一个只针对 vaddr 的检查（对于 load / store 指令，vaddr 的计算一般为某寄存器的值 + imm 立即数计算得到的 64 bits 值），因此无需等待 TLB 命中，且当出现该检查的异常时，TLB 并不会返回 miss，代表该异常有效。因此，“在第一次由 Backend 发送至 MemBlock 时”，一定能够发现该异常并上报。对于非对齐访存，并不会进入 misalign buffer；对于 load 指令，并不会进入 load replay queue；对于 store 指令，也不会由保留站重发。因此，如果“一次由 Backend 发送至 MemBlock 时”并未发现该异常，由 load replay 重发时，一定不会出现该异常，无需做 checkfullva 检查。对于预取指令，不会拉高 checkfullva。
+3. fullva 何时有效（在什么时候被使用）
+    1. 除一种特定情况外，fullva 只在 checkfullva 为高时有效，代表要检查的完整 vaddr。这里需要说明，一条 load / store 指令，计算得到的原始 vaddr 为 64 位（寄存器读出来的值就是 64 位的）；但查询 TLB 只会用到低 48 / 50 位（Sv48 / Sv48x4），查询异常需要用到完整的 64 位。
+    2. 特定情况：非对齐指令出现 gpf，需要获取 gpaddr。目前访存侧对非对齐异常的处理逻辑如下：
+       1. 例如，原始 vaddr 为 0x81000ffb，要 ld 8 bytes 数据
+       2. misalign buffer 会将该指令拆成 vaddr 为 0x81000ff8（load 1）和 0x81001000（load 2）的两条 load，且这两条 load 并不属于同一虚拟页
+       3. 对于 load 1，此时传入 TLB 的 vaddr 为 0x81000ff8，fullva 总为原始 vaddr 0x81000ffb；对于 load 2，此时传入 TLB 的 vaddr 为 0x81001000，fullva 总为原始 vaddr 0x81000ffb
+       4. load 1 如果出现异常，写入 *tval 寄存器的 offset 约定为原始 addr 的 offset（即 0xffb）；load 2 如果出现异常，写入 *tval 寄存器的 offset 约定为下一页的起始值（0x000）。对于虚拟化场景的 onlyStage2 情况，此时 gpaddr = 出现异常的 vaddr。因此，对于跨页的非对齐请求、且跨页后的地址出现异常，gpaddr 的生成只会用到 vaddr（此时 offset 其实为 0x000），不会用到 fullva；对于非跨页的非对齐请求，或对于跨页、且原始地址出现异常的非对齐请求，gpaddr 的生成会用到 fullva 的 offset（0xffb）。这里 fullva 始终是有效的，和 checkfullva 是否拉高无关。
+4. vaNeedExt 何时有效（在什么情况被使用）
+   1. 在访存队列 load queue / store queue 中，处于节约面积的考虑，会将 64 位原始地址截断至 50 位保存，但在写入 *tval 寄存器时，需要写入 64 位值。上文中已经介绍过，对于“原始地址中，虚拟地址或物理地址相关的异常”的异常，要保留原始完整 64 位地址；而对于其他页表相关的异常，地址本身高位是满足要求的。例如：
+        * fullva = 0xffff,ffff,8000,0000；vaddr = 0xffff,8000,0000。Mode 为非虚拟化的 Sv39。这里原始地址并未产生异常，假设这是一个 load 请求，第一次访问 TLB 时 miss，因此该 load 会进入 load replay queue 等待重发，且地址会被截断为 50 位。等待 load 指令重发后，发现该页表的 V 位为 0，发生 page fault，需要将 vaddr 写入 *tval 寄存器。由于地址在 load queue replay 中已经被截断，因此需要做符号位扩展（例如 Sv39 情况，即将 39 位以上扩展为 38 位的值），返回的 vaNeedExt 拉高。
+        * fullva = 0x0000,ffff,8000,0000；vaddr = 0xffff,8000,0000。Mode 为非虚拟化的 Sv39。这里可以发现原始地址就产生了异常，我们会将该地址直接写入对应的 exception buffer 中（exception buffer 会保存完整的 64 位值）。此时需要直接将 0x0000,ffff,8000,0000 原始值写入 *tval，不能做符号位扩展，vaNeedExt 为低。
+
+### 支持 pointer masking 扩展
+
+目前香山处理器支持 pointer masking 扩展。
+
+pointer masking 扩展的本质是将访存的 fullva 由“寄存器堆的值 + imm 立即数”这个原始值，变为“effective vaddr”这个高位可能被忽略的值。当 pmm 的值为 2 时，会忽略高 7 位；当 pmm 的值为 3 时，会忽略高 16 位。pmm 为 0 代表不忽略高位，pmm 为 1 是保留位。
+
+pmm 的值可能来自于 mseccfg/menvcfg/henvcfg/senvcfg 的 PMM（[33:32]）位，也可能来自于 hstatus 寄存器的 HUPMM（[49:48]）位。具体怎样选择如下：
+1. 对于前端取指请求，或者一条手册规定的 hlvx 指令，不会使用 pointer masking（pmm 为 0）
+2. 当前访存有效特权级（dmode）为 M 态，选择 mseccfg 的 PMM（[33:32]）位
+3. 非虚拟化场景，且当前访存有效特权级为 S 态（HS），选择 menvcfg 的 PMM（[33:32]）位
+4. 虚拟化场景，且当前访存有效特权级为 S 态（VS），选择 henvcfg 的 PMM（[33:32]）位
+5. 是虚拟化指令，且当前处理器特权级（imode）为 U 态，选择 hstatus 的 HUPMM（[49:48]）位
+6. 其余 U 态场景，选择 senvcfg 的 PMM（[33:32]）位
+
+由于 pointer masking 的只针对访存生效，并不适用于前端取指。因此 ITLB 不存在“effective vaddr”的概念，也不会在端口中引入 CSR 传入的这些信号。
+
+由于这些地址的高位只在上文提到的“原始地址中，虚拟地址或物理地址相关的异常”中被检查使用，因此对于屏蔽高位的情况，我们直接让其不会触发异常即可。具体地：
+1. 对于开启虚存的非虚拟化场景，或虚拟化场景的非 onlyStage2（vsatp 的 mode 不为 0）情况；根据 pmm 的值为 2 或 3，分别对地址的高 7 或 16 位做符号扩展
+2. 对于虚拟化场景的 onlyStage2 情况，或未开启虚存，根据 pmm 的值为 2 或 3，分别对地址的高 7 或 16 位做零扩展
+
 ### 支持 TLB 压缩
 
 ![TLB 压缩示意图](figure/image18.png)
@@ -242,6 +296,21 @@ Table: 获取 gpaddr 的新增 Reg
 
 此外为了保证获取 gpaddr 的 PTW 请求返回的时候不会 refill TLB，在发送 PTW 请求的时候添加了一个新的 output 信号 getGpa，该信号传递的路径与 memidx 类似，可以参考 memidx，该信号会传入 Repeater 内，当 PTW resp 回 TLB 的时候，该信号也会发送回来，如果该信号有效，则表明这个 PTW 请求只是为了获取 gpaddr，所以此时不会重填 TLB。
 
+关于发生 guest page fault 后获取 gpaddr 的处理流程，这里对于一些关键点做再次说明：
+
+1. 可以将获取 gpa 的机制看作一个只有 1 项的 buffer，当某个请求发生 guest page fault 时，即向该 buffer 写入 need_gpa 的相应信息；直至 need_gpa_vpn_hit && resp_gpa_refill 条件有效，或传入 flush（itlb）/ redirect（dtlb）信号刷新 gpa 信息。
+  
+  * need_gpa_vpn_hit 指的是：在某个请求发生 guest page fault 后，会将 vpn 信息写入 need_gpa_vpn 中。如果相同的 vpn 再次查询 TLB，need_gpa_vpn_hit 信号会拉高，代表获取的 gpaddr 与原始 get_gpa 请求相对应。如果此时 resp_gpa_refill 也为高，代表 vpn 已经获取得到对应的 gpaddr，可以将 gpaddr 返回给前端取指 / 后端访存进行异常处理。
+  * 因此，对于前端或访存的任意请求，如果触发 gpa，则后续一定需要满足以下两个条件之一：
+
+    1. 该触发 gpa 的请求一定能够重发（TLB 在获取 gpaddr 前，会一直对该请求返回 miss，直至得到 gpaddr 结果为止
+    2. 需要通过向 TLB 传入 flush 或 redirect 信号，将该 gpa 请求冲刷掉。具体地，对于所有可能的请求：
+
+        1. ITLB 的取指请求：如果出现 gpf 的取指请求处于推测路径上，且发现出现错误的推测，则会通过 flushPipe 信号进行刷新（包括后端 redirect、或前端多级分支预测器出现后级预测器的预测结果更新前级预测器的预测结果等）；对于其他情况，由于 ITLB 会对该请求返回 miss，前端会保证重发相同 vpn 的请求。
+        2. DTLB 的 load 请求：如果出现 gpf 的 load 请求处于推测路径上，且发现出现错误的推测，则会通过 redirect 信号进行刷新（需要判断出现 gpf 的 robidx 与传入 redirect 的 robidx 的前后关系）；对于其他情况，由于 DTLB 会对该请求返回 miss，同时会将返回 tlbreplay 信号拉高，使 load queue replay 一定能够重发该请求。
+        3. DTLB 的 store 请求：如果出现 gpf 的 store 请求处于推测路径上，且发现出现错误的推测，则会通过 redirect 信号进行刷新（需要判断出现 gpf 的 robidx 与传入 redirect 的 robidx 的前后关系）；对于其他情况，由于 DTLB 会对该请求返回 miss，后端一定会调度该 store 指令再次重发该请求。
+        4. DTLB 的 prefetch 请求：返回的 gpf 信号会拉高，代表该预取请求的地址发生 gpf，但不会写入 gpa* 一系列寄存器，不会触发查找 gpaddr 机制，无需考虑。
+2. 在目前的处理机制中，需要保证发生 gpf 且等待 gpa 的该 TLB 项在等待 gpa 过程中不会被替换出去。这里我们简单地在出现等待 gpa 情况时，阻止 TLB 的回填，从而避免替换操作发生。由于发生 gpf 时本就需要进行异常处理程序，且在此之后的指令会被重定向冲刷掉，因此在等待 gpa 过程中阻止回填并不会导致性能问题。
 ## 整体框图
 
 L1 TLB 的整体框图如 [@fig:L1TLB-overall] 所述，包括绿框中的 ITLB 和 DTLB。ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括 ICache 的 3 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 2 个请求（AtomicsUnit 占用 LoadUnit 的 1 个请求通道）、L1 Load Stream & Stride prefetch 的 1 个请求，StoreUnit 的 2 个请求，以及 SMSPrefetcher 的 1 个请求。
