@@ -23,10 +23,13 @@ nav:
       - memblock/LSU/index.md
       - LSQ:
         - memblock/LSU/LSQ/index.md
+        - 访存队列 LSQ: memblock/LSU/LSQ/LSQ.md
+        - VirtualLoadQueue.md: memblock/LSU/LSQ/VirtualLoadQueue.md
         - LoadQueueRAR.md: memblock/LSU/LSQ/LoadQueueRAR.md
         - LoadQueueRAW.md: memblock/LSU/LSQ/LoadQueueRAW.md
+        - Load重发队列LoadQueueReplay: memblock/LSU/LSQ/LoadQueueReplay.md
         - LqExceptionBuffer.md: memblock/LSU/LSQ/LqExceptionBuffer.md
-        - VirtualLoadQueue.md: memblock/LSU/LSQ/VirtualLoadQueue.md
+        - Store队列StoreQueue: memblock/LSU/LSQ/StoreQueue.md
       - LoadUnit: memblock/LSU/LoadUnit.md
       - SBuffer.md: memblock/LSU/SBuffer.md
       - StdExeUnit.md: memblock/LSU/StdExeUnit.md
