@@ -2,10 +2,10 @@
 
 ## 基本功能
 GrantBuf接收来自MainPipe的任务，并根据任务类型进行转发。主要分为：
-1.预取响应（opcode = HintAck），会安排其进入预取响应队列 pftRespQueue(size=10)，按FIFO顺序向预取器发出。
-2.D通道响应（opcode = Grant/GrantData/ReleaseAck），会安排其进入grantQueue(size=16)，按FIFO顺序向总线D通道发出；
-  如果是Grant/GrantAck，则还需要将其信息进入到inflightGrant缓冲区(size=16)（表明Grant已发送但是还没收到GrantAck），等待L1从E通道返回GrantAck后再将信息清除掉。
-3.融合请求（task.mergeA = true），同时执行1和2。
+-  预取响应（opcode = HintAck），会安排其进入预取响应队列 pftRespQueue(size=10)，按FIFO顺序向预取器发出。
+-  D通道响应（opcode = Grant/GrantData/ReleaseAck），会安排其进入grantQueue(size=16)，按FIFO顺序向总线D通道发出；
+   如果是Grant/GrantAck，则还需要将其信息进入到inflightGrant缓冲区(size=16)（表明Grant已发送但是还没收到GrantAck），等待L1从E通道返回GrantAck后再将信息清除掉。
+-  融合请求（task.mergeA = true），同时执行以上2种。
 
 ### 特性1：阻塞MainPipe入口
 GrantBuf 还会根据: 【流水线入口信息 + 流水线是S1/S2/S3/S4/S5级状态 + 内部 pftRespQueue，inflightGrant，grantQueue状态】，来向ReqArb给出【请求入口的阻塞信息】。
