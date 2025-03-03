@@ -1,6 +1,3 @@
-
-\newpage
-
 # 访存队列 LSQ
 
 ## 子模块列表
@@ -70,5 +67,3 @@ LSQ包括了LoadQueue和StoreQueue两个部分，并做了一层wrapper，便于
 ### Load指令和Store指令入队接口时序实例
 
 ![入队更新](./figure/LSQ-LsqEnqCtrl-Timing.svg){#fig:LSQ-LsqEnqCtrl-Timing width=90%}
-
-\newpage

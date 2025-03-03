@@ -23,7 +23,6 @@ nav:
       - memblock/LSU/index.md
       - LSQ:
         - memblock/LSU/LSQ/index.md
-        - 访存队列 LSQ: memblock/LSU/LSQ/LSQ.md
         - VirtualLoadQueue.md: memblock/LSU/LSQ/VirtualLoadQueue.md
         - LoadQueueRAR.md: memblock/LSU/LSQ/LoadQueueRAR.md
         - LoadQueueRAW.md: memblock/LSU/LSQ/LoadQueueRAW.md
