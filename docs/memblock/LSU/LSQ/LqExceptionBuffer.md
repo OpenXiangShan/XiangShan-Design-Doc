@@ -1,3 +1,4 @@
+\newpage
 # Load 异常缓冲 LqExceptionBuffer
 
 ## 功能描述

@@ -1,3 +1,4 @@
+\newpage
 # 读后读违例检查 LoadQueueRAR
 
 ## 功能描述
@@ -45,19 +46,20 @@ LoadQueueRAR中的load指令被标记为release有四种情况：
 
 ## 整体框图
 <!-- 请使用 svg -->
-![LoadQueueRAR整体框图](./figure/LoadQueueRAR.svg)
+![LoadQueueRAR整体框图](./figure/LoadQueueRAR.svg){#fig:LoadQueueRAR width=80%}
 
+\newpage
 ## 接口时序
 
-### 请求入队时序实例
+### LoadQueueRAR请求入队时序实例
 
-![请求入队时序](./figure/LoadQueueRAR-enqueue.svg)
+![LoadQueueRAR请求入队时序](./figure/LoadQueueRAR-enqueue.svg){#fig:LoadQueueRAR-enqueue width=70%}
 
 当io_query_ * _req_valid和io_query_ * _req_ready都为高时，表示握手成功，needEnqueue和io_canAllocate_* 都为高时，将io_doAllocate_* 置为高，表示query需要需要入队且FreeList可以分配， io_allocateSlot_* 为接收query入队的entry， 写入entry的信息为io_w*。
 
 ### load-load 违例检查时序实例
 
-![load-load违例检查时序](./figure/LoadQueueRAR-load-to-load.svg)
+![load-load违例检查时序](./figure/LoadQueueRAR-load-to-load.svg){#fig:RAR-load-to-load width=70%}
 
 当io_query_* _req_valid和io_query_* _req_ready都为高时，表示握手成功，LoadQueueRAR接收ld-ld违例查询请求，当拍得到mask结果，在下一拍将io_query_*_resp_valid置为高，给出响应。
 

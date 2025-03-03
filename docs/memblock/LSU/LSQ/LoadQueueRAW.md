@@ -1,3 +1,4 @@
+\newpage
 # 写后读违例检查 LoadQueueRAW
 
 ## 功能描述
@@ -31,18 +32,18 @@ store指令到达store流水线的 s1 时会进行store-load检查，此时store
 
 ## 整体框图
 <!-- 请使用 svg -->
-![LoadQueueRAW整体框图](./figure/LoadQueueRAW.svg)
+![LoadQueueRAW整体框图](./figure/LoadQueueRAW.svg){#fig:LoadQueueRAW width=80%}
 
 ## 接口时序
 
-### 请求入队时序实例
+### LoadQueueRAW请求入队时序实例
 
-![请求入队时序](./figure/LoadQueueRAW-enqueue.svg)
+![LoadQueueRAW请求入队时序](./figure/LoadQueueRAW-enqueue.svg){#fig:RAW-enqueue width=70%}
 
 当io_query_* _req_valid和io_query_* _req_ready都为高时，表示握手成功，needEnqueue和io_canAllocate_* 都为高时，将io_doAllocate_* 置为高，表示query需要入队且FreeList可以分配，io_allocateSlot_* 为接收query入队的entry，下一拍对应entry的allocate拉高，sqIdx写入entry。再下一拍后mask写入LqMaskModule对应的entry，压缩后的物理地址写入到LqPAddrModule对应的entry。
 
 ### store-load违例时序实例
 
-![store-load违例检查时序](./figure/LoadQueueRAW-store-to-load.svg)
+![store-load违例检查时序](./figure/LoadQueueRAW-store-to-load.svg){#fig:RAW-store-to-load width=70%}
 
 当io_rollback_valid为高时，表示发生了store-load违例，违例的信息为io_rollback_bits_*。

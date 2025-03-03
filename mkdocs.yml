@@ -19,6 +19,18 @@ nav:
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
   - 访存:
+    - 访存流水线 LSU:
+      - memblock/LSU/index.md
+      - LSQ:
+        - memblock/LSU/LSQ/index.md
+        - LoadQueueRAR.md: memblock/LSU/LSQ/LoadQueueRAR.md
+        - LoadQueueRAW.md: memblock/LSU/LSQ/LoadQueueRAW.md
+        - LqExceptionBuffer.md: memblock/LSU/LSQ/LqExceptionBuffer.md
+        - VirtualLoadQueue.md: memblock/LSU/LSQ/VirtualLoadQueue.md
+      - LoadUnit: memblock/LSU/LoadUnit.md
+      - SBuffer.md: memblock/LSU/SBuffer.md
+      - StdExeUnit.md: memblock/LSU/StdExeUnit.md
+      - StoreUnit.md: memblock/LSU/StoreUnit.md
     - 内存管理单元 MMU: 
       - memblock/MMU/index.md
       - L1TLB: memblock/MMU/L1TLB.md
