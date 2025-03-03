@@ -1,5 +1,3 @@
-\newpage
-
 # Load 重发队列 LoadQueueReplay
 
 ## 功能描述

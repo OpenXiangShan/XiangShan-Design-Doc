@@ -1,5 +1,3 @@
-\newpage
-
 # Store 队列 StoreQueue
 
 ## 功能描述
@@ -290,5 +288,3 @@ StoreQueue地址更新和数据更新类似，StoreUnit通过s1阶段的io_lsq�
 ### CMO接口时序实例
 
 ![CMO接口时序实例](./figure/LSQ-StoreQueue-CMO-Timing.svg){#fig:LSQ-StoreQueue-CMO-Timing width=90%}
-
-\newpage
