@@ -19,7 +19,6 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如图\ref{fig:LSU-StoreUn
 
     * 判断是否为数据宽度为128bits的store指令。
 
-
 * stage 1:
 
     * 将DTLB查询结果更新到storeQueue
@@ -34,8 +33,6 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如图\ref{fig:LSU-StoreUn
 
     * 更新DTLB结果通过feedback_slow更新到后端
 
-    * 如果指令是非对齐Store指令，且跨16bytes，需要发送请求到StoreMisalignBuffer
-
 * stage 3
 
     * 为了和RAW违例检查同步发送给后端，需要增加一拍
@@ -44,15 +41,54 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如图\ref{fig:LSU-StoreUn
 
     * 标量store发起Writeback，通过stout发送给后端
 
-    * 向量store发起Writeback，通过vecstout发送到vsMergeBuffer
+### 特性 3: StoreUnit支持向量Store指令
 
-![StoreUnit流水线功能图](./figure/StoreUnit-pipeline.svg){#fig:LSU-StoreUnit-Pipeline}
+StoreUnit处理非对齐Store指令流程和标量类似，特别的:
 
-\newpage
+* stage 0:
+
+    * 接受vsSplit的执行请求，优先级高于标量请求,并且不需要计算虚拟地址
+
+* stage 1:
+
+    * 计算vecVaddrOffset和vecTriggerMask
+
+* stage 2:
+
+    * 不需要向后端发送feedback_slow响应
+
+* stage 4:
+
+    * 向量store发起Writeback，通过vecstout发送给后端
 
 ### 特性 2: StoreUnit支持非对齐Store指令
 
-### 特性 3: StoreUnit支持向量Store指令
+StoreUnit处理非对齐Store指令流程和标量类似，特别的:
+
+* stage 0:
+
+    * 接受来自StoreMisalignBuffer的勤求，优先级高于向量和标量请求,并且不需要计算虚拟地址
+
+* stage 2:
+
+    * 不需要向后端发送feedback响应,
+
+    * 如果不是来自于StoreMisalignBuffer的请求并且没有跨越16字节边界的非对齐请求，那么需要进入StoreMisalignBuffer处理
+
+        * 通过io_misalign_buf接口，向StoreMisalignBuffer发送入队请求
+
+        * 不进入stage 3
+
+    * 如果是来自与StoreMisalignBuffer的请求并且没有跨越16字节边界请求，则需要向StoreMisliagnBuffer发送重发或者写回响应
+
+        * 通过io_misalign_sout接口，向StoreMisalignBuffer发送响应
+
+        * 如果出现TLB miss，则需要重发，否则写回
+
+        * 不进入stage 3
+
+
+\newpage
 
 ## 整体框图
 
@@ -64,6 +100,6 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, 如图\ref{fig:LSU-StoreUn
 
 ### 接口时序实例
 
-store指令进入StoreUnit后，在stage 0 请求TLB，stage 1得到TLB返回的paddr。在stage 0将mask写入StoreQueue，stage 1向 RAW发送请求，并通过io_lsq将store指令的其他信息更新到LoadStoreQueue。在stage 2得到feedback相关信息，stage 4 通过stout写回。
+如图\ref{fig:LSU-StoreUnit-Timing}所示, store指令进入StoreUnit后，在stage 0 请求TLB，stage 1得到TLB返回的paddr。在stage 0将mask写入StoreQueue，stage 1向 RAW发送请求，并通过io_lsq将store指令的其他信息更新到LoadStoreQueue。在stage 2得到feedback相关信息，stage 4 通过stout写回。
 
-![StoreUnit接口时序](./figure/StoreUnit-timing.svg)
+![StoreUnit接口时序](./figure/LSU-StoreUnit-Timing.svg){#fig:LSU-StoreUnit-Timing}

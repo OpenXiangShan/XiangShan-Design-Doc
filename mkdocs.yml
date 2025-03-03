@@ -21,7 +21,10 @@ nav:
   - 访存:
     - 访存流水线 LSU:
       - memblock/LSU/index.md
-      - LSQ:
+      - Load指令执行单元LoadUnit: memblock/LSU/LoadUnit.md
+      - Store地址执行单元StoreUnit: memblock/LSU/StoreUnit.md
+      - Store数据执行单元StdExeUnit: memblock/LSU/StdExeUnit.md
+      - 访存队列:
         - memblock/LSU/LSQ/index.md
         - 访存队列 LSQ: memblock/LSU/LSQ/LSQ.md
         - VirtualLoadQueue.md: memblock/LSU/LSQ/VirtualLoadQueue.md
@@ -32,8 +35,6 @@ nav:
         - Store队列StoreQueue: memblock/LSU/LSQ/StoreQueue.md
       - LoadUnit: memblock/LSU/LoadUnit.md
       - SBuffer.md: memblock/LSU/SBuffer.md
-      - StdExeUnit.md: memblock/LSU/StdExeUnit.md
-      - StoreUnit.md: memblock/LSU/StoreUnit.md
     - 数据缓存:
       - memblock/DCache/index.md
       - 数据高速缓存DCache: memblock/DCache/DCache.md
