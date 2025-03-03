@@ -65,7 +65,7 @@ Table: StoreQueue存储的状态信息
 
       * 如果是same flag, 则older Store范围是 [tail, sqIdx - 1], 如图\ref{fig:LSQ-StoreQueue-Forward-Mask} a）所示； 否则older Store范围是[tail, VirtualLoadQueueSize - 1]和[0, sqIdx]，如图\ref{fig:LSQ-StoreQueue-Forward-Mask} b）所示
 
-      ![StoreQueue前递范围生成](../figure/LSQ-StoreQueue-Forward-Mask.svg){#fig:LSQ-StoreQueue-Forward-Mask width=90%}
+      ![StoreQueue前递范围生成](./figure/LSQ-StoreQueue-Forward-Mask.svg){#fig:LSQ-StoreQueue-Forward-Mask width=90%}
 
 
     * 查询总线用虚拟地址和物理地址同时查询，如果发现物理地址匹配但是虚拟地址不匹配；或者虚拟地址匹配但是物理地址不匹配的情况就需要将那条 load 设置为 replayInst，等 load 到 ROB head 后重新取指令执行。
@@ -80,7 +80,7 @@ Table: StoreQueue存储的状态信息
 
   \newpage
 
-  ![StoreQueue前递数据选择](../figure/LSQ-StoreQueue-Forward.svg){#fig:LSQ-StoreQueue-Forward width=80%}
+  ![StoreQueue前递数据选择](./figure/LSQ-StoreQueue-Forward.svg){#fig:LSQ-StoreQueue-Forward width=80%}
 
 
 * 参与数据前递的store需要满足：
@@ -109,7 +109,7 @@ StoreQueue支持处理非对齐的Store指令，每一个非对齐的Store指令
 
     在特殊情况下（当 store 跨页且 storeMisalignBuffer 中有相同的 uop），如果该 store 符合条件io.maControl.toStoreQueue.withSameUop，会强制将 vecMbCommit设置为 true，表示该 store 无论如何都已提交。
 
-![向量Store指令](../figure/LSQ-StoreQueue-Vector.svg){#fig:LSQ-StoreQueue-Vector width=25%}
+![向量Store指令](./figure/LSQ-StoreQueue-Vector.svg){#fig:LSQ-StoreQueue-Vector width=25%}
 
 
 ### 特性 4：CMO
@@ -255,19 +255,19 @@ StoreQueue强制刷新Sbuffer，直到StoreQueue的有效项数小于下阈值�
 
 ## 整体框图
 
-![StoreQueue整体框架](../figure/LSQ-StoreQueue.svg){#fig:LSQ-StoreQueue width=90%}
+![StoreQueue整体框架](./figure/LSQ-StoreQueue.svg){#fig:LSQ-StoreQueue width=90%}
 
 ## 接口时序
 
 ### 入队接口时序实例
 
-![StoreQueue整体框架](../figure/LSQ-StoreQueue-Enq-Timing.svg){#fig:LSQ-StoreQueue-Enq-Timing width=90%}
+![StoreQueue整体框架](./figure/LSQ-StoreQueue-Enq-Timing.svg){#fig:LSQ-StoreQueue-Enq-Timing width=90%}
 
 \newpage
 
 ### 数据更新接口时序
 
-![数据更新接口时序](../figure/LSQ-StoreQueue-Data-Timing.svg){#fig:LSQ-StoreQueue-Data-Timing width=90%}
+![数据更新接口时序](./figure/LSQ-StoreQueue-Data-Timing.svg){#fig:LSQ-StoreQueue-Data-Timing width=90%}
 
 ### 地址更新接口时序
 
@@ -275,20 +275,20 @@ StoreQueue地址更新和数据更新类似，StoreUnit通过s1阶段的io_lsq�
 
 ### MMIO接口时序实例
 
-![MMIO接口时序实例](../figure/LSQ-StoreQueue-MMIO-Timing.svg){#fig:LSQ-StoreQueue-MMIO-Timing width=90%}
+![MMIO接口时序实例](./figure/LSQ-StoreQueue-MMIO-Timing.svg){#fig:LSQ-StoreQueue-MMIO-Timing width=90%}
 
 \newpage
 ### NonCacheable接口时序实例
 
-![NonCacheable接口时序实例](../figure/LSQ-StoreQueue-NC-Timing.svg){#fig:LSQ-StoreQueue-NC-Timing width=90%}
+![NonCacheable接口时序实例](./figure/LSQ-StoreQueue-NC-Timing.svg){#fig:LSQ-StoreQueue-NC-Timing width=90%}
 
 ### CBO接口时序实例
 
-![CBO接口时序实例](../figure/LSQ-StoreQueue-CBO-Timing.svg){#fig:LSQ-StoreQueue-CBO-Timing width=90%}
+![CBO接口时序实例](./figure/LSQ-StoreQueue-CBO-Timing.svg){#fig:LSQ-StoreQueue-CBO-Timing width=90%}
 
 \newpage
 ### CMO接口时序实例
 
-![CMO接口时序实例](../figure/LSQ-StoreQueue-CMO-Timing.svg){#fig:LSQ-StoreQueue-CMO-Timing width=90%}
+![CMO接口时序实例](./figure/LSQ-StoreQueue-CMO-Timing.svg){#fig:LSQ-StoreQueue-CMO-Timing width=90%}
 
 \newpage

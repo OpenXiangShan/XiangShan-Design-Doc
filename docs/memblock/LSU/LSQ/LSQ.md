@@ -40,7 +40,7 @@ LSQ包括了LoadQueue和StoreQueue两个部分，并做了一层wrapper，便于
 
 * 由于时序的影响，LqPtr和SqPtr的分配被拆分为两部分，如图
 
-  ![LSQ分配](../figure/LSQ-LsqEnqCtrl.svg){#fig:LSQ-LsqEnqCtrl width=60%}
+  ![LSQ分配](./figure/LSQ-LsqEnqCtrl.svg){#fig:LSQ-LsqEnqCtrl width=60%}
 
   * Dispatch阶段
 
@@ -60,7 +60,7 @@ LSQ包括了LoadQueue和StoreQueue两个部分，并做了一层wrapper，便于
 
 ## 整体框图
 
-![LSQ整体框架](../figure/LSQ.svg){#fig:LSQ width=40%}
+![LSQ整体框架](./figure/LSQ.svg){#fig:LSQ width=40%}
 
 
 \newpage
@@ -69,6 +69,6 @@ LSQ包括了LoadQueue和StoreQueue两个部分，并做了一层wrapper，便于
 
 ### Load指令和Store指令入队接口时序实例
 
-![入队更新](../figure/LSQ-LsqEnqCtrl-Timing.svg){#fig:LSQ-LsqEnqCtrl-Timing width=90%}
+![入队更新](./figure/LSQ-LsqEnqCtrl-Timing.svg){#fig:LSQ-LsqEnqCtrl-Timing width=90%}
 
 \newpage
