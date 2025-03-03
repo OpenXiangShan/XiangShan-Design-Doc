@@ -8,21 +8,21 @@ GrantBuf接收来自MainPipe的任务，并根据任务类型进行转发。主�
 3.融合请求（task.mergeA = true），同时执行1和2。
 
 ### 特性1：阻塞MainPipe入口
-GrantBuf 还会根据: 【流水线入口信息 + 流水线S1~S5级状态 + 内部 pftRespQueue，inflightGrant，grantQueue状态】，来向ReqArb给出【请求入口的阻塞信息】。
+GrantBuf 还会根据: 【流水线入口信息 + 流水线是S1/S2/S3/S4/S5级状态 + 内部 pftRespQueue，inflightGrant，grantQueue状态】，来向ReqArb给出【请求入口的阻塞信息】。
 
-3种资源的统计：
-c1: GrantBuf资源不足：已占用的GrantBuf数量 + 流水线S1~S5中是可能GrantBuf的数量(from sinkA or sinkC） > 16
-c2: E通道资源不足：inflightGrant +  流水线S1~S5中可能需要E通道回GrantAck的数量(from sinkA） > 16
-c3: Prefetch的RespQueue资源不足：已占用的pftRespQueue数量 + 流水线S1~S5中可能用到preRespQueue数量(from sinkA） > 10
+3种资源的统计:
+  c1: GrantBuf资源不足：已占用的GrantBuf数量 + 流水线S1/S2/S3/S4/S5中是可能GrantBuf的数量(from sinkA or sinkC） > 16
+  c2: E通道资源不足：inflightGrant +  流水线S1/S2/S3/S4/S5中可能需要E通道回GrantAck的数量(from sinkA） > 16
+  c3: Prefetch的RespQueue资源不足：已占用的pftRespQueue数量 + 流水线S1/S2/S3/S4/S5中可能用到preRespQueue数量(from sinkA） > 10
 在S1阻塞A/B/C通道进入MainPipe的条件：
-A：c1或c2或c3
-B: 只要inflightGrant缓冲区有和B通道地址一样的未完成操作
-C: c1
+  A：c1或c2或c3
+  B: 只要inflightGrant缓冲区有和B通道地址一样的未完成操作
+  C: c1
 
 MSHR的3种资源不足(资源最大数-1)：
-c4: GrantBuf的资源不足：已占用的GrantBuf数量 + 流水线S1~S5中是可能GrantBuf的数量(from sinkA or sinkC） > 15
-c5: E通道资源不足：inflightGrant +  流水线S1~S5中可能需要E通道回GrantAck的数量(from sinkA） > 15
-c6: Prefetch的RespQueue资源不足：已占用的pftRespQueue数量 + 流水线S1~S5中可能用到preRespQueue数量(from sinkA） > 9
+  c4: GrantBuf的资源不足：已占用的GrantBuf数量 + 流水线S1/S2/S3/S4/S5中是可能GrantBuf的数量(from sinkA or sinkC） > 15
+  c5: E通道资源不足：inflightGrant +  流水线S1/S2/S3/S4/S5中可能需要E通道回GrantAck的数量(from sinkA） > 15
+  c6: Prefetch的RespQueue资源不足：已占用的pftRespQueue数量 + 流水线S1/S2/S3/S4/S5中可能用到preRespQueue数量(from sinkA） > 9
 阻塞MSHR进入Mainpipe的阻塞条件为以上3种任意一种
 
 
