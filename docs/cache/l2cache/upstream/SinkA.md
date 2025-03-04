@@ -7,3 +7,4 @@ SinkA把来自【①总线A通道，②预取器】的请求进行处理，转�
 当RequestBuffer不能接收SinkA的申请时，总线A通道接口/预取器通过valid/ready协议来阻塞后面的申请。
 
 ## 整体框图
+![SinkA](./figure/SinkA.svg)
