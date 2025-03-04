@@ -2,7 +2,9 @@
 
 ## 功能描述
 
-Store指令地址流水线分为S0/S1/S2/S3/S4五级。接收store地址发射队列发来的请求，处理完成之后需要给后端和向量部分响应，处理过程中需要给发射队列反馈信息，给StoreQueue反馈信息，最后写回, 如果中间出现异常则从发射队列重新发射。
+Store指令地址流水线分为S0/S1/S2/S3/S4五级, \ref{fig:LSU-StoreUnit-Pipeline}所示。接收store地址发射队列发来的请求，处理完成之后需要给后端和向量部分响应，处理过程中需要给发射队列反馈信息，给StoreQueue反馈信息，最后写回, 如果中间出现异常则从发射队列重新发射。
+
+![StoreUnit流水线](./figure/LSU-StoreUnit-Pipeline.svg){#fig:LSU-StoreUnit-Pipeline}
 
 ### 特性 1：StoreUnit支持标量Store指令
 
