@@ -176,10 +176,14 @@ load指令流水线，接收load发射队列发送的load指令，在流水线�
 
         * 通过io_prefetch_train训练SMS预取
 
+\newpage
 
 ## 整体框图
 
 ![LoadUnit整体框图](./figure/LSU-LoadUnit.svg){#fig:LSU-LoadUnit}
+
+
+\newpage
 
 ## 接口时序
 
@@ -188,6 +192,9 @@ load指令流水线，接收load发射队列发送的load指令，在流水线�
 ![LoadUnit接口时序](./figure/LSU-LoadUnit-Timing.svg){#fig:LSU-LoadUnit-timing}
 
 load指令进入LoadUnit后，在stage 0 请求TLB和DCache，stage 1得到TLB返回的paddr，stage 2得到是否命中DCache。在stage 2进行RAW和RAR违例检查，stage 3通过io_lsq_ldin更新LoadQueue。在stage 3通过ldout写回。
+
+
+\newpage
 
 ### stage 0不同源仲裁时序实例
 
