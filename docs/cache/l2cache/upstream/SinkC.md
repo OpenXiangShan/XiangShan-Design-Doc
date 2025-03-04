@@ -14,3 +14,4 @@ b.如果请求是ProbeAckData，则直接向MSHR发送反馈，同时将其数�
 当MSHR处理一笔release需要probe L1D$时，这笔probeAckData查找匹配到MSHR中的这笔release后，会主动把数据写入到ReleaseBuf中。
 
 ## 整体框图
+![SinkC](./figure/SinkC.svg)
