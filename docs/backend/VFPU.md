@@ -968,7 +968,7 @@ Table: $VFALU$ 接口和含义
 | $round\_mode$ | $input$ | $3$ |              舍入模式              |
 | $fp\_format$ | $input$ | $2$ |              浮点格式              |
 | $res\_widening$ | $input$ | $1$ |           $widen$ 指令           |
-| $opb\_widening$ | $input$ | $1$ | 源操作数$vs1 $是否和结果格式相同 |
+| $opb\_widening$ | $input$ | $1$ | 源操作数$vs1$是否和结果格式相同 |
 | $op\_code$ | $input$ | $5$ |               操作码               |
 | $fp\_result$ | $output$ | $64$ |              计算结果              |
 | $fflags$ | $output$ | $20$ |               标志位               |
