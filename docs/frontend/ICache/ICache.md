@@ -2,8 +2,8 @@
 
 - 版本：V2R2
 - 状态：OK
-- 日期：2025/01/03
-- commit：[6c106319588f5988a282dc2e7c687a9d44e9c209](https://github.com/OpenXiangShan/XiangShan/tree/6c106319588f5988a282dc2e7c687a9d44e9c209)
+- 日期：2025/03/07
+- commit：[4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345](https://github.com/OpenXiangShan/XiangShan/tree/4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345)
 
 ## 术语说明
 
@@ -34,7 +34,7 @@
 | DataArray | 数据 SRAM |
 | [MissUnit](MissUnit.md) | 缺失处理单元 |
 | [Replacer](Replacer.md) | 替换策略单元 |
-| [CtrlUnit](CtrlUnit.md) | 控制单元，目前仅用于控制 ECC 功能 |
+| [CtrlUnit](CtrlUnit.md) | 控制单元，目前仅用于控制错误校验/错误注入功能 |
 
 ## 设计规格
 
@@ -49,8 +49,13 @@
 - 支持可配置的替换算法
 - 支持可配置的缺失状态寄存器数量
 - 支持检查地址翻译错误、物理内存保护错误
-- 支持 ECC 检查 & 自动恢复
+- 支持错误检查 & 错误恢复 & 错误注入[^ecc]
+  - 默认采用 parity code
+  - 通过从 L2 重取实现错误恢复
+  - 软件可通过 MMIO 空间访问的错误注入控制寄存器
 - DataArray 支持分 bank 存储，细存储粒度实现低功耗
+
+[^ecc]: 本文档也将错误检查 & 错误恢复 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](ICache.md#sec:ecc) 一节开始的说明。
 
 ## 参数列表
 
@@ -183,9 +188,11 @@ ITLB 的冲刷比较特殊，其缓存的页表项仅需要在执行 `sfence.vma
 
 因此，每当冲刷 IPrefetchPipe 的 s1 流水级时，无论冲刷原因为何，都需要同步冲刷 ITLB 的 `gpf` 缓存（即拉高 `ITLB.flushPipe`）。
 
-### ECC
+### ECC {#sec:icache-ecc}
 
-ICache 支持 ECC 功能（亦称 RAS[^ras] 或 RERI[^reri]），由 CtrlUnit 进行控制。目前除了基础的错误检测能力以外，主要实现了两个高级能力：错误自动恢复、错误注入。
+首先需要指出，ICache 在默认参数下使用 parity code，其仅具备 1 bit 错误检测能力，不具备错误恢复能力，严格意义上不能算是 ECC（Error Correction Code）。但一方面，其可以配置为使用 secded code；另一方面，我们在代码中大量使用 ECC 来命名错误检测与错误恢复相关的功能（`ecc_error`、`ecc_inject`等）。因此本文档仍将使用 ECC 一词来指代错误检测、错误恢复、错误注入相关功能以保证与代码的一致性。
+
+ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] 能力的一部分，可以参考 RISC-V RERI[^reri] 手册，由 CtrlUnit 进行控制。
 
 [^ras]: 此 RAS（Reliability, Availability, and Serviceability）非彼 RAS（Return Address Stack）。
 
