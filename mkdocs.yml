@@ -1,4 +1,7 @@
-site_name: 香山开源处理器设计文档
+site_name: 香山开源处理器设计文档（南湖）
+copyright: |
+  <div>XiangShan Documents are licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</div>
+  <div>Copyright © 2021 - 2025 The XiangShan Team</div>
 
 # Repository
 repo_name: XiangShan-Design-Doc
@@ -8,7 +11,7 @@ theme:
   name: material
   language: zh
   features:
-    - navigation.tabs
+    # - navigation.tabs
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -41,8 +44,21 @@ plugins:
 #       toc_level: 3
 #       enabled_if_env: ENABLE_PDF_EXPORT
 #       output_path: document.pdf
+
+extra:
+  social:
+    - icon: fontawesome/solid/house
+      link: https://xiangshan.cc/
+      name: XiangShan Homepage
+    - icon: material/file-document-multiple
+      link: https://docs.xiangshan.cc
+      name: XiangShan Documents
+    - icon: fontawesome/brands/github
+      link: https://github.com/OpenXiangShan
+      name: XiangShan on Github
+
 nav:
-    - 首页 Home: index.md
+    - 首页: index.md
     - 总体架构: arch.md
     - 前端:
         - 总体架构: frontend/overview.md

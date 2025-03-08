@@ -1,4 +1,4 @@
-mkdocs-material==9.5.40
+mkdocs-material~=9.5.0
 mkdocs-static-i18n
 mkdocs-rss-plugin
 mkdocs-git-revision-date-localized-plugin
