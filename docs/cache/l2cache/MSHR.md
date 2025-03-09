@@ -1,4 +1,4 @@
-# MSHR
+# MSHR {#sec:mshr}
 
 每个任务是否分配 MSHR 由访存流水线（MainPipe）根据其是否命中、是否需要 Probe L1、处理流程的复杂程度等决定，详见 [@sec:reqarb-mainpipe] [请求仲裁器与访存流水线](ReqArb_MainPipe.md)。
 
