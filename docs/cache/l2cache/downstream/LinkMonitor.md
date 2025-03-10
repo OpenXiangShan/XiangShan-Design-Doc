@@ -1,4 +1,4 @@
-## 链路层控制器 LinkMonitor
+# 链路层控制器 LinkMonitor
 
 ## 功能描述
 LinkMonitor 模块将基于 Valid-Ready 握手的消息转化为基于 L-Credit 的握手，同时会维护 TX、RX 两条方向的 Link 的功耗状态。具体内容详见 CHI Spec Link Handshake 一章。
