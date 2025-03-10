@@ -85,7 +85,7 @@
 | VLMergeBuffer | 16 |
 | VSMergeBuffer | 16 |
 | VSegmentBuffer | 8 |
-| VFOFBuffer | 8 |
+| VFOFBuffer | 1 |
 | Load TLB | 48-entry fully associative |
 | Store TLB | 48-entry fully associative |
 | L1 Prefetch TLB | 48-entry fully associative |
