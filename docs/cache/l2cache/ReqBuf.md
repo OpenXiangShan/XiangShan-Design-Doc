@@ -40,3 +40,6 @@ RequestBuffer 入口的请求在哪些情况下允许被接收：
   waitMP + waitMS 全部被清零
   noFreeway为低
   流水线s1级即将进入流水线的A/B通道请求没有 set 冲突
+
+## 整体框图
+![RequestBuf](./figure/RequestBuf.svg)
