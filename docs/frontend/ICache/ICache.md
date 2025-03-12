@@ -100,17 +100,49 @@ FTQ 分别把（预）取指请求发送到（预）取指流水线进行处理�
 
 详细的取指过程见[MainPipe 子模块文档](MainPipe.md)、[IPrefetchPipe 子模块文档](IPrefetchPipe.md)和[WayLookup 子模块文档](WayLookup.md)。
 
+#### 硬件预取与软件预取
+
+V2R2 后，ICache 可能接受两个来源的预取请求：
+
+1. 来自 Ftq 的硬件预取请求，基于 FDIP 算法。
+2. 来自 Memblock 中 LoadUint 的软件预取请求，其本质是 Zicbop 扩展中的 prefetch.i 指令，请参考 RISC-V CMO 手册。
+
+然而，PrefetchPipe 每周期仅可以处理一个预取请求，故需要进行仲裁。ICache 顶层负责缓存软件预取请求，并与来自 Ftq 的硬件预取请求二选一送往 PrefetchPipe，软件预取请求的优先级高于硬件预取请求。
+
+逻辑上来说，每个 LoadUnit 都有可能发出软件预取请求，因此每周期至多会有 LoadUnit 数量（目前默认参数为`LduCnt=3`）个软件预取请求。但出于实现成本和性能收益考量，ICache 每周期至多仅接收并处理一个，多余的会被丢弃，端口下标最小的优先。此外，若 PrefetchPipe 阻塞，而 ICache 内已经缓存了一个软件预取请求，那么新的软件预取请求也会被丢弃。
+
+![ICache 预取请求接收与仲裁](../figure/ICache/ICache/prefetch_mux.drawio.png)
+
+发送到 PrefetchPipe 后，软件预取请求的处理和硬件预取请求的处理几乎是一致的，除了：
+- 软件预取请求不会影响控制流，即**不会**发送到 MainPipe（和后续的 Ifu、IBuffer 等环节），仅做：1) 判断是否 miss 或异常；2) 若 miss 且无异常，发送到 MissUnit 做预取指并重填 SRAM。
+
+关于 PrefetchPipe 的细节请查看子模块文档。
+
 ### 异常传递/特殊情况处理
 
-ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），可能的异常和特殊情况有：
+ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），接收 L2 的响应，过程中可能出现的异常有：
 
 | 来源 | 异常 | 描述 | 处理 |
 | --- | --- | --- | --- |
 | ITLB | af | 虚拟地址翻译过程出现访问错误 | 禁止取指，标记取指块为 af，经 IFU、IBuffer 发送到后端处理 |
-| ITLB | gpf | 客户机页错误 | 禁止取指，标记取指块为 gpf，经 IFU、IBuffer 发送到后端处理，将有效的 gpaddr 发送到后端的 GPAMem 以备使用 |
+| ITLB | gpf | 客户机页错误 | 禁止取指，标记取指块为 gpf，经 IFU、IBuffer 发送到后端处理，将有效的 `gpaddr` 和 `isForNonLeafPTE` 发送到后端的 GPAMem 以备使用 |
 | ITLB | pf | 页错误 | 禁止取指，标记取指块为 pf，经 IFU、IBuffer 发送到后端处理 |
+| backend | af/pf/gpf | 同 ITLB af/gpf/pf | 同 ITLB af/gpf/pf |
 | PMP | af | 物理地址无权限访问 | 同 ITLB af |
-| MissUnit | L2 corrupt | L2 cache 响应 tilelink corrupt （可能是 L2 ECC 错误，亦可能是无权限访问总线地址空间导致 denied） | 同 ITLB af |
+| MissUnit | L2 corrupt | L2 cache 响应 corrupt | 标记取指块为 af，经 IFU、IBuffer 发送到后端处理 |
+
+需要指出，对于一般的取指流程来说，并不存在 backend 异常这一项。但 XiangShan 出于节省硬件资源的考虑，在前端传递的 pc 只有 41 / 50 bit（Sv39\*4 / Sv48\*4），而对于 `jr`、`jalr` 等指令，跳转目标来源于 64 bit 寄存器。根据 RISC-V 规范，高位非全0或全1时的地址不合法，需要引发异常，这一检查只能由后端完成，并随同后端重定向信号一起发送到 Ftq，进而随同取指请求一起发送到 ICache。其本质是一种 ITLB 异常，因此解释描述和处理方式与 ITLB 相同。
+
+另外，L2 cache 通过 tilelink 总线响应 corrupt 可能是 L2 ECC 错误（`d.corrupt`），亦可能是无权限访问总线地址空间导致拒绝访问（`d.denied`）。tilelink 手册规定，当拉高 `d.denied` 时必须同时拉高 `d.corrupt`。而这两种情况都需要将取指块标记为 access fault，因此目前在 ICache 中无需区分这两种情况（即无需关注 `d.denied`，其可能被 chisel 自动优化掉而导致 verilog 中看不到）。
+
+这些异常间存在优先级：backend 异常 > ITLB 异常 > PMP 异常 > MissUnit 异常。这是自然的：
+1. 当出现 backend 异常时，发送到前端的 vaddr 不完整且不合法，故 ITLB 地址翻译过程无意义，检查出的异常无效；
+2. 当出现 ITLB 异常时，翻译得到的 paddr 无效，故 PMP 检查过程无意义，检查出的异常无效；
+3. 当出现 PMP 异常时，paddr 无权限访问，不会发送（预）取指请求，故不会从 MissUnit 得到响应。
+
+而对于 backend 的三种异常、ITLB 的三种异常，由 backend 和 ITLB 内部进行有优先级的选择，保证同时至多只有一种拉高。
+
+此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况：
 
 | 来源 | 特殊情况 | 描述 | 处理 |
 | --- | --- | --- | --- |
