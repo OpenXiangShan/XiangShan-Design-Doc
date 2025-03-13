@@ -7,26 +7,28 @@ repo_name: XiangShan-Design-Doc
 nav:
   - 前端:
     - 分支预测单元:
-      - 整体设计: frontend/BPU/BPU.md
+      - frontend/BPU/index.md
       - BPU抽象模块: frontend/BPU/Composer.md
       - 取指目标单元: frontend/BPU/FTB.md
       - 分支目标缓冲: frontend/BPU/uFTB.md
       - 主预测器TAGE-SC: frontend/BPU/TAGE-SC.md
       - 间接跳转指令预测器: frontend/BPU/ITTAGE.md
       - 返回地址预测器: frontend/BPU/RAS.md
-    - 取指目标队列: frontend/FTQ/FTQ.md
+    - 取指目标队列: 
+      - frontend/FTQ/index.md
     - 取指令单元:
-      - 整体设计: frontend/IFU/IFU.md
+      - frontend/IFU/index.md
       - 预译码器: frontend/IFU/PreDecoder.md
     - 指令缓存:
-      - 整体设计: frontend/ICache/ICache.md
+      - frontend/ICache/index.md
       - MainPipe: frontend/ICache/MainPipe.md
       - IPrefetchPipe: frontend/ICache/IPrefetchPipe.md
       - WayLookup: frontend/ICache/WayLookup.md
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
-    - PC类: frontend/Pruned_Address/Pruned_Address.md
+    - PC类: 
+      - frontend/Pruned_Address/index.md
   - 访存:
     - 访存流水线 LSU:
       - memblock/LSU/index.md
