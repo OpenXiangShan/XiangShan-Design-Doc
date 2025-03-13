@@ -27,7 +27,7 @@ IPrefetchPipe 为预取的流水线，为两级流水设计，负责预取请求
 
 综合该请求的命中结果、ITLB 异常、PMP 异常，判断是否需要预取，只有不存在异常时才进行预取，因为同一个预测块可能对应两个 cacheline，所以通过 Arbiter 依次将请求发送至 MissUnit。
 
-## 命中信息的更新
+## 命中信息的更新 {#sec:IPrefetchPipe-hit-update}
 
 在 S1 流水级中得到命中信息后，距离命中信息真正在 MainPipe 中被使用要经过两个阶段，分别是在 IPrefetchPipe 中等待入队 WayLookup 阶段和在 WayLookup 中等待出队阶段，在等待期间可能会发生 MSHR 对 Meta/DataArray 的更新，因此需要对 MSHR 的响应进行监听，分为两种情况：
 

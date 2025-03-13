@@ -42,7 +42,7 @@ IFU 接收来自 FTQ 以预测块为单位的取指令请求，包括预测块�
 
 当且仅当预测块的取指地址在 cacheline 的后半段时，为了满足一个预测块最多 34 字节的需要，IFU 将从 ICache 中取回连续的两个 cacheline，分别产生例外信息（page fault 和 access fault），如后述特性 3 进行切分。
 
-在 2024/06 以后，ICache 实现了低功耗设计，会在内部进行数据的选择和拼接，因此 IFU 不需要关心两个 cacheline 的数据如何拼接和选择，只需要简单地将 ICache 返回的数据复制一份拼接在一起，即可进行切分。请参考 [ICache 文档](../ICache/ICache.md#dataarray-分-bank-的低功耗设计)。
+在 2024/06 以后，ICache 实现了低功耗设计，会在内部进行数据的选择和拼接，因此 IFU 不需要关心两个 cacheline 的数据如何拼接和选择，只需要简单地将 ICache 返回的数据复制一份拼接在一起，即可进行切分。请参考 [ICache 文档](../ICache/index.md#sec:icache-dataarray-per-bank-lowpower)。
 
 亦可参考 [IFU.scala 中的注释](https://github.com/OpenXiangShan/XiangShan/blob/fad7803d97ed4a987a743036cec42d1c07b48e2e/src/main/scala/xiangshan/frontend/IFU.scala#L474-L502)。
 

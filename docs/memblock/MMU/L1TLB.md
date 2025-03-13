@@ -239,7 +239,7 @@ Table: TLB 压缩前后每项存储的内容
 
 在添加 H 拓展的 L1TLB 中对 TLB 项进行了修改，如 [@fig:L1TLB-item] 所示。
 
-![TLB 项示意图](figure/image19.png) {#fig:L1TLB-item}
+![TLB 项示意图](figure/image19.png){#fig:L1TLB-item}
 
 与原先的设计相比，新增了 g_perm、vmid、s2xlate，其中 g_perm 用来存储第二阶段页表的 perm，vmid 用来存储第二阶段页表的 vmid，s2xlate 用来区分 TLB 项的类型。根据 s2xlate 的不同，TLB 项目存储的内容也有所不同。
 
@@ -259,7 +259,7 @@ Table: TLB 项的类型
 
 添加了 H 拓展后的 MMU，PTW 返回的结构分为三部分，第一部分 s1 是原先设计中的 PtwSectorResp，存储第一阶段翻译的页表，第二部分 s2 是 HptwResp，存储第二阶段翻译的页表，第三部分是 s2xlate，代表这次 resp 的类型，仍然分为 noS2xlate、allStage、onlyStage1 和 onlyStage2，如 [@fig:L1TLB-PTW-resp-struct]。其中 PtwSectorEntry 是采用了 TLB 压缩技术的 PtwEntry，两者的主要区别是 tag 和 ppn 的长度
 
-![PTW resp 结构示意图](figure/image20.png) {#fig:L1TLB-PTW-resp-struct}
+![PTW resp 结构示意图](figure/image20.png){#fig:L1TLB-PTW-resp-struct}
 
 对于 noS2xlate 和 onlyStage1 的情况，只需要将 s1 的结果填入 TLB 项中即可，写入方法与原先的设计类似，将返回的 s1 的对应字段填入 entry 的对应字段即可。需要注意的是，noS2xlate 的时候，vmid 字段无效。
 

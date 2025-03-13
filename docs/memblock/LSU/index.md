@@ -8,8 +8,8 @@
 | [StoreUnit](StoreUnit.md)                     | Store 地址执行单元 |
 | [StdExeUnit](StdExeUnit.md)                   | Store 数据执行单元 |
 | [AtomicsUnit](AtomicsUnit.md)                 | 原子指令执行单元 |
-| [VLSU](VLSU/VLSU.md)                          | 向量访存 |
-| [LSQ](LSQ/LSQ.md)                             | 访存队列 |
+| [VLSU](VLSU/index.md)                          | 向量访存 |
+| [LSQ](LSQ/index.md)                             | 访存队列 |
 | [Uncache](Uncache.md)                         | Uncache 处理单元 |
 | [SBuffer](SBuffer.md)                         | Store 提交缓冲 |
 | [LoadMisalignBuffer](LoadMisalignBuffer.md)   | Load 非对齐缓冲 |

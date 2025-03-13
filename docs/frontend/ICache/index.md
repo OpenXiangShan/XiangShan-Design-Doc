@@ -55,7 +55,7 @@
   - 软件可通过 MMIO 空间访问的错误注入控制寄存器
 - DataArray 支持分 bank 存储，细存储粒度实现低功耗
 
-[^ecc]: 本文档也将错误检查 & 错误恢复 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](ICache.md#sec:ecc) 一节开始的说明。
+[^ecc]: 本文档也将错误检查 & 错误恢复 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](#sec:icache-ecc) 一节开始的说明。
 
 ## 参数列表
 
@@ -72,7 +72,7 @@
 
 ## 功能概述
 
-FTQ 中存储着 BPU 生成的预测块，fetchPtr 指向取指预测块，prefetchPtr 指向预取预测块，当复位时 prefetchPtr 与 fetchPtr 相同，每成功发送一次取指请求时 fetchPtr++，每成功发送一次预取请求时 prefetchPtr++。详细说明见[FTQ 设计文档](../FTQ/FTQ.md)。
+FTQ 中存储着 BPU 生成的预测块，fetchPtr 指向取指预测块，prefetchPtr 指向预取预测块，当复位时 prefetchPtr 与 fetchPtr 相同，每成功发送一次取指请求时 fetchPtr++，每成功发送一次预取请求时 prefetchPtr++。详细说明见[FTQ 设计文档](../FTQ/index.md)。
 
 ![FTQ 指针示意](../figure/ICache/ICache/ftq_pointer.png)
 
@@ -149,9 +149,9 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
 | PMP | mmio | 物理地址为 mmio 空间 | 禁止取指，标记取指块为 mmio，由 IFU 进行**非推测性**取指 |
 | ITLB | pbmt.NC | 页属性为不可缓存、幂等 | 禁止取指，由 IFU 进行**推测性**取指 |
 | ITLB | pbmt.IO | 页属性为不可缓存、非幂等 | 同 pmp mmio |
-| MainPipe | ECC error | 主流水检查发现 MetaArray/DataArray ECC 错误 | 见[ECC 一节](#ecc)，旧版同 ITLB af，新版做自动重取 |
+| MainPipe | ECC error | 主流水检查发现 MetaArray/DataArray ECC 错误 | 见[ECC 一节](#sec:icache-ecc)，旧版同 ITLB af，新版做自动重取 |
 
-### DataArray 分 bank 的低功耗设计
+### DataArray 分 bank 的低功耗设计 {#sec:icache-dataarray-per-bank-lowpower}
 
 目前，ICache 中每个 cacheline 分为 8 个 bank，bank0-7。一个取指块需要 34B 指令数据，故一次访问连续的 5 个 bank。存在两种情况：
 
@@ -252,10 +252,10 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 在后续版本（[#3899](https://github.com/OpenXiangShan/XiangShan/pull/3899) 后）实现了错误自动恢复机制，故只需进行以下处理：
 
-1. 错误处理：从 L2 Cache 重新取指，见[下节](#错误自动恢复)。
+1. 错误处理：从 L2 Cache 重新取指，见[下节](#sec:icache-recover-from-error)。
 2. 错误报告：同上向 BEU 报告错误。
 
-#### 错误自动恢复
+#### 错误自动恢复 {#sec:icache-recover-from-error}
 
 注意到，ICache 与 DCache 不同，是只读的，因此其数据必然不是 dirty 的，这意味着我们总是可以从下级存储结构（L2/3 Cache、memory）中重新获取正确的数据。因此，ICache 可以通过向 L2 Cache 重新发起 miss 请求来实现错误自动恢复。
 

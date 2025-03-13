@@ -1,6 +1,6 @@
 # WayLookup 子模块文档
 
-WayLookup 为 FIFO 结构，暂存 IPrefetchPipe 查询 MetaArray 和 ITLB 得到的元数据，以备 MainPipe 使用。同时监听 MSHR 写入 SRAM 的 cacheline，对命中信息进行更新。更新逻辑与 IPrefetchPipe 中相同，见 [IPrefetchPipe 子模块文档中的“命中信息的更新”](IPrefetchPipe.md#命中信息的更新)一节。
+WayLookup 为 FIFO 结构，暂存 IPrefetchPipe 查询 MetaArray 和 ITLB 得到的元数据，以备 MainPipe 使用。同时监听 MSHR 写入 SRAM 的 cacheline，对命中信息进行更新。更新逻辑与 IPrefetchPipe 中相同，见 [IPrefetchPipe 子模块文档中的“命中信息的更新”](IPrefetchPipe.md#sec:IPrefetchPipe-hit-update)一节。
 
 ![WayLookup 结构](../figure/ICache/WayLookup/waylookup_structure.png)
 
