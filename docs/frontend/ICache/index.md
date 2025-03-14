@@ -109,7 +109,7 @@ V2R2 后，ICache 可能接受两个来源的预取请求：
 
 然而，PrefetchPipe 每周期仅可以处理一个预取请求，故需要进行仲裁。ICache 顶层负责缓存软件预取请求，并与来自 Ftq 的硬件预取请求二选一送往 PrefetchPipe，软件预取请求的优先级高于硬件预取请求。
 
-逻辑上来说，每个 LoadUnit 都有可能发出软件预取请求，因此每周期至多会有 LoadUnit 数量（目前默认参数为`LduCnt=3`）个软件预取请求。但出于实现成本和性能收益考量，ICache 每周期至多仅接收并处理一个，多余的会被丢弃，端口下标最小的优先。此外，若 PrefetchPipe 阻塞，而 ICache 内已经缓存了一个软件预取请求，那么新的软件预取请求也会被丢弃。
+逻辑上来说，每个 LoadUnit 都有可能发出软件预取请求，因此每周期至多会有 LoadUnit 数量（目前默认参数为`LduCnt=3`）个软件预取请求。但出于实现成本和性能收益考量，ICache 每周期至多仅接收并处理一个，多余的会被丢弃，端口下标最小的优先。此外，若 PrefetchPipe 阻塞，而 ICache 内已经缓存了一个软件预取请求，那么原先的软件预取请求将被覆盖。
 
 ![ICache 预取请求接收与仲裁](../figure/ICache/ICache/prefetch_mux.drawio.png)
 
@@ -185,7 +185,8 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
     - `gpf_entry.valid` 置为 `false.B`
 4. MissUnit 中所有 MSHR
     - 若 MSHR 尚未向总线发出请求，直接置无效（`valid === false.B`）
-    - 若 MSHR 已经向总线发出请求，记录待冲刷（`flush === true.B` 或 `fencei === true.B`），等到 d 通道收到 grant 响应时再置无效，同时不把 grant 的数据回复给 MainPipe/IPrefetchPipe
+    - 若 MSHR 已经向总线发出请求，记录待冲刷（`flush === true.B` 或 `fencei === true.B`），等到 d 通道收到 grant 响应时再置无效，同时不把 grant 的数据回复给 MainPipe/PrefetchPipe，也不写入 SRAM
+    - 需要留意，当 d 通道收到 grant 响应的同时收到冲刷（`io.flush === true.B` 或 `io.fencei === true.B`）时，MissUnit 同样不写入 SRAM，但**会**将数据回复给 MainPipe/PrefetchPipe，避免将端口的延时引入响应逻辑中，此时 MainPipe/PrefetchPipe 也同步收到了冲刷请求，因此会将数据丢弃
 
 每种冲刷原因需要执行的冲刷目标：
 
