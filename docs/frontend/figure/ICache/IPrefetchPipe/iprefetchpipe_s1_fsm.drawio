@@ -1,0 +1,137 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.3065.51" version="26.1.0">
+  <diagram name="Page-1" id="kA7oCcuXTSsDpck8mc_g">
+    <mxGraphModel dx="3145" dy="1438" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-1" value="&lt;font style=&quot;font-size: 59px;&quot; face=&quot;MS Mincho,ＭＳ 明朝&quot;&gt;itlbResend&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=4;fillColor=none;" parent="1" vertex="1">
+          <mxGeometry x="1066.0000000000005" y="370" width="443" height="222" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-2" value="&lt;font style=&quot;font-size: 59px;&quot; face=&quot;MS Mincho,ＭＳ 明朝&quot;&gt;idle&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=4;fillColor=none;" parent="1" vertex="1">
+          <mxGeometry x="340.00000000000045" y="370" width="443" height="222" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-3" value="&lt;font style=&quot;font-size: 59px;&quot; face=&quot;MS Mincho,ＭＳ 明朝&quot;&gt;metaResend&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=4;fillColor=none;" parent="1" vertex="1">
+          <mxGeometry x="1067.0000000000005" y="1035" width="443" height="222" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-4" value="&lt;font style=&quot;font-size: 59px;&quot; face=&quot;MS Mincho,ＭＳ 明朝&quot;&gt;enqWay&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=4;fillColor=none;" parent="1" vertex="1">
+          <mxGeometry x="340.00000000000045" y="1035" width="443" height="222" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-5" value="&lt;font style=&quot;font-size: 59px;&quot; face=&quot;MS Mincho,ＭＳ 明朝&quot;&gt;enterS2&lt;/font&gt;" style="ellipse;whiteSpace=wrap;html=1;strokeWidth=4;fillColor=none;" parent="1" vertex="1">
+          <mxGeometry x="-689.9999999999995" y="1035" width="443" height="222" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-6" value="" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="784.0000000000068" y="480.40999999999997" as="sourcePoint" />
+            <mxPoint x="1066.9999999999995" y="480.40999999999997" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-7" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 38px;&quot;&gt;itlb&lt;/font&gt;&lt;font face=&quot;STSong&quot; style=&quot;font-size: 38px;&quot;&gt;缺失&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-6" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="15" y="1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-8" value="" style="endArrow=classic;html=1;rounded=0;entryX=1;entryY=0;entryDx=0;entryDy=0;exitX=0;exitY=1;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;" parent="1" source="k0up6hZ05IzZb-exf6Pb-1" target="k0up6hZ05IzZb-exf6Pb-4" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1060.0000000000005" y="580" as="sourcePoint" />
+            <mxPoint x="1061.0000000000005" y="1022.9999999999995" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-9" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 38px;&quot;&gt;itlb&lt;/font&gt;&lt;font face=&quot;STSong&quot; style=&quot;font-size: 38px;&quot;&gt;命中&lt;/font&gt;&lt;div&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;metaArray&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;空闲&lt;/font&gt;&lt;/span&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-8" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="9" y="-40" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-10" value="" style="endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;" parent="1" source="k0up6hZ05IzZb-exf6Pb-3" target="k0up6hZ05IzZb-exf6Pb-4" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1062.9999999999995" y="1145.41" as="sourcePoint" />
+            <mxPoint x="780.0000000000068" y="1145.41" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-11" value="&lt;span style=&quot;font-size: 38px;&quot;&gt;&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot;&gt;metaArray&lt;/font&gt;&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;&lt;font face=&quot;STSong&quot;&gt;空闲&lt;/font&gt;&lt;/span&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-10" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="15" y="-6" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-12" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;" parent="1" source="k0up6hZ05IzZb-exf6Pb-2" target="k0up6hZ05IzZb-exf6Pb-4" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="570.0000000000005" y="592" as="sourcePoint" />
+            <mxPoint x="571.0000000000005" y="1034.9999999999995" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-13" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 38px;&quot;&gt;itlb&lt;/font&gt;&lt;font face=&quot;STSong&quot; style=&quot;font-size: 38px;&quot;&gt;命中&lt;/font&gt;&lt;div&gt;&lt;font style=&quot;font-size: 38px;&quot;&gt;&lt;font style=&quot;&quot; face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;WayLookup&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;未入队&lt;/font&gt;&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="560.5000000000005" y="745.294117647059" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-14" value="" style="endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;" parent="1" target="k0up6hZ05IzZb-exf6Pb-5" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="340.00000000000045" y="1146" as="sourcePoint" />
+            <mxPoint x="-46.999999999999545" y="1146" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-15" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;WayLookup&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;入队或软件预取&lt;/span&gt;&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;S2&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;繁忙&lt;/span&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/font&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-14" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="-41" y="-3" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-16" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;" parent="1" source="k0up6hZ05IzZb-exf6Pb-1" target="k0up6hZ05IzZb-exf6Pb-3" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1298.0000000000005" y="602" as="sourcePoint" />
+            <mxPoint x="1299.0000000000005" y="1045" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-17" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 38px;&quot;&gt;itlb&lt;/font&gt;&lt;font face=&quot;STSong&quot; style=&quot;font-size: 38px;&quot;&gt;命中&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;metaArray&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;繁忙&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-16" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="-3" y="-52" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-18" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.701;entryY=0.052;entryDx=0;entryDy=0;exitX=0.115;exitY=0.822;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;exitPerimeter=0;entryPerimeter=0;" parent="1" source="k0up6hZ05IzZb-exf6Pb-2" target="k0up6hZ05IzZb-exf6Pb-5" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="353.00000000000045" y="540" as="sourcePoint" />
+            <mxPoint x="-59.999999999999545" y="1049" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-19" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 38px;&quot;&gt;itlb&lt;/font&gt;&lt;font face=&quot;STSong&quot; style=&quot;font-size: 38px;&quot;&gt;命中&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;WayLookup&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;入队&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;S2&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;繁忙&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-18" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="-11" y="-27" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-20" value="" style="endArrow=none;html=1;rounded=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;endSize=14;strokeWidth=4;curved=1;edgeStyle=orthogonalEdgeStyle;startFill=1;startArrow=classic;" parent="1" source="k0up6hZ05IzZb-exf6Pb-2" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="269.9970588235302" y="497.7988235294117" as="sourcePoint" />
+            <mxPoint x="-489.99999999999955" y="1030" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-21" value="&lt;br&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;S2&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;空闲&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="k0up6hZ05IzZb-exf6Pb-20" vertex="1" connectable="0">
+          <mxGeometry x="-0.1187" y="3" relative="1" as="geometry">
+            <mxPoint x="-33" y="136" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-22" value="" style="endArrow=classic;html=1;rounded=0;curved=1;exitX=0.166;exitY=0.12;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.272;entryY=0.957;entryDx=0;entryDy=0;entryPerimeter=0;strokeWidth=4;endSize=14;" parent="1" source="k0up6hZ05IzZb-exf6Pb-4" target="k0up6hZ05IzZb-exf6Pb-2" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="420.00000000000045" y="970" as="sourcePoint" />
+            <mxPoint x="420.00000000000045" y="680" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="290.00000000000045" y="830" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-23" value="&lt;span style=&quot;font-size: 38px; font-family: &amp;quot;MS Mincho&amp;quot;, &amp;quot;ＭＳ 明朝&amp;quot;; background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;WayLookup&lt;/span&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px; background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;入队&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;或软件预取&lt;/span&gt;&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;S2&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;空闲&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="260.0040861289631" y="909.9968931373173" as="geometry" />
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-24" value="" style="endArrow=classic;html=1;rounded=0;curved=1;exitX=0.805;exitY=0.105;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.183;entryY=0.114;entryDx=0;entryDy=0;entryPerimeter=0;endSize=14;strokeWidth=4;" parent="1" source="k0up6hZ05IzZb-exf6Pb-2" target="k0up6hZ05IzZb-exf6Pb-2" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="721.5000000000005" y="360" as="sourcePoint" />
+            <mxPoint x="401.50000000000045" y="360" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="761.5000000000005" y="220" />
+              <mxPoint x="561.5000000000005" y="80" />
+              <mxPoint x="361.50000000000045" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="k0up6hZ05IzZb-exf6Pb-25" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 38px;&quot;&gt;itlb&lt;/font&gt;&lt;font face=&quot;STSong&quot; style=&quot;font-size: 38px;&quot;&gt;命中&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;metaArray&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;空闲&lt;/span&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;WayLookup&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;入队&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;S2&lt;/span&gt;&lt;/font&gt;&lt;font face=&quot;STSong&quot;&gt;&lt;span style=&quot;font-size: 38px;&quot;&gt;空闲&lt;/span&gt;&lt;/font&gt;&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="550.0040861289631" y="169.99689313731722" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
