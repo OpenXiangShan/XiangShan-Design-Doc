@@ -185,7 +185,8 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
     - `gpf_entry.valid` 置为 `false.B`
 4. MissUnit 中所有 MSHR
     - 若 MSHR 尚未向总线发出请求，直接置无效（`valid === false.B`）
-    - 若 MSHR 已经向总线发出请求，记录待冲刷（`flush === true.B` 或 `fencei === true.B`），等到 d 通道收到 grant 响应时再置无效，同时不把 grant 的数据回复给 MainPipe/IPrefetchPipe
+    - 若 MSHR 已经向总线发出请求，记录待冲刷（`flush === true.B` 或 `fencei === true.B`），等到 d 通道收到 grant 响应时再置无效，同时不把 grant 的数据回复给 MainPipe/PrefetchPipe，也不写入 SRAM
+    - 需要留意，当 d 通道收到 grant 响应的同时收到冲刷（`io.flush === true.B` 或 `io.fencei === true.B`）时，MissUnit 同样不写入 SRAM，但**会**将数据回复给 MainPipe/PrefetchPipe，避免将端口的延时引入响应逻辑中，此时 MainPipe/PrefetchPipe 也同步收到了冲刷请求，因此会将数据丢弃
 
 每种冲刷原因需要执行的冲刷目标：
 

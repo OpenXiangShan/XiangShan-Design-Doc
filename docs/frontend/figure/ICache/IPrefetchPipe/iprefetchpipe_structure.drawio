@@ -1,0 +1,236 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.0.16 Chrome/132.0.6834.196 Electron/34.2.0 Safari/537.36" version="26.0.16">
+  <diagram name="Page-1" id="_rUZ4crFM4W0crcEr0Tm">
+    <mxGraphModel dx="4160" dy="2142" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-52" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;" parent="1" vertex="1">
+          <mxGeometry x="-1037.0984399999998" y="290.4699999999998" width="2269.89" height="1526" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-53" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;FTQ_fetch_req&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-870.2054556586971" y="1053.4666995302114" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-54" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-903.2084399999999" y="1011.4699999999998" as="sourcePoint" />
+            <mxPoint x="-903.2084399999999" y="291.4699999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-55" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;read_req&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="M5B-rK0V3i303MBmZhCQ-54" vertex="1" connectable="0">
+          <mxGeometry x="0.2824" y="4" relative="1" as="geometry">
+            <mxPoint x="-2" y="-1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-56" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;exitX=0.004;exitY=0.471;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-1040" y="1013.0999999999999" as="sourcePoint" />
+            <mxPoint x="-649.2084399999999" y="1012.4699999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-57" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.107;entryY=0.999;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-803.2084399999999" y="1010.4699999999998" as="sourcePoint" />
+            <mxPoint x="-802.88267" y="1815.9399999999996" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-58" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;tlb_req&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="M5B-rK0V3i303MBmZhCQ-57" vertex="1" connectable="0">
+          <mxGeometry x="0.2824" y="4" relative="1" as="geometry">
+            <mxPoint x="-4" y="-149" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-59" value="" style="group;fillColor=#B3B3B3;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-650.2084399999999" y="420.4699999999998" width="74.99843999999985" height="1185" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-60" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;" parent="M5B-rK0V3i303MBmZhCQ-59" vertex="1">
+          <mxGeometry width="70" height="1185" as="geometry" />
+        </mxCell>
+        <mxCell id="hW9r7w9afn_gxpKuI_tI-3" value="" style="triangle;whiteSpace=wrap;html=1;direction=north;strokeWidth=4;fillColor=#808080;" parent="M5B-rK0V3i303MBmZhCQ-59" vertex="1">
+          <mxGeometry x="1" y="1120.53" width="67" height="64.47" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-62" value="" style="group;fillColor=#B3B3B3;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="448.7915600000001" y="420.4699999999998" width="71.9" height="1190" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-63" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;" parent="M5B-rK0V3i303MBmZhCQ-62" vertex="1">
+          <mxGeometry x="-1" width="71" height="1185" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-65" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 64px;&quot;&gt;S0/S1&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-686.2095553162071" y="1742.468928205588" as="geometry">
+            <mxPoint x="80" y="-69" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-68" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;shadow=0;glass=0;autosize=0;resizeWidth=0;imageHeight=24;imageAspect=1;perimeter=rectanglePerimeter;arcSize=21;" parent="1" vertex="1">
+          <mxGeometry x="-273.2084399999999" y="600.4699999999998" width="422" height="195" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-69" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;exitX=0.255;exitY=0.999;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" parent="1" target="M5B-rK0V3i303MBmZhCQ-68" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-425.1484399999995" y="1814.9439999999995" as="sourcePoint" />
+            <mxPoint x="-281.2084399999999" y="738.4699999999998" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="-427" y="698" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-70" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;tlb_resp&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="M5B-rK0V3i303MBmZhCQ-69" vertex="1" connectable="0">
+          <mxGeometry x="0.2824" y="4" relative="1" as="geometry">
+            <mxPoint x="5" y="548" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-71" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot;&gt;&lt;span style=&quot;font-size: 48px;&quot;&gt;paddr&lt;/span&gt;&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-574.208238394029" y="850.4731161659984" as="geometry">
+            <mxPoint x="149" y="-2" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-72" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;shadow=0;glass=0;autosize=0;resizeWidth=0;imageHeight=24;imageAspect=1;perimeter=rectanglePerimeter;arcSize=21;" parent="1" vertex="1">
+          <mxGeometry x="-273.2084399999999" y="1110.4699999999998" width="422" height="195" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-73" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;shadow=0;glass=0;autosize=0;resizeWidth=0;imageHeight=24;imageAspect=1;perimeter=rectanglePerimeter;arcSize=21;" parent="1" vertex="1">
+          <mxGeometry x="733.7915600000001" y="600.4699999999998" width="422" height="195" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-74" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeWidth=4;shadow=0;glass=0;autosize=0;resizeWidth=0;imageHeight=24;imageAspect=1;perimeter=rectanglePerimeter;arcSize=21;" parent="1" vertex="1">
+          <mxGeometry x="733.7915600000001" y="1110.4699999999998" width="422" height="195" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-75" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=-0.005;entryY=0.501;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" target="M5B-rK0V3i303MBmZhCQ-72" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-425.2084399999999" y="1207.8299999999997" as="sourcePoint" />
+            <mxPoint x="-277.2084399999999" y="1208.0361281337046" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-76" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 62px;&quot;&gt;MetaMatch&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-64.21334090684581" y="698.9706752208808" as="geometry">
+            <mxPoint x="1" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-77" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 62px;&quot;&gt;Generate&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 62px;&quot;&gt;EnqueueReq&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-64.21334090684581" y="1207.9706752208808" as="geometry">
+            <mxPoint x="1" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-78" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=-0.003;entryY=0.665;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="M5B-rK0V3i303MBmZhCQ-72" target="M5B-rK0V3i303MBmZhCQ-63" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-52" y="1209.1" as="sourcePoint" />
+            <mxPoint x="338.7915600000001" y="1208.4699999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-79" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="M5B-rK0V3i303MBmZhCQ-68" target="M5B-rK0V3i303MBmZhCQ-72" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-64.20843999999988" y="820.4699999999998" as="sourcePoint" />
+            <mxPoint x="-63.88266999999996" y="1625.9399999999996" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-80" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;way&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="M5B-rK0V3i303MBmZhCQ-79" vertex="1" connectable="0">
+          <mxGeometry x="0.2824" y="4" relative="1" as="geometry">
+            <mxPoint x="-5" y="-48" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-81" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.414;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;endSize=28;jumpStyle=arc;jumpSize=11;" parent="1" source="M5B-rK0V3i303MBmZhCQ-72" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-64.37844000000041" y="1305.4699999999998" as="sourcePoint" />
+            <mxPoint x="-63.20843999999943" y="1816.4699999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-82" value="" style="endArrow=classic;html=1;rounded=0;jumpStyle=arc;jumpSize=22;endFill=1;strokeWidth=4;endSize=28;curved=0;entryX=-0.001;entryY=0.902;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" target="M5B-rK0V3i303MBmZhCQ-63" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-424.2084399999999" y="1489.4699999999998" as="sourcePoint" />
+            <mxPoint x="444.50756" y="1489.34" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-83" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;enq_req&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="-62.21739256447927" y="1638.474291825768" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-85" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=-0.001;entryY=0.406;entryDx=0;entryDy=0;entryPerimeter=0;curved=0;" parent="1" target="M5B-rK0V3i303MBmZhCQ-63" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="322.7915600000001" y="290.4699999999998" as="sourcePoint" />
+            <mxPoint x="448.7965599999998" y="901.2499999999998" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="322.7915600000001" y="900.9999999999998" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-86" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;pmp_resp&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="338.7915600000001" y="610.4699999999993" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-87" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.781;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;jumpStyle=arc;jumpSize=23;" parent="1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="945.0815600000001" y="1818.4699999999998" as="sourcePoint" />
+            <mxPoint x="57.37355999999954" y="1305.4700000000003" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="944.7915600000001" y="1700.4699999999998" />
+              <mxPoint x="57.79156000000012" y="1700.4699999999998" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-88" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 64px;&quot;&gt;S1/S2&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="296.7904446837929" y="1727.468928205588" as="geometry">
+            <mxPoint x="80" y="-69" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-89" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;fetch_resp&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="944.7915600000001" y="1746.4699999999993" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-90" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" parent="1" target="M5B-rK0V3i303MBmZhCQ-74" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="944.7915600000001" y="1700.4699999999998" as="sourcePoint" />
+            <mxPoint x="944.7915600000001" y="1310.4699999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-91" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" parent="1" source="M5B-rK0V3i303MBmZhCQ-74" target="M5B-rK0V3i303MBmZhCQ-73" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1018.7915600000001" y="1110.4699999999998" as="sourcePoint" />
+            <mxPoint x="1018.7915600000001" y="715.4699999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-92" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.854;entryY=0.001;entryDx=0;entryDy=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryPerimeter=0;" parent="1" source="M5B-rK0V3i303MBmZhCQ-73" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="1018.7915600000001" y="595.4699999999998" as="sourcePoint" />
+            <mxPoint x="944.7935000000002" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-93" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;s2_mshr_hit_r&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="944.7915600000001" y="950.4699999999993" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-94" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;prefetch_req&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="944.7915600000001" y="437.46999999999935" as="geometry" />
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-95" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0;entryY=0.25;entryDx=0;entryDy=0;exitX=1.008;exitY=0.228;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" source="M5B-rK0V3i303MBmZhCQ-63" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="409.7915600000001" y="690.4699999999998" as="sourcePoint" />
+            <mxPoint x="733.7915600000001" y="691.6999999999998" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-96" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 62px;&quot;&gt;Prefetch&lt;/font&gt;&lt;div&gt;&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 62px;&quot;&gt;Handle&lt;/font&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="943.7866590931542" y="695.9706752208808" as="geometry">
+            <mxPoint x="1" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="M5B-rK0V3i303MBmZhCQ-97" value="&lt;font face=&quot;MS Mincho, ＭＳ 明朝&quot; style=&quot;font-size: 62px;&quot;&gt;MSHRMatch&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" parent="1" vertex="1" connectable="0">
+          <mxGeometry x="943.7866590931542" y="1207.9706752208808" as="geometry">
+            <mxPoint x="1" y="-7" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="hW9r7w9afn_gxpKuI_tI-4" value="" style="triangle;whiteSpace=wrap;html=1;direction=north;strokeWidth=4;fillColor=#808080;" parent="1" vertex="1">
+          <mxGeometry x="449.7915600000001" y="1539.9999999999998" width="67" height="64.47" as="geometry" />
+        </mxCell>
+        <mxCell id="vfaJZWUncnLMD7Btc4ou-1" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;entryX=0.269;entryY=-0.002;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;sourcePerimeterSpacing=0;entryPerimeter=0;" edge="1" parent="1" target="M5B-rK0V3i303MBmZhCQ-52">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-427" y="695.97" as="sourcePoint" />
+            <mxPoint x="-427" y="380.97" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vfaJZWUncnLMD7Btc4ou-3" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;pmp_req&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" vertex="1" connectable="0" parent="1">
+          <mxGeometry x="-424.9984399999999" y="389.9999999999993" as="geometry" />
+        </mxCell>
+        <mxCell id="vfaJZWUncnLMD7Btc4ou-5" value="" style="endArrow=classic;html=1;rounded=0;strokeWidth=4;endFill=1;startArrow=none;startFill=0;endSize=28;targetPerimeterSpacing=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="-62" y="290" as="sourcePoint" />
+            <mxPoint x="-62" y="601" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vfaJZWUncnLMD7Btc4ou-6" value="&lt;font face=&quot;MS Mincho,ＭＳ 明朝&quot; style=&quot;font-size: 48px;&quot;&gt;way&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=default;" vertex="1" connectable="0" parent="vfaJZWUncnLMD7Btc4ou-5">
+          <mxGeometry x="0.2824" y="4" relative="1" as="geometry">
+            <mxPoint x="-5" y="-48" as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
