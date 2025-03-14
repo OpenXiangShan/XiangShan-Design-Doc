@@ -2,8 +2,7 @@
 
 - 版本：V2R2
 - 状态：OK
-- 日期：2025/02/24
-- commit：[fdbc42a4e4f502385c1ad2f4dea697e3857cd2b7](https://github.com/OpenXiangShan/CoupledL2/tree/fdbc42a4e4f502385c1ad2f4dea697e3857cd2b7)
+- 日期：2025/03/14
 
 ## 术语说明
 
@@ -92,8 +91,17 @@ L2 Cache 支持可配置的 Poison/DataCheck：
 
 1. 若 L2 Cache 检测到 tag ECC 错误或者对应 meta 中 tagErr = 1，则将 respErr 置为 NDERR，将 poison 置为全 0
 2. 若 L2 Cache 检测到 data ECC 错误或者对应 meta 中 dataErr = 1，则将 respErr 置为 DERR，并将 poison 域置为全 1
-3. 若 L2 Cache 未检测到任何错误，则将 respErr 置为 OK，将 poison 置为全 0
-4. dataCheck 域填充对 data 进行奇校验的校验码
+3. 若 L2 Cache 检测到 data ECC 错误或者对应 meta 中 tagErr = 1 且 dataErr = 1， 则将 respErr 置为 NDERR，将 poison 置为全 1
+4. 若 L2 Cache 未检测到任何错误，则将 respErr 置为 OK，将 poison 置为全 0
+5. dataCheck 域填充对 data 进行奇校验的校验码
+
+* 在当前版本中，L2 支持的 Write/Snoop transactions 在相关的 data packet 传输中均不允许 respErr 为 NDERR （故 TXDAT 中 respErr 实际只会为 DERR 或 OK）
+
+一致性状态处理（RN 接收到包含 NDERR 请求）：
+
+1. 对于分配事务，L2 将正常处理流水线，但是不回将包含 NDERR 请求的相关数据写回 Directory 或者 DataStorage，缓存状态不变 （具体相关事务类型为 ReadClean, ReadNotSharedDirty, ReadShared, ReadUnique, CleanUnique, MakeUnique）
+2. 对于释放事务，L2 正常处理 （具体相关事务类型为 WriteBack, WriteEvictFull, Evict, WriteEvictOrEvict）
+3. 对于其他事务，L2 保证相应数据缓存状态不升级 （当前版本下，由 1 可保证）
 
 
 ## Uncached 访存请求错误处理
@@ -111,6 +119,6 @@ CHI to TL（RXDAT）
 
 TL to CHI（TXDAT）
 
-1. 当 corrupt = 1 时，若 opcode = Release，则置 respErr 为 NDERR，否则置 respErr 为 DERR
+1. 当 corrupt = 1 时，若 opcode = Get，则置 respErr 为 DERR，否则置 respErr 为 NDERR
 2. 当 corrupt = 0 时，则置 respErr 为 OK
 3. dataCheck 域填充对 data 进行奇校验的校验码
