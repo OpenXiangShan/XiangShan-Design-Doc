@@ -101,7 +101,8 @@ L2 Cache 支持可配置的 Poison/DataCheck：
 
 1. 对于分配事务，L2 将正常处理流水线，但是不回将包含 NDERR 请求的相关数据写回 Directory 或者 DataStorage，缓存状态不变 （具体相关事务类型为 ReadClean, ReadNotSharedDirty, ReadShared, ReadUnique, CleanUnique, MakeUnique）
 2. 对于释放事务，L2 正常处理 （具体相关事务类型为 WriteBack, WriteEvictFull, Evict, WriteEvictOrEvict）
-3. 对于其他事务，L2 保证相应数据缓存状态不升级 （当前版本下，由 1 可保证）
+3. 对于 Snoop，L2 probe L1（ToN），回复 SnpResp_I 以及 NDERR，一律不 forward（不回复 CompData），暂不将 L2 对应缓存行置为 Invalid
+4. 对于其他事务，L2 保证相应数据缓存状态不升级 （当前版本下，由 1 可保证）
 
 
 ## Uncached 访存请求错误处理
