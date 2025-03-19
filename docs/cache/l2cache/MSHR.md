@@ -472,9 +472,12 @@ CMO 缓存状态更新任务（```mp_cmometaw```）由状态机项 ```s_cmometaw
 | SnpStashUnique        | -         | -       | -       | -       | -                              |
 | SnpStashShared        | -         | -       | -       | -       | -                              |
 | SnpOnceFwd            | UC        | UC      | I       | X       | SnpRespData_I_PD_Fwded_I       |
-| SnpCleanFwd           | UC        | UC      | I       | X       | SnpRespData_I_PD_Fwded_SC      |
-| SnpSharedFwd          | UC        | UC      | I       | X       | SnpRespData_I_PD_Fwded_SC      |
-| SnpNotSharedDirtyFwd  | UC        | UC      | I       | X       | SnpRespData_I_PD_Fwded_SC      |
+| SnpCleanFwd           | UC        | UC      | I       | 0       | SnpResp_I_PD_Fwded_SC          |
+|                       |           |         |         | 1       | SnpRespData_I_PD_Fwded_SC      |
+| SnpSharedFwd          | UC        | UC      | I       | 0       | SnpResp_I_PD_Fwded_SC          |
+|                       |           |         |         | 1       | SnpRespData_I_PD_Fwded_SC      |
+| SnpNotSharedDirtyFwd  | UC        | UC      | I       | 0       | SnpResp_I_PD_Fwded_SC          |
+|                       |           |         |         | 1       | SnpRespData_I_PD_Fwded_SC      |
 | SnpUniqueFwd          | UC        | UC      | I       | X       | SnpResp_I_Fwded_UD_PD          |
 | SnpQuery              | -         | -       | -       | -       | -                              |
 
@@ -488,44 +491,44 @@ CMO 缓存状态更新任务（```mp_cmometaw```）由状态机项 ```s_cmometaw
 | SnpNotSharedDirty     | -           | -       | -       | -       | -                              |
 | SnpCleanShared        | -           | -       | -       | -       | -                              |
 | SnpCleanInvalid       | UD          | UD      | I       | 0       | SnpRespData_I_PD               |
-|                       | UD, UC      | UC      | I       | 0       | SnpResp_I                      |
-|                       | UD, UC, SC  | SC      | I       | 0       | SnpResp_I                      |
+|                       |             | UC      | I       | 0       | SnpResp_I                      |
+|                       |             | SC      | I       | 0       | SnpResp_I                      |
 | SnpMakeInvalid        | UD          | UD      | I       | 0       | SnpResp_I                      |
-|                       | UD, UC      | UC      | I       | 0       | SnpResp_I                      |
-|                       | UD, UC, SC  | SC      | I       | 0       | SnpResp_I                      |
+|                       |             | UC      | I       | 0       | SnpResp_I                      |
+|                       |             | SC      | I       | 0       | SnpResp_I                      |
 | SnpUnique             | UD          | UD      | I       | X       | SnpRespData_I_PD               |
-|                       | UD, UC      | UC      | I       | X       | SnpResp_I                      |
-|                       | UD, UC, SC  | SC      | I       | 0       | SnpResp_I                      |
+|                       |             | UC      | I       | X       | SnpResp_I                      |
+|                       |             | SC      | I       | 0       | SnpResp_I                      |
 |                       |             |         |         | 1       | SnpRespData_I                  |
 | SnpUniqueStash        | UD          | UD      | I       | 0       | SnpRespData_I_PD               |
-|                       | UD, UC      | UC      | I       | 0       | SnpResp_I                      |
-|                       | UD, UC, SC  | SC      | I       | 0       | SnpResp_I                      |
+|                       |             | UC      | I       | 0       | SnpResp_I                      |
+|                       |             | SC      | I       | 0       | SnpResp_I                      |
 | SnpMakeInvalidStash   | UD          | UD      | I       | 0       | SnpResp_I                      |
-|                       | UD, UC      | UC      | I       | 0       | SnpResp_I                      |
-|                       | UD, UC, SC  | SC      | I       | 0       | SnpResp_I                      |
+|                       |             | UC      | I       | 0       | SnpResp_I                      |
+|                       |             | SC      | I       | 0       | SnpResp_I                      |
 | SnpStashUnique        | -           | -       | -       | -       | -                              |
 | SnpStashShared        | -           | -       | -       | -       | -                              |
 | SnpOnceFwd            | UD          | UD      | SC      | 0       | SnpRespData_SC_PD_Fwded_I      |
-|                       | UD, UC      | UC      | UC      | 0       | SnpResp_UC_Fwded_I             |
-|                       | UD, UC, SC  | SC      | SC      | 0       | SnpResp_SC_Fwded_I             |
+|                       |             | UC      | UC      | 0       | SnpResp_UC_Fwded_I             |
+|                       |             | SC      | SC      | 0       | SnpResp_SC_Fwded_I             |
 | SnpCleanFwd           | UD          | UD      | SC      | X       | SnpRespData_SC_PD_Fwded_SC     |
-|                       | UD, UC      | UC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
+|                       |             | UC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
 |                       |             |         |         | 1       | SnpRespData_SC_Fwded_SC        |
-|                       | UD, UC, SC  | SC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
+|                       |             | SC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
 |                       |             |         |         | 1       | SnpRespData_SC_Fwded_SC        |
 | SnpSharedFwd          | UD          | UD      | SC      | X       | SnpRespData_SC_PD_Fwded_SC     |
-|                       | UD, UC      | UC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
+|                       |             | UC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
 |                       |             |         |         | 1       | SnpRespData_SC_Fwded_SC        |
-|                       | UD, UC, SC  | SC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
+|                       |             | SC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
 |                       |             |         |         | 1       | SnpRespData_SC_Fwded_SC        |
 | SnpNotSharedDirtyFwd  | UD          | UD      | SC      | X       | SnpRespData_SC_PD_Fwded_SC     |
-|                       | UD, UC      | UC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
+|                       |             | UC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
 |                       |             |         |         | 1       | SnpRespData_SC_Fwded_SC        |
-|                       | UD, UC, SC  | SC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
+|                       |             | SC      | SC      | 0       | SnpResp_SC_Fwded_SC            |
 |                       |             |         |         | 1       | SnpRespData_SC_Fwded_SC        |
 | SnpUniqueFwd          | UD          | UD      | I       | 0       | SnpResp_I_Fwded_UD_PD          |
-|                       | UD, UC      | UC      | I       | 0       | SnpResp_I_Fwded_UC             |
-|                       | UD, UC, SC  | SC      | I       | 0       | SnpResp_I_Fwded_UC             |
+|                       |             | UC      | I       | 0       | SnpResp_I_Fwded_UC             |
+|                       |             | SC      | I       | 0       | SnpResp_I_Fwded_UC             |
 | SnpQuery              | -           | -       | -       | -       | -                              |
 
 
