@@ -29,7 +29,7 @@ BypassNetWork 位于 DataPath，Exu 流水级之间，主要用于为功能单�
 
 首先对于可以前递/旁路/两级旁路的源操作数：
 
-    根据 Datapath 输入的 ExuSource 信息，由 UintExtract 提取出独热码，选取可能的来自功能单元的旁路数据，具体现有的唤醒配置见下表。
+根据 Datapath 输入的 ExuSource 信息，由 UintExtract 提取出独热码，选取可能的来自功能单元的旁路数据，具体现有的唤醒配置见下表。
 
 Table: 现有唤醒配置1
 
