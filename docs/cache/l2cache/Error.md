@@ -120,6 +120,6 @@ CHI to TL（RXDAT）
 
 TL to CHI（TXDAT）
 
-1. 当 corrupt = 1 时，若 opcode = Get，则置 respErr 为 DERR，否则置 respErr 为 NDERR
+1. 当 corrupt = 1 时，则置 respErr 为 DERR
 2. 当 corrupt = 0 时，则置 respErr 为 OK
 3. dataCheck 域填充对 data 进行奇校验的校验码
