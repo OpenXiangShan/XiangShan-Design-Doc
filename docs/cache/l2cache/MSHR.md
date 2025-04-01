@@ -471,14 +471,14 @@ CMO 缓存状态更新任务（```mp_cmometaw```）由状态机项 ```s_cmometaw
 | SnpMakeInvalidStash   | -         | -       | -       | -       | -                              |
 | SnpStashUnique        | -         | -       | -       | -       | -                              |
 | SnpStashShared        | -         | -       | -       | -       | -                              |
-| SnpOnceFwd            | UC        | UC      | I       | X       | SnpRespData_I_PD_Fwded_I       |
-| SnpCleanFwd           | UC        | UC      | I       | 0       | SnpResp_I_PD_Fwded_SC          |
-|                       |           |         |         | 1       | SnpRespData_I_PD_Fwded_SC      |
-| SnpSharedFwd          | UC        | UC      | I       | 0       | SnpResp_I_PD_Fwded_SC          |
-|                       |           |         |         | 1       | SnpRespData_I_PD_Fwded_SC      |
-| SnpNotSharedDirtyFwd  | UC        | UC      | I       | 0       | SnpResp_I_PD_Fwded_SC          |
-|                       |           |         |         | 1       | SnpRespData_I_PD_Fwded_SC      |
-| SnpUniqueFwd          | UC        | UC      | I       | X       | SnpResp_I_Fwded_UD_PD          |
+| SnpOnceFwd            | UC        | UC      | I       | X       | SnpRespData_I_Fwded_I          |
+| SnpCleanFwd           | UC        | UC      | I       | 0       | SnpResp_I_Fwded_SC             |
+|                       |           |         |         | 1       | SnpRespData_I_Fwded_SC         |
+| SnpSharedFwd          | UC        | UC      | I       | 0       | SnpResp_I_Fwded_SC             |
+|                       |           |         |         | 1       | SnpRespData_I_Fwded_SC         |
+| SnpNotSharedDirtyFwd  | UC        | UC      | I       | 0       | SnpResp_I_Fwded_SC             |
+|                       |           |         |         | 1       | SnpRespData_I_Fwded_SC         |
+| SnpUniqueFwd          | UC        | UC      | I       | X       | SnpResp_I_Fwded_UC             |
 | SnpQuery              | -         | -       | -       | -       | -                              |
 
 #### 特性3：Snoop 与 WriteCleanFull 的嵌套
