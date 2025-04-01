@@ -478,7 +478,7 @@ CMO 缓存状态更新任务（```mp_cmometaw```）由状态机项 ```s_cmometaw
 |                       |           |         |         | 1       | SnpRespData_I_Fwded_SC         |
 | SnpNotSharedDirtyFwd  | UC        | UC      | I       | 0       | SnpResp_I_Fwded_SC             |
 |                       |           |         |         | 1       | SnpRespData_I_Fwded_SC         |
-| SnpUniqueFwd          | UC        | UC      | I       | X       | SnpResp_I_Fwded_UC             |
+| SnpUniqueFwd          | UC        | UC      | I       | 0       | SnpResp_I_Fwded_UC             |
 | SnpQuery              | -         | -       | -       | -       | -                              |
 
 #### 特性3：Snoop 与 WriteCleanFull 的嵌套
