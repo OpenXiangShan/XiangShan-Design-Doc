@@ -35,9 +35,9 @@
 VSegmentUnit 指令自己单独执行非对齐访存，无需借助 MisalignBuffer。
 由 VSegmentUnit 自身进行非对齐指令的拆分与数据的合并。
 
-## 整体框图
+## 状态转换图
 
-状态转换图与转换细节待补充
+![alt text](./figure/VSegmentUnit-FSM.svg)
 
 **状态介绍**
 

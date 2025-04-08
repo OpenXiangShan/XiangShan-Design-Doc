@@ -50,7 +50,7 @@ VLSplitPipeline 分为两个流水级：
   
 ### 特性 2：VLSplitBuffer 根据 VLSplitPipeline 产生的二次译码信息进行拆分
 
-VLSplitBuffer 是一个队列，接受 VLSplitPipeline 发来的相关信息，并为每一个 Uop 分配一个表项用来缓存需要拆分的 Vector Load Uop。
+VLSplitBuffer 是只有一项的 Buffer，接受 VLSplitPipeline 发来的相关信息，缓存需要拆分的 Vector Load Uop。
 
 VLSplitBuffer 会根据 Uop 的信息将一个 Uop 拆分成多个可以发送到标量 Load PipeLine 流水线上的信息，并发送到标量 Load PipeLine 流水线进行实际访存。
 
@@ -97,9 +97,7 @@ VLSplitBuffer 接受 VLSplitPipeline 发来的表项申请与相关信息，当 
 
 ## 整体框图
 
-框图待补充
-<!-- 请使用 svg -->
-
+单一模块无框图。
 
 ## 主要端口
 

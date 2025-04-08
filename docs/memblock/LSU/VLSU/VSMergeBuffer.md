@@ -22,7 +22,7 @@ VSMergeBuffer 会将对应的表现置为 needRSReplay，从而最终通知 Issu
 
 
 ## 整体框图
-单一模块无框图
+单一模块无框图。
 
 ## 主要端口
 

@@ -53,7 +53,8 @@ Store 因为需要写入 Sbuffer，在跨页的情况下，会产生两个物理
 
 ## 整体框图
 
-状态转换图与转换细节待补充
+![alt text](./figure/StoreMisalign-FSM.svg)
+
   
 **状态介绍**
 

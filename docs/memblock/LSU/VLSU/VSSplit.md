@@ -50,7 +50,7 @@ Vector Store 指令的拆分流水线。接受 Vector Store 发射队列发射�
 
 ### 特性 2：VSSplitBuffer 根据 VSSplitPipeline 产生的二次译码信息进行拆分
 
-VSplitBuffer 是一个队列，接受 VSSplitPipeline 发来的相关信息，并为每一个 Uop 分配一个表项用来缓存需要拆分的 Vector Store Uop。
+VSplitBuffer 是只有一项的 Buffer，接受 VSSplitPipeline 发来的相关信息，缓存需要拆分的 Vector Store Uop。
 
 VSSplitBuffer 会根据 Uop 的信息将一个 Uop 拆分成多个可以发送到标量 Store PipeLine 流水线上的信息，并发送到标量 Store PipeLine 流水线进行实际访存。
 
@@ -99,7 +99,7 @@ VSSplitBuffer 接受 VSSplitPipeline 发来的表项申请与相关信息，当 
 
 ## 整体框图
 
-框图待补充
+单一模块无框图。
 
 ## 主要端口
 
