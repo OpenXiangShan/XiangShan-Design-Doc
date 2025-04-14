@@ -21,7 +21,7 @@ Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码�
 
 ## 重命名输入
 
-- 来自译码阶段输入
+- 来自译码阶段输入（途中FusionDecoder会对DecodeStage吐出的指令进行宏操作融合的修改，会根据相邻指令的组合种类改变valid，uop等信息，而且会根据相邻指令的ftqptr与ftqoffset的不同组合修改该融合指令的提交类型CommitType）
 - 接受 RAT 的推测重名数据返回
 - 指令融合信息，以及根据指令融合情况修改译码输入指令流
 - ssit，waittable 信息
@@ -263,6 +263,8 @@ StdFreeList 在 Rename 模块中被例化为 fpFreeList 和 vecFreeList。正如
 但是，由于 freeList 不可能无限长，我们设计出了环形队列。环形队列可以认为是将有限长的普通队列首尾相接。此时，tailPtr 和 headPtr 将不能仅仅只是指向 freeList 中某个元素的指针了：按原有设计，当 tailPtr 与 headPtr 相等时，环形队列可能是空的，也可能是满的。
 
 为了解决这一问题，我们为 tailPtr 和 headPtr 新增了 flag 字段，该字段初始值为 false，且在每次由 freeList[size - 1] 变为 freeList[0] 时，将 flag 取反。这样，在 value 相同的情况下，若 flag 相同，则说明环形队列为空；若 flag 不同，则说明环形队列为满。
+
+canAllocate 的更新时序：当拍会根据 headPtr， tailPtr， freeReq 以及 allocateReq 计算 freeRegCnt，然后将其打一拍得到 freeRegCntReg（它就是实际上的 size）。 freeRegCntReg 大于译码宽度时 canAllocate 置高，并当拍传出。
 
 ![环形队列](./figure/Queue-Circle.svg)
 
