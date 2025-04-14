@@ -152,7 +152,7 @@ vtypeArch更新存在2种情况：
       - noSpecExec：是否是可以乱序执行，即不需要等待前面的指令提交完成再执行
       - blockBackward：是否阻塞后面的指令，即需要等待当前指令提交完成后续指令才能进入rob
       - flushPipe：是否需要清空流水线，即当前指令提交完成后需要清空流水线
-      - canRobCompress：指令是否支持rob压缩
+      - canRobCompress：指令是否支持rob压缩(对于不会触发异常的指令，其不处于FTQ的边界时，我们认为它是可以进行Rob压缩的)
       - uopSplitType：指令拆分类型。标量指令拆分类型均为UopSplitType.SCA_SIM无需拆分，向量指令和AMO_CAS指令需要拆分；向量指如果令仅需要拆分出一条uop且无需对指令控制信号进行修改，则拆分类型为UopSplitType.dummy从而进入向量复杂译码器进行向量指令异常检查。
 
    - **VPUCtrlSignals**  
