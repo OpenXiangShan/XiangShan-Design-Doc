@@ -12,8 +12,6 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, \ref{fig:LSU-StoreUnit-Pip
 
     * 计算VA地址
 
-    * 地址非对齐检查更新到uop.cf.exceptionVec(storeAddrMisaligned)
-
     * 发出DTLB读请求到tlb
 
     * 更新指令的mask信息到s0_mask_out发送到StoreQueue
@@ -28,9 +26,13 @@ Store指令地址流水线分为S0/S1/S2/S3/S4五级, \ref{fig:LSU-StoreUnit-Pip
 
     * 如果DTLB hit，将store issue信息发送到后端
 
+    * 更新store指令相关异常到uop.exceptionVec
+
 * stage 2:
 
     * mmio/PMP检查并更新storeQueue
+
+    * 更新store指令相关异常到uop.exceptionVec
 
     * 更新DTLB结果通过feedback_slow更新到后端
 
@@ -48,7 +50,7 @@ StoreUnit处理非对齐Store指令流程和标量类似，特别的:
 
 * stage 0:
 
-    * 接受vsSplit的执行请求，优先级高于标量请求,并且不需要计算虚拟地址
+    * 接收vsSplit的执行请求，优先级高于标量请求,并且不需要计算虚拟地址
 
 * stage 1:
 
@@ -60,7 +62,7 @@ StoreUnit处理非对齐Store指令流程和标量类似，特别的:
 
 * stage 4:
 
-    * 向量store发起Writeback，通过vecstout发送给后端
+    * 向量store发起Writeback，通过vecstout发送给vsMergeBuffer，vsMergeBuffer收集到uop的所有flow后，以uop为粒度发给后端
 
 ### 特性 2: StoreUnit支持非对齐Store指令
 
@@ -68,21 +70,25 @@ StoreUnit处理非对齐Store指令流程和标量类似，特别的:
 
 * stage 0:
 
-    * 接受来自StoreMisalignBuffer的勤求，优先级高于向量和标量请求,并且不需要计算虚拟地址
+    * 接收来自StoreMisalignBuffer的请求，优先级高于向量和标量请求,并且不需要计算虚拟地址
 
-* stage 2:
+* stage 1:
 
-    * 不需要向后端发送feedback响应,
+    * 如果不是来自于StoreMisalignBuffer的请求并且跨越16字节边界的非对齐请求，那么需要进入StoreMisalignBuffer处理
 
-    * 如果不是来自于StoreMisalignBuffer的请求并且没有跨越16字节边界的非对齐请求，那么需要进入StoreMisalignBuffer处理
+        * 通过io_misalign_enq接口，向StoreMisalignBuffer发送入队请求
 
-        * 通过io_misalign_buf接口，向StoreMisalignBuffer发送入队请求
+        * 在stage 2得到非对齐请求入队请求是否被nack，如果入队请求被nack，需要向后端发送feedback响应
 
         * 不进入stage 3
 
-    * 如果是来自与StoreMisalignBuffer的请求并且没有跨越16字节边界请求，则需要向StoreMisliagnBuffer发送重发或者写回响应
+* stage 2:
 
-        * 通过io_misalign_sout接口，向StoreMisalignBuffer发送响应
+    * 如果是来自于StoreMisalignBuffer的请求并且跨越16字节边界请求，则需要向StoreMisliagnBuffer发送重发或者写回响应
+
+        * 不需要向后端发送feedback响应
+
+        * 通过io_misalign_stout接口，向StoreMisalignBuffer发送响应
 
         * 如果出现TLB miss，则需要重发，否则写回
 
