@@ -93,7 +93,7 @@ Table: debug MMIO 地址空间 {#tbl:debug-mmio}
 * match 支持相等，大于等于，小于三种类型（向量访存当前只支持相等类型匹配）。
 * 仅支持 address 匹配，不支持 data 匹配。
 * 仅支持 timing = before。
-* 支持一对 trigger 的 chain。
+* 仅支持一对 trigger 的 chain。
 * 为了防止 trigger 的二次产生 breakpoint 的异常，支持通过 xSTATUS.xIE 控制。
 * 支持H扩展的软硬件断点，watchpoint 调试手段。
 * 支持原子指令的访存 trigger。
@@ -109,8 +109,8 @@ Table: 访存粒度和trigger匹配粒度
 | 原子访存指令（amo）             | 指令（元素）             | 检查元素小端地址，支持>=, =, <；在拿到 vaddr 同时检查 load 和 store             |
 | 向量访存指令（unit-stride）     | 向量寄存器宽度（128bit） | 支持该指令访存地址范围内任意地址的检查（以 8bit 为粒度），但仅仅支持 = 匹配 |
 | 向量访存指令（whole）           | 向量寄存器宽度（128bit） | 支持该指令访存地址范围内任意地址的检查（以 8bit 为粒度），但仅仅支持 = 匹配 |
-| 向量访存指令（fof unit-stride） | 向量寄存器宽度（128bit） | 支持该指令访存地址范围内任意地址的检查（以 8bit 为粒度），但仅仅支持 = 匹配 |
-| 向量访存指令（segment）         | field                    | 检查每个 field 小端地址，但仅仅支持 = 匹配                                  |
+| 向量访存指令（fof unit-stride） | 向量寄存器宽度（128bit） | 支持该指令访存地址范围内任意地址的检查（以 8bit 为粒度），但仅仅支持0号元素 = 匹配 |
+| 向量访存指令（segment）         | 元素                    | 检查每个元素小端地址，但仅仅支持 = 匹配                                  |
 | 其他类型的向量访存指令          | 元素                     | 检查每个元素小端地址，支持 >=, =, <                                        |
 
  table: 昆明湖实现的 debug 相关的 csr
@@ -125,6 +125,9 @@ Table: 访存粒度和trigger匹配粒度
 | Dpc               | 0x7B1 | RW   | Debug PC                 | 0x0                 |
 | Dscratch0         | 0x7B2 | RW   | Debug Scratch Register 0 | -                   |
 | Dscratch1         | 0x7B3 | RW   | Debug Scratch Register 1 |                     |
+| mcontext          | 0x7A8 | RW   | Machine Context          | -                   |
+| hcontext          | 0x6A8 | RW   | Hypervisor Context       | -                   |
+| scontext          | 0x5A8 | RW   | Supervisor Context       | -                   |
 
 ### 调试流程举例
 
