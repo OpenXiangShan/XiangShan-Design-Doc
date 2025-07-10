@@ -40,10 +40,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 预览网站
-mkdocs serve
+mkdocs serve -f mkdocs-zh.yml
 
 # 构建网站
-mkdocs build
+mkdocs build -f mkdocs-zh.yml
 ```
 
 ## 许可协议

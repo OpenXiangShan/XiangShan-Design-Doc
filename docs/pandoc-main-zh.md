@@ -29,5 +29,5 @@ break-after-section: true
 
 
 ``` {.include}
-docs/.index.md
+docs/zh/.index.md
 ```

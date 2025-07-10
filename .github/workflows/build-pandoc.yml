@@ -26,9 +26,12 @@ jobs:
         run: |
           git config --global --add safe.directory $(pwd)
           make pdf
+          make pdf TWOSIDE=1
 
       - name: Upload built pdf
         uses: actions/upload-artifact@v4
         with:
           name: xiangshan-design-doc-pdf
-          path: xiangshan-design-doc.pdf
+          path: |
+            xiangshan-design-doc-zh.pdf
+            xiangshan-design-doc-zh-twoside.pdf

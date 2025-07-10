@@ -42,10 +42,10 @@ source .venv/bin/activate
 pip install -r ./utils/requirements.txt
 
 # Preview the website
-mkdocs serve
+mkdocs serve -f mkdocs-zh.yml
 
 # Build the website
-mkdocs build
+mkdocs build -f mkdocs-zh.yml
 ```
 
 ## LICENSE
