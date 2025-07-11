@@ -1,4 +1,4 @@
-name: build via pandoc
+name: build document with pandoc
 
 on:
   push:
@@ -14,26 +14,29 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      matrix:
+        lang: [zh, en]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-tags: true
 
-      - name: build
+      - name: Build PDFs
         env:
           HOME: /root
         run: |
           git config --global --add safe.directory $(pwd)
-          make pdf
-          make pdf TWOSIDE=1
+          make pdf-one LANG=${{ matrix.lang }}
+          make pdf-one LANG=${{ matrix.lang }} TWOSIDE=1
 
-      - name: Upload built pdf
+      - name: Upload built PDFs
         uses: actions/upload-artifact@v4
         with:
-          name: xiangshan-design-doc-pdf
+          name: xiangshan-design-doc-${{ matrix.lang }}
           path: |
-            xiangshan-design-doc-zh.pdf
-            xiangshan-design-doc-zh-twoside.pdf
-            xiangshan-design-doc-en.pdf
-            xiangshan-design-doc-en-twoside.pdf
+            xiangshan-design-doc-${{ matrix.lang }}.pdf
+            xiangshan-design-doc-twoside-${{ matrix.lang }}.pdf
