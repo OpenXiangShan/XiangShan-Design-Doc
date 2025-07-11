@@ -2,6 +2,12 @@
 
 香山开源处理器的设计文档
 
+## 翻译
+
+我们正在使用 [Weblate](https://hosted.weblate.org/projects/openxiangshan/design-doc/) 将本项目文档翻译为英文及其他语言。欢迎大家参与翻译工作，帮助我们一起完善文档！
+
+本项目文档的原始语言为中文，英文翻译正在进行中。
+
 ## 构建
 
 我们使用 Pandoc 和 MkDocs 来构建此文档。

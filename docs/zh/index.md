@@ -9,6 +9,8 @@
 
 您可访问香山文档网站 [docs.xiangshan.cc](https://docs.xiangshan.cc/) 获取更多文档。
 
+本文档源语言为中文，托管于 GitHub，采用 Weblate 平台进行协作翻译。欢迎您参与校对、纠错与翻译工作，共同完善文档内容！
+
 ## 声明 {.unnumbered .unlisted}
 
 版权所有 © 2024 - 2025 香山开源处理器团队·北京开源芯片研究院

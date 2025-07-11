@@ -1,8 +1,15 @@
 # XiangShan Design Document
 
 ![build via pandoc](https://github.com/OpenXiangShan/XiangShan-User-Guide/actions/workflows/build-pandoc.yml/badge.svg)
+[![translation status](https://hosted.weblate.org/widget/openxiangshan/-/en/svg-badge.svg)](https://hosted.weblate.org/engage/openxiangshan/)
 
 Documentation for XiangShan Design
+
+## Translation
+
+We are using [Weblate](https://hosted.weblate.org/projects/openxiangshan/design-doc/) to translate this documentation into English and other languages. Your contributions are welcome — come and help us improve it!
+
+The original language of this document is Chinese. An English translation is currently in progress.
 
 ## Build
 
