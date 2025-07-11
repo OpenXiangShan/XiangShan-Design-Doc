@@ -35,3 +35,5 @@ jobs:
           path: |
             xiangshan-design-doc-zh.pdf
             xiangshan-design-doc-zh-twoside.pdf
+            xiangshan-design-doc-en.pdf
+            xiangshan-design-doc-en-twoside.pdf

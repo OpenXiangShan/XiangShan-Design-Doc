@@ -5,7 +5,7 @@
 DOC := xiangshan-design-doc
 
 # Supporting languages
-LANGS := zh
+LANGS := zh en
 
 # Git version information
 VERSION := $(shell git describe --always)
