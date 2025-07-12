@@ -11,6 +11,16 @@ markdown_extensions:
   replace_variables:
       yaml_file: docs/variables-zh.yml
 
+extra:
+  scope: /
+  alternate:
+    - name: 中文
+      link: https://docs.xiangshan.cc/projects/design/zh-cn/latest/
+      lang: zh
+    - name: English
+      link: https://docs.xiangshan.cc/projects/design/en/latest/
+      lang: en
+
 nav:
   - 首页: index.md
   - 前端:
