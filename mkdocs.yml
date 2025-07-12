@@ -1,1 +1,1 @@
-INHERIT: !ENV [MKDOCS_YML_FILE, "mydocs-zh.yml"]
+INHERIT: !ENV [MKDOCS_YML_FILE, "mkdocs-zh.yml"]
