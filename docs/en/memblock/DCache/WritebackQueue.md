@@ -36,7 +36,7 @@ WritebackQueue整体架构如[@fig:DCache-WritebackQueue]所示。
 
 Table: WritebackEntry状态寄存器含义 {#tbl:WritebackEntry-state}
 
-| 状态             | 描述                        |
+| 状态             | Descrption                |
 | -------------- | ------------------------- |
 | s_invalid      | 复位状态，该 WritebackEntry 为空项 |
 | s_release_req  | 正在发送Release或者ProbeAck请求   |

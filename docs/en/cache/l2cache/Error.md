@@ -1,12 +1,12 @@
 # 错误处理
 
-- 版本：V2R2
-- 状态：OK
+- Version: V2R2
+- Status: OK
 - 日期：2025/04/24
 
-## 术语说明
+## Glossary of Terms
 
-| 缩写           | 全称                                       | 描述             |
+| 缩写           | 全称                                       | Descrption     |
 | ------------ | ---------------------------------------- | -------------- |
 | ICache/I$    | Instruction Cache                        | L1 指令缓存        |
 | DCache/D$    | Data Cache                               | L1 数据缓存        |

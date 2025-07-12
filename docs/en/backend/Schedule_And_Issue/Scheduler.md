@@ -1,7 +1,7 @@
 # Scheduler
 
-- 版本：V2R2
-- 状态：OK
+- Version: V2R2
+- Status: OK
 - 日期：2025/01/15
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 

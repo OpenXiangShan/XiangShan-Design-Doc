@@ -2,7 +2,7 @@
 
 ## 子模块列表
 
-| 子模块                                           | 描述           |
+| 子模块                                           | Descrption   |
 | --------------------------------------------- | ------------ |
 | [LoadUnit](LoadUnit.md)                       | Load 指令执行单元  |
 | [StoreUnit](StoreUnit.md)                     | Store 地址执行单元 |

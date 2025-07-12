@@ -1,6 +1,8 @@
 # Preface {.unnumbered .unlisted}
 
-本文档为《香山开源处理器设计文档》，详细介绍了 {{processor_name}} 的微架构设计实现细节。
+This document is _XiangShan Open-Source Processor Design Document_, providing a
+detailed introduction to the microarchitecture design and implementation of
+{{processor_name}} .
 
 You can obtain an latest version of this document from:
 

@@ -1,6 +1,6 @@
 # 昆明湖 BPU 模块文档
 
-## 术语说明
+## Glossary of Terms
 
 表 1.1 术语说明
 

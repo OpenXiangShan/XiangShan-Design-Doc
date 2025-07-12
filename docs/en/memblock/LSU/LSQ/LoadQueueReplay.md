@@ -6,7 +6,7 @@ LoadQueueReplay用于存储需要重发的Load指令，并根据不同的唤醒�
 
 Table: LoadQueueReplay存储信息
 
-| Field              | 描述                                                  |
+| Field              | Descrption                                          |
 | ------------------ | --------------------------------------------------- |
 | allocated          | 是否已经被分配，也代表是否该项是否有效。                                |
 | scheduled          | 是否已经被调度，代表该项已经被选出，已经或即将被发送至LoadUnit进行重发。            |

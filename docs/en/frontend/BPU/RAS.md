@@ -1,14 +1,14 @@
 # BPU 子模块 RAS
 
-## 术语说明
+## Glossary of Terms
 
-| 缩写   | 全称                                         | 描述        |
-| ---- | ------------------------------------------ | --------- |
-| TOSW | Top Of Speculative Queue Write Pointer     | 推测队列写指针   |
-| TOSR | Top Of Speculative Queue Read Pointer      | 推测队列读指针   |
-| NOS  | Next Older Speculative Queue entry Pointer | 推测队列更旧项指针 |
-| ssp  | Speculative Stack Pointer                  | 虚拟推测栈指针   |
-| nsp  | Next Stack Pointer                         | 提交栈指针     |
+| 缩写   | 全称                                         | Descrption |
+| ---- | ------------------------------------------ | ---------- |
+| TOSW | Top Of Speculative Queue Write Pointer     | 推测队列写指针    |
+| TOSR | Top Of Speculative Queue Read Pointer      | 推测队列读指针    |
+| NOS  | Next Older Speculative Queue entry Pointer | 推测队列更旧项指针  |
+| ssp  | Speculative Stack Pointer                  | 虚拟推测栈指针    |
+| nsp  | Next Stack Pointer                         | 提交栈指针      |
 
 ## 功能
 

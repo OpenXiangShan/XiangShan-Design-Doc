@@ -20,7 +20,7 @@ Wait 状态项又称被动动作状态项，主要用来跟踪 MMIOBridgeEntry �
 
 状态寄存器包括：
 
-| 名称                  | 描述                                                                       |
+| 名称                  | Descrption                                                               |
 | ------------------- | ------------------------------------------------------------------------ |
 | ```s_txreq```       | 向下游 TXREQ 通道发送 ReadNoSnp / WriteNoSnpPtl 请求                              |
 | ```s_ncbwrdata```   | （如果是写操作）向下游 TXDAT 发送 NCBWrData 数据包，发送 NCBWrData 的前提是 ```w_dbidresp``` 拉高 |

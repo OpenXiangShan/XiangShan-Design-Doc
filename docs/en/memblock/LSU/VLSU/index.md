@@ -2,7 +2,7 @@
 
 ## 子模块列表
 
-| 子模块                               | 描述                                             |
+| 子模块                               | Descrption                                     |
 | --------------------------------- | ---------------------------------------------- |
 | [VLSplit](VLSplit.md)             | Vector Load uop 拆分模块                           |
 | [VSSplit](VSSplit.md)             | Vector Store uop 拆分模块                          |

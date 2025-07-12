@@ -1,16 +1,16 @@
 # VFPU
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/01/20
+- Version: V2R2
+- Status: OK
+- Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-## 术语说明
+## Glossary of Terms
 
-| 缩写   | 全称                      | 描述       |
-| ---- | ----------------------- | -------- |
-| VFPU | Vector Float Point Unit | 向量浮点功能单元 |
-| IQ   | Issue Queue             | 发射队列     |
+| 缩写   | 全称                      | Descrption |
+| ---- | ----------------------- | ---------- |
+| VFPU | Vector Float Point Unit | 向量浮点功能单元   |
+| IQ   | Issue Queue             | 发射队列       |
 
 ## 设计规格
 

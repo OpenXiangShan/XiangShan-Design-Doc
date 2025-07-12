@@ -59,7 +59,7 @@ DCache会对第一次读取DCache触发ecc错误（比如load指令或者MainPip
 
   Table: Bus Error Unit保存的信息
 
-  | Field            | 描述            | 初始值 | 地址         |
+  | Field            | Descrption    | 初始值 | 地址         |
   | ---------------- | ------------- | --- | ---------- |
   | cause            | 错误事件的原因       | 0   | 0x38010000 |
   | value            | 错误事件的物理地址     | 未定义 | 0x38010008 |

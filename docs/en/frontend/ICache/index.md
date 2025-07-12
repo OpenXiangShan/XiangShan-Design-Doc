@@ -1,11 +1,11 @@
 # XiangShan ICache 设计文档
 
-- 版本：V2R2
-- 状态：OK
+- Version: V2R2
+- Status: OK
 - 日期：2025/03/07
 - commit：[4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345](https://github.com/OpenXiangShan/XiangShan/tree/4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345)
 
-## 术语说明
+## Glossary of Terms
 
 | 缩写           | 全称                                       | 描述                       |
 | ------------ | ---------------------------------------- | ------------------------ |

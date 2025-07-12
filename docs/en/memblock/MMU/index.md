@@ -1,10 +1,10 @@
 # 内存管理单元概述
 
-## 术语说明
+## Glossary of Terms
 
 Table: 内存管理单元术语说明 {#tbl:MMU-Term}
 
-| 缩写       | 全称                                                     | 描述                       |
+| 缩写       | 全称                                                     | Descrption               |
 | -------- | ------------------------------------------------------ | ------------------------ |
 | MMU      | Memory Management Unit                                 | 内存管理单元                   |
 | TLB      | Translation Lookaside Buffer                           | 页表的缓存                    |

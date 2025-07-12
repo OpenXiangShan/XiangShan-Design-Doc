@@ -1,11 +1,11 @@
 # 昆明湖 IFU 模块文档
 
-- 版本：V2R2
-- 状态：OK
+- Version: V2R2
+- Status: OK
 - 日期：2025/01/03
 - commit：[7d889d887f665295eec9cdb987e037e008f875a6](https://github.com/OpenXiangShan/XiangShan/tree/7d889d887f665295eec9cdb987e037e008f875a6)
 
-## 术语说明
+## Glossary of Terms
 
 | 缩写           | 全称                                       | 描述                           |
 | ------------ | ---------------------------------------- | ---------------------------- |

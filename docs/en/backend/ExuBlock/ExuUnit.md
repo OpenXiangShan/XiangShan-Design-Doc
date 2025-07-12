@@ -1,43 +1,43 @@
 # ExuUnit
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/01/20
+- Version: V2R2
+- Status: OK
+- Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-## 术语说明
+## Glossary of Terms
 
-Table: fu 术语说明
+Table: Glossary of Terms in FU
 
-| fu         | 描述              |
-| ---------- | --------------- |
-| alu        | 算术逻辑单元          |
-| mul        | 乘法单元            |
-| bku        | B 扩展位运算和密码学单元   |
-| brh        | 条件跳转单元          |
-| jmp        | 直接跳转单元          |
-| i2f        | 整数转浮点单元         |
-| i2v        | 整数移动到向量单元       |
-| VSetRiWi   | 读整数写整数的 vset 单元 |
-| VSetRiWvf  | 读整数写向量的 vset 单元 |
-| csr        | 控制状态寄存器单元       |
-| fence      | 内存同步指令单元        |
-| div        | 除法单元            |
-| falu       | 浮点算数逻辑单元        |
-| fcvt       | 浮点转换单元          |
-| f2v        | 浮点移动到向量单元       |
-| fmac       | 浮点融合乘加          |
-| fdiv       | 浮点除法单元          |
-| vfma       | 向量浮点融合乘加单元      |
-| vialu      | 向量整数算术逻辑单元      |
-| vimac      | 向量整数乘加单元        |
-| vppu       | 向量排列处理单元        |
-| vfalu      | 向量浮点算数逻辑单元      |
-| vfcvt      | 向量浮点转换单元        |
-| vipu       | 向量整数处理单元        |
-| VSetRvfWvf | 读向量写向量的 vset 单元 |
-| vfdiv      | 向量浮点除法单元        |
-| vidiv      | 向量整数除法单元        |
+| fu         | Descrption            |
+| ---------- | --------------------- |
+| alu        | Arithmetic Logic Unit |
+| mul        | 乘法单元                  |
+| bku        | B 扩展位运算和密码学单元         |
+| brh        | 条件跳转单元                |
+| jmp        | 直接跳转单元                |
+| i2f        | 整数转浮点单元               |
+| i2v        | 整数移动到向量单元             |
+| VSetRiWi   | 读整数写整数的 vset 单元       |
+| VSetRiWvf  | 读整数写向量的 vset 单元       |
+| csr        | 控制状态寄存器单元             |
+| fence      | 内存同步指令单元              |
+| div        | 除法单元                  |
+| falu       | 浮点算数逻辑单元              |
+| fcvt       | 浮点转换单元                |
+| f2v        | 浮点移动到向量单元             |
+| fmac       | 浮点融合乘加                |
+| fdiv       | 浮点除法单元                |
+| vfma       | 向量浮点融合乘加单元            |
+| vialu      | 向量整数算术逻辑单元            |
+| vimac      | 向量整数乘加单元              |
+| vppu       | 向量排列处理单元              |
+| vfalu      | 向量浮点算数逻辑单元            |
+| vfcvt      | 向量浮点转换单元              |
+| vipu       | 向量整数处理单元              |
+| VSetRvfWvf | 读向量写向量的 vset 单元       |
+| vfdiv      | 向量浮点除法单元              |
+| vidiv      | 向量整数除法单元              |
 
 ## 输入输出
 

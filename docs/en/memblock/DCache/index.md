@@ -2,13 +2,13 @@
 
 <!-- TODO: 填写版本信息 -->
 
-- 版本：V2R2
+- Version: V2R2
 - 状态：WIP
 - 日期：2025/02/28
   <!-- TODO: 填写 commit -->
 - commit：[b6c14329cbd4a204593ce03d130052f820439a08](https://github.com/OpenXiangShan/XiangShan/tree/b6c14329cbd4a204593ce03d130052f820439a08)
 
-## 术语说明
+## Glossary of Terms
 
 | 缩写   | 全称   | 描述   |
 | ---- | ---- | ---- |
