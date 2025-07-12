@@ -16,7 +16,6 @@ markdown_extensions:
 
 extra:
   scope: /
-  readthedocs_version: true
   alternate:
     - name: 中文
       link: https://docs.xiangshan.cc/projects/design/zh-cn/latest/
