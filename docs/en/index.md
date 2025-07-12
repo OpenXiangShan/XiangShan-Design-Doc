@@ -14,6 +14,8 @@ You can obtain an latest version of this document from:
 You could visist XiangShan Document Center
 [docs.xiangshan.cc](https://docs.xiangshan.cc/) to get more documents.
 
+本文档源语言为中文，托管于 GitHub，采用 Weblate 平台进行协作翻译。欢迎您参与校对、纠错与翻译工作，共同完善文档内容！
+
 ## Notice {.unnumbered .unlisted}
 
 Copyright © 2024–2025 The XiangShan Team · Beijing Institute of Open Source Chip
