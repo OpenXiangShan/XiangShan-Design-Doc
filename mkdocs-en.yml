@@ -16,6 +16,9 @@ markdown_extensions:
 
 extra:
   scope: /
+  back_to_home:
+    url: https://docs.xiangshan.cc/
+    title: Back to XiangShan Documentation Home
   alternate:
     - name: 中文
       link: https://docs.xiangshan.cc/projects/design/zh-cn/latest/
