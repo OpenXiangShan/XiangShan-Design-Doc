@@ -2,18 +2,18 @@
 
 ## 子模块列表
 
-| 子模块                                           | Descrption   |
-| --------------------------------------------- | ------------ |
-| [LoadUnit](LoadUnit.md)                       | Load 指令执行单元  |
-| [StoreUnit](StoreUnit.md)                     | Store 地址执行单元 |
-| [StdExeUnit](StdExeUnit.md)                   | Store 数据执行单元 |
-| [AtomicsUnit](AtomicsUnit.md)                 | 原子指令执行单元     |
-| [VLSU](VLSU/index.md)                         | 向量访存         |
-| [LSQ](LSQ/index.md)                           | 访存队列         |
-| [Uncache](Uncache.md)                         | Uncache 处理单元 |
-| [SBuffer](SBuffer.md)                         | Store 提交缓冲   |
-| [LoadMisalignBuffer](LoadMisalignBuffer.md)   | Load 非对齐缓冲   |
-| [StoreMisalignBuffer](StoreMisalignBuffer.md) | Store 非对齐缓冲  |
+| 子模块                                           | Descrption           |
+| --------------------------------------------- | -------------------- |
+| [LoadUnit](LoadUnit.md)                       | Load 指令执行单元          |
+| [StoreUnit](StoreUnit.md)                     | Store 地址执行单元         |
+| [StdExeUnit](StdExeUnit.md)                   | Store 数据执行单元         |
+| [AtomicsUnit](AtomicsUnit.md)                 | 原子指令执行单元             |
+| [VLSU](VLSU/index.md)                         | Vector Memory Access |
+| [LSQ](LSQ/index.md)                           | 访存队列                 |
+| [Uncache](Uncache.md)                         | Uncache 处理单元         |
+| [SBuffer](SBuffer.md)                         | Store 提交缓冲           |
+| [LoadMisalignBuffer](LoadMisalignBuffer.md)   | Load 非对齐缓冲           |
+| [StoreMisalignBuffer](StoreMisalignBuffer.md) | Store 非对齐缓冲          |
 
 ## 设计规格
 

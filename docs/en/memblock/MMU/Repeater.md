@@ -1,4 +1,4 @@
-# 二级模块 Repeater
+# Secondary Module: Repeater
 
 Repeater 包括如下模块：
 
