@@ -1,220 +1,320 @@
-# BPU 子模块 FTB
+# BPU submodule FTB
 
-## 功能概述
+## Functional Overview
 
-FTB 暂存 FTB 项，为后续高级预测器提供更为精确的分支指令位置、类型等信息。FTB 模块内有一 FTBBank 模块负责 FTB 项的实际存储，模块
-内使用了一块多路 SRAM 作为存储器。
+The FTB temporarily stores FTB entries, providing more accurate branch
+instruction locations, types, and other information for subsequent advanced
+predictors. Within the FTB module, an FTBBank module is responsible for the
+actual storage of FTB entries, utilizing a multi-port SRAM as memory.
 
-### 请求接收
+### Request reception
 
-0 阶段时，FTB 模块向内部 FTBBank 发送读请求，其请求 pc 值为 s0 传入的 PC,。
+At stage 0, the FTB module sends a read request to the internal FTBBank, with
+the request PC value being the PC passed in from s0.
 
-数据读取与返回
+Data read and return
 
-在发送请求的下一拍也就是预测器的 1 阶段，将暂存从 FTB SRAM 中读出的多路信号。
+In the next clock cycle after sending the request, which is stage 1 of the
+predictor, the multi-path signals read from the FTB SRAM will be temporarily
+stored.
 
-再下一拍也就是预测器的 2 阶段，从暂存数据中根据各路的 tag 和实际请求时 tag 的匹配情况生成命中信号并在命中时选出命中 FTB 数据。若存在 hit
-请求，则返回值为选出的 FTB 项及命中的路信息，若未 hit，则输出数据无意义。tag 为 PC 的 29 到 10 位。
+In the next cycle, which is stage 2 of the predictor, the hit signal is
+generated from the temporary data based on the matching of each way's tag with
+the actual request tag, and the hit FTB data is selected if a hit occurs. If
+there is a hit request, the return value is the selected FTB entry and the hit
+way information; if no hit occurs, the output data is meaningless. The tag
+corresponds to bits 29 to 10 of the PC.
 
-FTBBank 模块读出的数据在 FTB 模块内作为 2 阶段的预测结果以组合逻辑连线形式在当拍传递给后续预测器，此外这一读出的结果还会被暂 存到 FTB
-模块内，在 3 阶段作为预测结果再次以组合逻辑连线传递给后续预测器。若 FTB 命中，则读出的命中路编号也会作为 meta 信息在 s3
-与命中信息、周期数一起传递给后续 FTQ 模块。
+The data read from the FTBBank module is passed as a 2-stage prediction result
+to subsequent predictors via combinational logic within the same cycle.
+Additionally, this read result is temporarily stored within the FTB module and
+passed again as a prediction result to subsequent predictors via combinational
+logic in the 3rd stage. If the FTB hits, the read hit way number is also passed
+as meta information to the subsequent FTQ module in stage s3, along with the hit
+information and cycle count.
 
-此外，若 FTB 项内存在 always taken 标志，则 2 阶段的预测结果中对应 br_taken_mask 也在本模块内拉高处理。
+Additionally, if there is an "always taken" flag in the FTB entry, the
+corresponding br_taken_mask in the prediction results of stage 2 is also pulled
+high within this module.
 
-### 数据更新
+### Data update
 
-收到 update 请求后，FTB 模块会根据 meta 信息中是否 hit 决定更新时机。若 meta 中显示 hit，则在本拍立刻更新，否则需要延迟 2
-周期等待读出 FTB 内现有结果后才可更新。
+Upon receiving an update request, the FTB module determines the update timing
+based on whether the meta information indicates a hit. If the meta shows a hit,
+the update is performed immediately in the current cycle. Otherwise, it must
+wait for 2 cycles to read the existing results from the FTB before proceeding
+with the update.
 
-在 FTBBank 内部，当存在更新请求时，该模块行为也因立即更新和推迟更新两情况而有所不同。立即更新时，FTBBank 内的 SRAM
-写通道拉高，按照给定的信息完成写入。推迟更新时，FTBBank 首先收到一个 update 的读请求且优先级高于普通预测的读请求，而后下一拍读出数据
-，选出给定地址命中的路编码传递给外部 FTB 模块。而若这一拍未命中，则下一拍需要写入到分配的路中。路选取规则为，若所有路均已 写满，则使用替换算法（此处为伪
-LRU，详见 ICache 文档）选取要替换的路，否则选取一空路。
+Within the FTBBank, when an update request exists, the module's behavior also
+differs between immediate and deferred updates. For immediate updates, the SRAM
+write channel in FTBBank is activated, completing the write with the given
+information. For deferred updates, FTBBank first receives a read request for the
+update with higher priority than normal prediction read requests, then reads the
+data in the next cycle, selecting the way encoding that hits the given address
+and passing it to the external FTB module. If there is no hit in this cycle, the
+next cycle requires writing to the allocated way. The way selection rule is: if
+all ways are full, use a replacement algorithm (here, pseudo-LRU, see ICache
+documentation for details) to select the way to replace; otherwise, select an
+empty way.
 
-### SRAM 规格
+### SRAM specifications
 
-单 bank，512 set，4 way，使用单口 SRAM，无读保持，有上电复位。
+Single bank, 512 sets, 4-way, using single-port SRAM, no read hold, with
+power-on reset.
 
-20 bit tag，60 bit FTB 项。
+20-bit tag, 60-bit FTB entry.
 
-其中 FTB 项
+FTB entry
 
 1 bit valid
 
-20 bit br slot（4 bit offset，12 bit lower 2 bit tarStat, 1bit sharing, 1 bit
-valid）
+20-bit br slot (4-bit offset, 12-bit lower, 2-bit tarStat, 1-bit sharing, 1-bit
+valid)
 
-28 bit tail slot (4 bit offset , 20 bit lower, 2 bit tarStat, 1 bit sharing, 1
-bit valid)
+28-bit tail slot (4-bit offset, 20-bit lower, 2-bit tarStat, 1-bit sharing,
+1-bit valid)
 
-4 bit pftAddr
+4-bit pftAddr
 
-1 bit carry
+1-bit carry
 
-1 bit isCall
+1-bit isCall
 
 1 bit isRet
 
-1 bit isJalr
+1-bit isJalr
 
-1 bit 末尾可能为 rvi call
+The last bit may be an RVI call
 
-2 bit always taken
+2-bit always taken
 
-## 整体框图
+## Overall Block Diagram
 
-![整体框图](../figure/BPU/FTB/structure.png)
+![Overall Block Diagram](../figure/BPU/FTB/structure.png)
 
-## 接口时序
+## Interface timing
 
-### 结果输出接口
+### Result output interface
 
-![结果输出接口](../figure/BPU/FTB/port1.png)
+![Result Output Interface](../figure/BPU/FTB/port1.png)
 
-上图展示了分支预测器中 FTB 模块针对 fallThrough 地址为 0x2000001062 的请求连续三拍在分支预测器不同阶段输出预测结果的接口。
+The above diagram shows the interface where the FTB module in the branch
+predictor outputs prediction results across three consecutive cycles for a
+request with a fallThrough address of 0x2000001062, at different stages of the
+branch predictor.
 
-### 更新接口
+### Update interface
 
-![更新接口](../figure/BPU/FTB/port2.png)
+![Update interface](../figure/BPU/FTB/port2.png)
 
-上图展示了 FTB 模块的一次针对 0x2000000E00 地址的更新操作，所有更新数据在一拍内全部传递。
+The figure above demonstrates an update operation of the FTB module for address
+0x2000000E00, where all update data is transmitted within a single clock cycle.
 
 ## FTBBank
 
-### 接口时序
+### Interface timing
 
-#### 读数据接口
+#### Read data interface
 
-![读数据接口](../figure/BPU/FTB/port3.png)
+![Read data interface](../figure/BPU/FTB/port3.png)
 
-上图展示了 FTBBank 读数据接口，FTBBank 在收到请求一拍后回复数据，即 16303ps 处回复的为 16301ps 的 0x2000001060
-地址请求。
+The above figure shows the FTBBank read data interface. FTBBank replies with
+data one cycle after receiving the request, i.e., the response at 16303ps
+corresponds to the 0x2000001060 address request at 16301ps.
 
-#### 更新读数据接口
+#### Update read data interface
 
-![更新读数据接口](../figure/BPU/FTB/port4.png) 上图展示了 FTBBank 更新读数据接口，FTBBank
-在收到更新读请求一拍后回复数据，回复的数据被外 部在一拍后用于更新写数据，可以注意到请求一拍后的 pftAddr 被用于结果读出一拍后的数据写入。
+![Update Read Data Interface](../figure/BPU/FTB/port4.png) The above diagram
+shows the FTBBank's update read data interface. The FTBBank replies with data
+one cycle after receiving the update read request, and the returned data is used
+by the external module to update the write data one cycle later. Note that the
+pftAddr one cycle after the request is used for writing the data one cycle after
+the result is read out.
 
-#### 更新写数据接口
+#### Update write data interface
 
-![更新写数据接口](../figure/BPU/FTB/port5.png) 上图展示了 FTBBank 更新写数据接口，在收到写请求后一拍，数据完成写入。
+![Update write data interface](../figure/BPU/FTB/port5.png) The above figure
+shows the FTBBank update write data interface. One cycle after receiving the
+write request, the data is written.
 
-### 功能概述
+### Functional Overview
 
-如上所述，FTBBank 主要存储 FTB 项，为 SRAM 模块的简单封装。
+As mentioned above, the FTBBank primarily stores FTB entries and is a simple
+encapsulation of the SRAM module.
 
-## FTB 项的生成条件简述
+## Brief description of FTB entry generation conditions
 
-FTB 是 BPU 的核心。BPU 的其他预测部件所作出的预测全部依赖于 FTB 提供的信息。FTB
-除了提供预测块内分支指令的信息之外，还提供预测块的结束地址。对于 FTB 来说，FTB 项的生成策略至关重要。南湖架构在原始论文 1 的基础上，结合这篇论文 2
-的思想形成了现有的策略，记 FTB 项的起始地址为 start ，结束地址为 end ，具体策略如下：
+FTB is the core of BPU. All predictions made by other prediction components of
+BPU rely on the information provided by FTB. In addition to providing
+information about branch instructions within the prediction block, FTB also
+provides the end address of the prediction block. For FTB, the generation
+strategy of FTB entries is crucial. Based on the original paper 1, the Nanhu
+architecture combines the ideas from paper 2 to form the current strategy. Let
+the start address of the FTB entry be 'start' and the end address be 'end'. The
+specific strategy is as follows:
 
-- FTB 项由 start 索引， start 在预测流水线中生成，实际上， start 基本遵循如下原则之一：
-  - start 是上一个预测块的 end
-  - start 是来自 BPU 外部的重定向的目标地址；
-- FTB 项内最多记录两条分支指令，其中第一条一定是条件分支；
-- end 一定满足三种条件之一：
-  - end - start = 预测宽度
-  - end 是从 start 开始的预测宽度范围内第三条分支指令的 PC
-  - end 是一条无条件跳转分支的下一条指令的 PC，同时它在从 start 开始的预测宽度范围内
+- The FTB entry is indexed by start, where start is generated in the prediction
+  pipeline. In practice, start generally follows one of the following
+  principles:
+  - start is the end of the previous prediction block.
+  - start is the target address of the redirect from outside the BPU;
+- The FTB entry can record up to two branch instructions, with the first one
+  always being a conditional branch;
+- The end must satisfy one of the three conditions:
+  - end - start = prediction width
+  - end is the PC of the third branch instruction within the predicted width
+    range starting from start
+  - end is the PC of the next instruction following an unconditional jump
+    branch, and it falls within the prediction width range starting from start
 
-这种训练策略下，同一条分支指令可能存在于多个 FTB 项内。
+Under this training strategy, the same branch instruction may exist in multiple
+FTB entries.
 
-和论文中的实现[1](https://docs.xiangshan.cc/zh-cn/latest/frontend/bp/#fn:ftbcite)一样，我们只存储结束地址的低位，而高位用起始地址的高位拼接得到。和
-AMD[3](https://docs.xiangshan.cc/zh-cn/latest/frontend/bp/#fn:amd)的做法相似，我们还对[FTB](https://docs.xiangshan.cc/zh-cn/latest/frontend/bp/#ftb)项中的条件分支指令记录“总是跳转”位，该位在第一次遇到该条件分支跳转时置
-1，在它值为 1 的时候，该条件分支的方向总是预测为跳转，也不用它的结果训练条件分支方向预测器；当该条件分支遇到一次执行结果为不跳转的时候，将该位置
-0，之后它的方向由条件分支方向预测器预测。
+Similar to the implementation in the paper
+[1](https://docs.xiangshan.cc/zh-cn/latest/frontend/bp/#fn:ftbcite), we only
+store the lower bits of the end address, while the higher bits are concatenated
+from the higher bits of the start address. Like AMD's approach
+[3](https://docs.xiangshan.cc/zh-cn/latest/frontend/bp/#fn:amd), we also record
+an "always taken" bit for conditional branch instructions in the
+[FTB](https://docs.xiangshan.cc/zh-cn/latest/frontend/bp/#ftb) entry. This bit
+is set to 1 when the conditional branch is first encountered and taken. When
+this bit is 1, the direction of the conditional branch is always predicted as
+taken, and its results are not used to train the conditional branch direction
+predictor. When the conditional branch encounters an execution result of not
+taken, this bit is set to 0, and thereafter its direction is predicted by the
+conditional branch direction predictor.
 
-## FTB 存储结构
+## FTB storage structure
 
-FTB 项结构如下
+FTB entry structure is as follows
 
-| total | valid | brSlot  | tailSlot | pftAddr | carry      | isCall, isRet, isJalr | last_may_be_rvi_call | strong_bias |
-| ----- | ----- | ------- | -------- | ------- | ---------- | --------------------- | -------------------- | ----------- |
-|       | 有效位   | 第一条分支信息 | 第二条分支信息  | 预测块结束地址 | 结束地址高位是否进位 | tailSlot 分支类型         | RAS 标识特殊位            | 强 bias      |
-| 62    | 1     | 21      | 29       | 4       | 1          | 3                     | 1                    | 2           |
+| total | valid     | brSlot                   | tailSlot                  | pftAddr                   | carry                                                     | isCall, isRet, isJalr | last_may_be_rvi_call | strong_bias |
+| ----- | --------- | ------------------------ | ------------------------- | ------------------------- | --------------------------------------------------------- | --------------------- | -------------------- | ----------- |
+|       | Valid bit | First branch information | Second branch information | Predict block end address | Whether the high-order bits of the end address carry over | tailSlot branch type  | RAS special flag bit | Strong bias |
+| 62    | 1         | 21                       | 29                        | 4                         | 1                                                         | 3                     | 1                    | 2           |
 
-FTB slot 的组成，每个 slot 对应一条分支指令
+Composition of FTB slots, each slot corresponds to one branch instruction
 
-| total | valid | offset      | lower  | tarStat    | sharing                 | isRVC   |
-| ----- | ----- | ----------- | ------ | ---------- | ----------------------- | ------- |
-|       | 有效位   | 相对起始 PC 的偏移 | 目标地址低位 | 目标地址高位是否进位 | （对 tailSlot 来说）是否装了条件分支 | 是否是压缩指令 |
-| 21/29 | 1     | 4           | 12/20  | 2          | 1                       | 1       |
+| total | valid     | offset                             | lower                        | tarStat                                          | sharing                                                  | isRVC                           |
+| ----- | --------- | ---------------------------------- | ---------------------------- | ------------------------------------------------ | -------------------------------------------------------- | ------------------------------- |
+|       | Valid bit | Offset relative to the starting PC | Lower bits of target address | Whether the target address high bit carries over | (For tailSlot) Whether a conditional branch is installed | Is it a compressed instruction? |
+| 21/29 | 1         | 4                                  | 12/20                        | 2                                                | 1                                                        | 1                               |
 
-FTB 共有 2048 项，4 路组相联，每项最多记录 2 条分支，其中第一条一定是条件分支，第二条可能是任意类型分支指令
+The FTB has a total of 2048 entries, 4-way set-associative, with each entry
+recording up to 2 branches. The first branch is always a conditional branch,
+while the second may be any type of branch instruction.
 
-## 目标地址生成逻辑
+## Target address generation logic
 
-对于每个 slot，根据三种可能的高位进位情况（进位/退位/不变），在（PC 高位+1, PC 高位-1, PC
-高位）三种情况中选择一个，和存储的目标地址低位信息进行拼位
+For each slot, based on three possible high-bit carry scenarios
+(carry/borrow/unchanged), select one from (PC high bits +1, PC high bits -1, PC
+high bits) and concatenate it with the stored target address low bits.
 
-## 更新流程
+## Update process
 
-1. 表项生成
+1. Entry generation
 
-   1.1 从FTQ读取必要信息：
-      - 起始地址 startAddr
-      - 预测时读出的旧FTB项 old_entry
-      - 包含FTQ项内32Byte内所有分支指令的预译码信息 pd
-      - 此FTQ项内有效指令的真实跳转结果 cfiIndex，包括是否跳转，以及跳转指令相对startAddr的偏移
-      - 此FTQ项内分支指令（如跳转）的跳转地址（执行结果）
-      - 预测时FTB是否真正命中（旧FTB项是否有效）
-      - 对应FTQ项内所有可能指令的误预测 mask
+   1.1 Read necessary information from FTQ:
+      - Starting address startAddr
+      - The old FTB entry old_entry read during prediction
+      - Contains the pre-decoding information pd for all branch instructions
+        within the 32Byte FTQ entry
+      - The actual jump results cfiIndex of valid instructions within this FTQ
+        entry, including whether it jumps and the offset of the jump instruction
+        relative to startAddr
+      - The jump address (execution result) of the branch instruction (e.g.,
+        jump) within this FTQ entry
+      - Whether the FTB actually hits during prediction (whether the old FTB
+        entry is valid)
+      - The misprediction mask for all possible instructions corresponding to
+        the FTQ entry
 
-   1.2 FTB项生成逻辑：
-      - 情况1：FTB未命中或存在错误
-        1) 无条件跳转指令处理：
-          - 不论是否被执行，都一定会被写入新FTB项的tailSlot
-          - 如果最终FTQ项内跳转的指令是条件分支指令，写入新FTB项的第一个brSlot，将对应的always_taken位置1
-        2) pftAddr设置：
-          - 存在无条件跳转指令时：以第一条无条件跳转指令的结束地址设置
-          - 无无条件跳转指令时：以startAddr+取指宽度（32B）设置
-          - 特殊情况：当4Byte宽度的第一条无条件跳转指令起始地址位于startAddr+30时，虽然结束地址超出取指宽度范围，仍按startAddr+32设置
-        3) carry位根据pftAddr的条件同时设置
-        4) 设置分支类型标志：
-          - isJalr、isCall、isRet按照第一条无条件跳转指令的类型设置
-          - 特殊标志：当且仅当4Byte宽度的第一条无条件跳转指令起始地址位于startAddr+30，且该指令是call类型时，置last_may_be_rvi_call位
+   1.2 FTB entry generation logic:
+      - Case 1: FTB miss or error exists
+        1) Unconditional jump instruction processing:
+          - Regardless of whether it is executed, it will always be written to
+            the tailSlot of the new FTB entry
+          - If the jump instruction in the final FTQ entry is a conditional
+            branch, write it to the first brSlot of the new FTB entry and set
+            the corresponding always_taken bit to 1
+        2) pftAddr settings:
+          - When an unconditional jump instruction is present: set the end
+            address of the first unconditional jump instruction
+          - When there is no unconditional jump instruction: set to startAddr +
+            fetch width (32B)
+          - Special case: When the start address of a 4-byte-wide unconditional
+            jump instruction is at startAddr+30, even if the end address exceeds
+            the fetch width range, it is still set as startAddr+32
+        3) The carry bit is set simultaneously based on the condition of pftAddr
+        4) Set branch type flags:
+          - isJalr, isCall, isRet are set according to the type of the first
+            unconditional jump instruction
+          - Special flag: The last_may_be_rvi_call bit is set if and only if the
+            first unconditional jump instruction of 4-byte width starts at
+            startAddr+30, and the instruction is of call type.
 
-      - 情况2：FTB命中且无错误
-        1) 插入新条件分支：
-          - 有空闲位置时： a) tailSlot有无条件跳转：新条件分支一定指令序先于该无条件跳转，直接插入brSlot b)
-            brSlot有条件分支：按指令序排列，保持FTB项内brSlot的分支在指令序上先于tailSlot c)
-            以上情况pftAddr均无需修改
-          - 无空闲位置时： a) tailSlot有无条件跳转：
-              - 新条件分支指令序一定比该无条件跳转靠前
-              - 新条件分支替代无条件跳转的位置
-              - pftAddr按无条件跳转的PC设置 b) tailSlot有条件分支： i)
-                新条件分支指令序比tailSlot内已有的条件分支指令序靠前：
-                - 将brSlot内的条件分支和新条件分支按指令序排布
-                - pftAddr按tailSlot内原有分支的PC设置 ii) 新条件分支指令序位于已有的所有分支指令后面：
-                - slot不发生任何改变
-                - 只把pftAddr按新条件分支的PC设置
-        2) 更新jalr跳转地址信息：
-          - 当tailSlot内原来记载了jalr（RISC-V的无条件间接跳转指令）
-          - 跳转地址改变时，修改tailSlot内记载的相应目标地址低位和高位进位信息
-        3) 更新always_taken位：
-          - 如果always_taken位置1，且对应的条件分支此次执行结果是不跳转，拉低always_taken位
+      - Case 2: FTB hit with no errors
+        1) Insert new conditional branch:
+          - When there is an available slot: a) tailSlot has an unconditional
+            jump: the new conditional branch must be instructionally prior to
+            this unconditional jump and is directly inserted into brSlot. b)
+            brSlot has a conditional branch: arrange in instruction order,
+            ensuring branches in brSlot within the FTB entry are instructionally
+            prior to those in tailSlot. c) In the above cases, pftAddr does not
+            need modification.
+          - When there is no free slot: a) tailSlot has an unconditional jump:
+              - The new conditional branch instruction sequence must precede the
+                unconditional jump
+              - New conditional branch replaces the position of an unconditional
+                jump.
+              - pftAddr is set according to the PC of the unconditional jump b)
+                tailSlot conditional branch: i) The new conditional branch
+                instruction sequence is earlier than the existing conditional
+                branch instruction sequence in the tailSlot:
+                - Arrange the conditional branches in brSlot and new conditional
+                  branches in instruction order
+                - pftAddr is set according to the PC of the original branch in
+                  tailSlot. ii) The new conditional branch instruction sequence
+                  is located after all existing branch instructions:
+                - No changes occur in the slot
+                - Only set pftAddr according to the PC of the new conditional
+                  branch
+        2) Update jalr jump address information:
+          - When the tailSlot originally records a jalr (RISC-V's unconditional
+            indirect jump instruction)
+          - When the jump address changes, modify the corresponding target
+            address low bits and high carry information recorded in the
+            tailSlot.
+        3) Update the always_taken bit:
+          - If the always_taken bit is set to 1 and the corresponding
+            conditional branch execution result is not taken, pull the
+            always_taken bit low
 
-2. 写入SRAM
+2. Write to SRAM
 
-   2.1 写入条件：
+   2.1 Write conditions:
 
-    - 新FTB项完全没有变化，或者虽然FTB未命中但uFTB命中：不需写入
-    - 新FTB项有变化且非uFTB命中、FTB未命中的情况：需要写入
+    - The new FTB entry is completely unchanged, or although the FTB misses but
+      the uFTB hits: no need to write.
+    - New FTB entry has changes and is not a uFTB hit or FTB miss: requires
+      writing.
 
-   2.2 写入流程：
-      - 情况1：预测未命中
-        1) 先用一拍做一次FTB读，判断此时命中情况
-        2) 如命中，写入对应路
-        3) 如仍未命中，根据替换算法选择一路写入
-        4) 总流程需要3个时钟周期
-        5) 过程中由于FTB读写口占用，需要FTQ配合不发出新的更新请求
-           - 注：分bank可能提高更新带宽
-      - 情况2：预测时命中（包括命中项内有错误信息的情况）
-        1) 直接写入对应路，无需再次读出
+   2.2 Write Process:
+      - Case 1: Prediction miss
+        1) First, perform an FTB read in one cycle to determine the hit
+           condition at this time
+        2) If hit, write to the corresponding way
+        3) If it still misses, select a way to write according to the
+           replacement algorithm
+        4) The entire process requires 3 clock cycles
+        5) During the process, due to FTB read/write port occupancy, the FTQ
+           must coordinate to avoid issuing new update requests.
+           - Note: Bank partitioning may improve update bandwidth.
+      - Case 2: Prediction hit (including cases where the hit entry contains
+        erroneous information)
+        1) Directly write to the corresponding way without needing to read again
 
-3. 写入SRAM的流水线示意图如下：
+3. The pipeline diagram for writing to SRAM is as follows:
 
-![写入SRAM的流水线](../figure/BPU/FTB/update.svg)
+![Pipeline for writing to SRAM](../figure/BPU/FTB/update.svg)
 

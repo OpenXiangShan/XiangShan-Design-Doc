@@ -1,42 +1,51 @@
-# 三级模块 Prefetcher
+# Level-3 Module: Prefetcher
 
-Prefetcher 指的是如下模块：
+The Prefetcher refers to the following module:
 
 * L2TlbPrefetch prefetch
 
-## 设计规格
+## Design specifications
 
-1. 支持 Next-line 预取算法
-2. 支持过滤重复的历史请求
+1. Supports Next-line prefetching algorithm
+2. Supports filtering duplicate historical requests
 
-## 功能
+## Function
 
-### 发出预取请求
+### Issue a prefetch request
 
-当满足如下两种情况之一时会发出预取请求：
+A prefetch request is issued when either of the following two conditions is met:
 
-1.  Page Cache 发生 miss
-2.  Page Cache hit，但命中的是预取项
+1.  Page Cache miss
+2.  Page Cache hit, but the hit is on a prefetched entry
 
-Prefetcher 采用 Next-Line 预取算法，预取结果会保存在 Page Cache 中，并不会返回给 L1 TLB。由于 Page Table
-Walker 的访存能力较弱，预取请求并不会进入 Page Table Walker 或 Miss
-Queue，而是会被直接丢弃。当预取请求只差最后一级页表缺失时，可以访问 LLPTW。同时，在 Prefetcher 中添加了 Filter
-Buffer，可以起到过滤重复的预取请求的目的。
+The Prefetcher employs the Next-Line prefetching algorithm. Prefetched results
+are stored in the Page Cache and are not returned to the L1 TLB. Due to the
+limited memory access capability of the Page Table Walker, prefetch requests do
+not enter the Page Table Walker or Miss Queue but are directly discarded. When a
+prefetch request is only missing the last-level page table, it can access the
+LLPTW. Additionally, a Filter Buffer is added to the Prefetcher to filter
+duplicate prefetch requests.
 
-### 过滤重复的历史请求
+### Filter duplicate historical requests
 
-为避免重复的请求浪费 L2 TLB 的资源，同时提高 Prefetcher 的利用率，当满足 5.3.11.2
-节描述的两种情况，发出预取请求时，会判断相同地址的预取请求是否已经发出，如果发出则丢弃新收到的预取请求。当前 Prefetcher 模块会过滤最近的 4
-条请求。
+To avoid wasting L2 TLB resources with duplicate requests and improve Prefetcher
+utilization, when the two conditions described in Section 5.3.11.2 are met and a
+prefetch request is issued, it checks whether a prefetch request for the same
+address has already been issued. If so, the newly received prefetch request is
+discarded. The current Prefetcher module filters the most recent 4 requests.
 
-## 整体框图
+## Overall Block Diagram
 
-Prefetcher 的整体框图如 [@fig:MMU-prefetcher-overall] 所示。当 Page Cache 发生 miss 或 Page
-Cache hit，但命中的是预取项时，会产生预取请求。通过 Filter Buffer 可以过滤重复的预取请求。
+The overall block diagram of the Prefetcher is shown in
+[@fig:MMU-prefetcher-overall]. A prefetch request is generated when the Page
+Cache misses or hits on a prefetched entry. The Filter Buffer can be used to
+filter duplicate prefetch requests.
 
-![Prefetcher 的整体框图](../figure/image44.png){#fig:MMU-prefetcher-overall}
+![Overall block diagram of the
+Prefetcher](../figure/image44.png){#fig:MMU-prefetcher-overall}
 
-## 接口时序
+## Interface timing
 
-Prefetcher 是一个 next-line 预取器，接口时序较为简单，这里不再赘述。
+The Prefetcher is a next-line prefetcher with relatively simple interface
+timing, which will not be elaborated here.
 

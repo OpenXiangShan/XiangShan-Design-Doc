@@ -1,6 +1,6 @@
 # Vector Store Merge Unit VSMergeBuffer
 
-## Functional description
+## Functional Description
 
 A freelist-based queue that receives requests from the VSSplit module, allocates
 an entry for each uop issued by the backend to store related uop information,

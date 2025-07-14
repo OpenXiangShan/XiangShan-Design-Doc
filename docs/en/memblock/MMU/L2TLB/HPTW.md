@@ -1,70 +1,90 @@
 
-# 三级模块 Hypervisor Page Table Walker
+# Level-3 Module: Hypervisor Page Table Walker
 
-Hypervisor Page Table Walker 指的是如下模块：
+Hypervisor Page Table Walker refers to the following module:
 
 * HPTW hptw
 
-## 设计规格
+## Design Specifications
 
-1. 支持访问 G-stage 的三级页表
-2. 支持向内存发送请求
-3. 支持向 Page Cache 发送 refill 信号
-4. 支持异常处理
-5. bypass 特殊处理
+1. Supports accessing the three-level page table of G-stage
+2. Supports sending requests to memory
+3. Supports sending refill signals to the Page Cache
+4. Support for exception handling
+5. Bypass special handling
 
-## 功能
+## Function
 
-### 支持访问 G-stage 的三级页表
+### Supports accessing the three-level page table of G-stage
 
-HPTW 整体设计与 PTW 基本相同，每次只能处理一个请求，并且 HPTW
-可以进行完整的第二阶段的三级页表的翻译，翻译过程中如果需要访问内存，会对访问内存的地址进行 PMP 检查，如果检查出错则直接返回，否则发送访存请求。HPTW
-返回的情况有：
+The overall design of HPTW is fundamentally the same as PTW, capable of
+processing only one request at a time. HPTW can perform a complete second-stage
+translation of the three-level page table. If memory access is required during
+translation, it will perform PMP checks on the memory access address. If an
+error is detected, it returns immediately; otherwise, it sends a memory access
+request. The scenarios in which HPTW returns include:
 
-1. 访问到叶子节点
-2. 访问出现 pagefault 或者 accessfault
+1. Accessing a leaf node
+2. A pagefault or accessfault occurs during access
 
-### 支持向内存发送请求
+### Supports sending requests to memory
 
-HPTW 与 PTW 和 LLPTW 类似，在访问页表的时候需要向内存发送请求，通过仲裁器发送请求。
+Similar to PTW and LLPTW, HPTW needs to send requests to memory when accessing
+page tables, which are sent through an arbiter.
 
-### 向 Page Cache 发送 refill 信号
+### Send a refill signal to the Page Cache
 
-HPTW 得到 PTW 返回的结果后，会向 Page Cache 发送 refill 请求，将返回的页表项填入 Page Cache，HPTW 会提供填入
-Page Cache 的信息。
+After receiving the result from PTW, HPTW sends a refill request to the Page
+Cache to fill in the returned page table entry. HPTW provides the information
+required for filling the Page Cache.
 
-### 异常处理机制
+### Exception Handling Mechanism
 
-当出现 pagefault 或者 accessfault 的异常时候，HPTW 会直接返回给 PTW 或者 LLPTW。
+When a pagefault or accessfault exception occurs, HPTW will directly return to
+PTW or LLPTW.
 
-### Bypass 特殊处理
+### Bypass special handling
 
-对于 bypass 请求，我们一般将其放入 MissQueue 中重新查询，但对于 hptw 请求（即 isHptwReq 有效）不放入
-MissQueue（避免出现阻塞），所以出现 bypass 的请求的时候，为了避免 Page Cache 填入重复的页表项，hptw 请求传入 HPTW
-的时候如果 bypass 信号有效，则向内存发送请求的时候，内存返回的结果不会重填 Page Cache。
+For bypass requests, they are generally placed in the MissQueue for re-querying.
+However, for hptw requests (i.e., when isHptwReq is valid), they are not placed
+in the MissQueue (to avoid blocking). Therefore, when a bypass request occurs,
+to prevent duplicate page table entries from being filled into the Page Cache,
+if the bypass signal is valid when the hptw request is passed to HPTW, the
+result returned by memory will not refill the Page Cache.
 
-## 整体框图
+## Overall Block Diagram
 
-HPTW 的状态转移关系图如 [@fig:HPTW-states] 所示。
+The state transition diagram of HPTW is shown in [@fig:HPTW-states].
 
-![Hypervisor Page Table Walker
-状态机的状态转移图](../figure/image43.jpeg){#fig:HPTW-states}
+![Hypervisor Page Table Walker state machine transition
+diagram](../figure/image43.jpeg){#fig:HPTW-states}
 
-状态机的各个状态的描述如下：
+The descriptions of each state in the state machine are as follows:
 
-* idle：Hypervisor Page Table Walker 状态机的初始状态，接收一个 PTW 请求后，进入 pmp_check 状态。
-* pmp_check：在该状态下将需要访问的物理地址发送给 PMP 模块做 PMP 和 PMA 检查，下一拍进入 mem_req 状态。PMP
-  模块需要当拍返回物理地址检查结果是否出现 access fault。
-* mem_req：根据 PMP 和 PMA 的检查结果，如果检查结果出现 access fault，则进入 check_pte 状态；否则向内存发送请求。在
-  mem_req 状态继续等待，直至和内存握手成功，表示成功发送请求，之后后进入 mem_resp 状态。
-* mem_resp：在 mem_req 状态时，Hypervisor Page Table Walker 已经向内存发送了 PTW 请求，在 mem_resp
-  状态下，Hypervisor Page Table Walker 等待内存回复。在收到内存回复，内存和 Hypervisor Page Table
-  Walker 握手成功后进入 check_pte 状态。
-* check_pte：该状态对目前的查询情况进行判断，从而决定下一步操作。该状态处理的情况如下：
-    1. 出现 accessfault 或者 pagefault，返回给 PTW 或者 LLPTW。
-    2. 在内存返回的页表是叶子节点，则直接返回给 PTW 或者 LLPTW。
-    3. 如果不是叶子节点，则将物理地址发送给 PMP 模块做 PMP&PMA 检查，同时状态转移到 mem_req，重复上文中介绍的流程。
+* idle: The initial state of the Hypervisor Page Table Walker state machine.
+  Upon receiving a PTW request, it transitions to the pmp_check state.
+* pmp_check: In this state, the physical address to be accessed is sent to the
+  PMP module for PMP and PMA checks, transitioning to the mem_req state in the
+  next cycle. The PMP module must return the physical address check result for
+  access faults within the same cycle.
+* mem_req: Based on the PMP and PMA check results, if an access fault is
+  detected, it transitions to the check_pte state; otherwise, it sends a request
+  to memory. In the mem_req state, it continues to wait until the handshake with
+  memory is successful, indicating the request has been sent, and then
+  transitions to the mem_resp state.
+* mem_resp: In the mem_req state, the Hypervisor Page Table Walker has sent a
+  PTW request to memory. In the mem_resp state, the Hypervisor Page Table Walker
+  waits for a response from memory. Upon receiving the memory response and
+  successfully handshaking with memory, it transitions to the check_pte state.
+* check_pte: This state evaluates the current query situation to determine the
+  next operation. The scenarios handled in this state include:
+    1. In case of accessfault or pagefault, it returns to PTW or LLPTW.
+    2. If the page table returned by memory is a leaf node, it is directly
+       returned to PTW or LLPTW.
+    3. If it is not a leaf node, the physical address is sent to the PMP module
+       for PMP&PMA checks, and the state transitions to mem_req, repeating the
+       process described above.
 
-## 接口时序
+## Interface timing
 
-与 PTW 类似，不再赘述。
+Similar to PTW, no further elaboration is provided.

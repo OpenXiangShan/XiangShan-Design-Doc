@@ -1,71 +1,99 @@
-# MMIO 转接桥 MMIOBridge
+# MMIO Bridge MMIOBridge
 
-MMIOBridge 独立于 CoupledL2 的 4 个 Slice 之外，接收来自 IFU / LSU 的 MMIO 与 Uncache 请求，通过
-CHI 总线与下游 NoC / LLC 进行交互并完成外设的读写操作。默认 MMIOBridge 包含 8 项 MMIOBirdgeEntry，每一项
-MMIOBridgeEntry 都是独立的状态机，用于处理一条 MMIO 或 Uncache 请求。
+The MMIOBridge operates independently of the four slices in CoupledL2, receiving
+MMIO and Uncache requests from the IFU/LSU. It interacts with the downstream
+NoC/LLC via the CHI bus to complete peripheral read/write operations. By
+default, the MMIOBridge contains eight MMIOBridgeEntry items, each of which is
+an independent state machine handling one MMIO or Uncache request.
 
-## 状态机
+## State machine
 
-状态机项主要分为两类：
+State machine entries are primarily divided into two categories:
 
-- Schedule 状态项
-- Wait 状态项
+- Schedule state entry
+- Wait state item
 
-Schedule 状态项又称主动动作状态项，主要用来跟踪 MMIOBridgeEntry 主动向上游 TileLink 总线、下游 CHI
-总线发送任务与请求的情况。其值为低有效，表示未完成状态，即任务尚未成功离开 MMIOBridgeEntry
-并被发出，其原因可能是未完成阻塞条件（有必要的前置动作未完成）或通道阻塞；值为高则表示对应任务已经成功发出，或不需要发出任务。
+The Schedule state item, also known as the active action state item, is
+primarily used to track the active tasks and requests sent by MMIOBridgeEntry to
+the upstream TileLink bus and downstream CHI bus. Its value is active-low,
+indicating an incomplete state—meaning the task has not yet successfully left
+MMIOBridgeEntry and been issued, possibly due to unmet blocking conditions
+(necessary preceding actions not completed) or channel blocking; a high value
+indicates the corresponding task has been successfully issued or does not need
+to be issued.
 
-Wait 状态项又称被动动作状态项，主要用来跟踪 MMIOBridgeEntry 期望收到的来自下游 CHI 通道、上游 TileLink
-通道的回复。其值为低有效，表示未完成状态，即对应的回复尚未回到当前 entry；值为高则表示对应回复已经收到，或不需要收到回复。
+Wait state entries, also known as passive action state entries, are primarily
+used to track the responses expected by an MMIOBridgeEntry from downstream CHI
+channels or upstream TileLink channels. A low value indicates an incomplete
+state, meaning the corresponding response has not yet returned to the current
+entry; a high value indicates the response has been received or no response is
+needed.
 
-状态寄存器包括：
+Status registers include:
 
-| 名称                  | Descrption                                                               |
-| ------------------- | ------------------------------------------------------------------------ |
-| ```s_txreq```       | 向下游 TXREQ 通道发送 ReadNoSnp / WriteNoSnpPtl 请求                              |
-| ```s_ncbwrdata```   | （如果是写操作）向下游 TXDAT 发送 NCBWrData 数据包，发送 NCBWrData 的前提是 ```w_dbidresp``` 拉高 |
-| ```s_resp```        | CHI 读 / 写事务已完成，向上游 TileLink D 通道返回 AccessAckData / AccessAck 响应          |
-| ```w_comp```        | （如果是写操作）等待下游 RXRSP 通道返回的 Comp / CompDBIDResp 响应                          |
-| ```w_dbidresp```    | （如果是写操作）等待下游 RXRSP 通道返回的 CompDBIDResp / DBIDResp / DBIDRespOrd 响应        |
-| ```w_compdata```    | （如果是读操作）等待下游 RXDAT 通道返回的 CompData                                        |
-| ```w_pcrdgrant```   | 读 / 写请求发生协议层重传，需要等待下游返回 PCrdGrant                                        |
-| ```w_readreceipt``` | （如果是读请求且 Order 不是 None）等待下游 RXRSP 通道返回的 ReadReceipt                      |
+| Name                | Descrption                                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ```s_txreq```       | Send ReadNoSnp / WriteNoSnpPtl requests to the downstream TXREQ channel                                                                                    |
+| ```s_ncbwrdata```   | (For write operations) Send NCBWrData packets to the downstream TXDAT channel. The prerequisite for sending NCBWrData is that ```w_dbidresp``` is asserted |
+| ```s_resp```        | The CHI read/write transaction is completed, returning an AccessAckData/AccessAck response to the upstream TileLink D channel.                             |
+| ```w_comp```        | (For write operations) Wait for the Comp / CompDBIDResp response returned by the downstream RXRSP channel                                                  |
+| ```w_dbidresp```    | (For write operations) Wait for the CompDBIDResp / DBIDResp / DBIDRespOrd response returned by the downstream RXRSP channel                                |
+| ```w_compdata```    | (For read operations) Wait for the CompData returned by the downstream RXDAT channel                                                                       |
+| ```w_pcrdgrant```   | For read/write requests that encounter protocol layer retransmission, it is necessary to wait for the downstream to return a PCrdGrant.                    |
+| ```w_readreceipt``` | (For read requests where Order is not None) Wait for the ReadReceipt returned by the downstream RXRSP channel                                              |
 
-## 定序
+## Sequencing
 
-MMIOBridge 发起的 CHI 请求默认 Order 为 RequestOrder 或 EndpointOrder。核内在发起 TileLink 读 /
-写请求时，会在 A 通道的自定义域中带上**PMA 属性是否为 Memory**：
+The CHI requests initiated by the MMIOBridge default to RequestOrder or
+EndpointOrder. When the core initiates a TileLink read/write request, it
+includes the **PMA attribute in the custom field of the A channel to indicate
+whether it is Memory**:
 
-- 如果该地址的 PMA 属性是 Memory，但是 PBMT 属性为 IO 或 NC，发起的 CHI 事务的 Order 为 RequestOrder
-- 如果该地址的 PMA 属性是 Memory，但是 PBMT 属性为 IO 或 NC，发起的 CHI 事务的 Order 为 EndpointOrder
+- If the PMA attribute of the address is Memory, but the PBMT attribute is IO or
+  NC, the Order of the initiated CHI transaction is RequestOrder
+- If the PMA attribute of the address is Memory, but the PBMT attribute is IO or
+  NC, the Order of the initiated CHI transaction is EndpointOrder
 
-无论是 RequestOrder 还是 EndpointOrder，发起的 ReadNoSnp 都需要下游返回 ReadReceipt 来对读操作定序。因此
-MMIOBridge 会侦听各个 entry 是否在等待 ReadReceipt（即 ```w_readreceipt``` 是否拉低），如果某个 entry
-在等待 ReadReceipt 那么所有 entry 都不能向下发送新的 ReadNoSnp。
+Whether RequestOrder or EndpointOrder, initiated ReadNoSnp requires downstream
+to return ReadReceipt for read operation ordering. Thus, MMIOBridge monitors
+whether each entry is waiting for ReadReceipt (i.e., whether ```w_readreceipt```
+is pulled low). If any entry is waiting for ReadReceipt, no new ReadNoSnp can be
+sent downstream from any entry.
 
-## 内存属性
+## Memory Attributes
 
-CHI 总线协议定义了如下 4 个维度的内存属性：
+The CHI bus protocol defines the following four dimensions of memory attributes:
 
 - Allocate
 - Cacheable
 - Device
 - EWA (Early Write Acknowledgment)
 
-对于 MMIOBridge 发起的请求，Allocate 和 Cacheable 总是 0；Device 取决于 PMA 属性，如果 PMA 属性为
-Memory 则 Device 为 0，否则 Device 为 1；EWA 可以理解为该地址能否被 Buffer，如果该地址的 PMA 属性为
-Memory，或者 PMA 属性不是 Memory 但是 PBMT 属性为 NC，则认为该地址可以被 Buffer，EWA 置为 1，否则 EWA 置 0。
+For requests initiated by MMIOBridge, Allocate and Cacheable are always 0;
+Device depends on the PMA attribute—if the PMA attribute is Memory, Device is 0,
+otherwise Device is 1; EWA can be understood as whether the address can be
+Buffered. If the PMA attribute of the address is Memory, or the PMA attribute is
+not Memory but the PBMT attribute is NC, the address is considered Bufferable,
+and EWA is set to 1; otherwise, EWA is set to 0.
 
-## P-Credit 仲裁
+## P-Credit arbitration
 
-MMIOBridge 支持 CHI 总线的协议层重传。根据 CHI 总线协议，一个事务在收到 RetryAck 和 PCrdGrant
-后才能发起协议层重传。其中 RetryAck 的 TxnID 和 TXREQ 通道的请求的 TxnID 一致，因此 RetryAck 可以通过 TxnID 和
-MMIOBridge 中的 entry 一一对应。然而 PCrdGrant 只要 SrcID 和 PCrdType 两个字段和 RetryAck
-一致即可匹配，无法通过 TxnID 直接和 MMIOBridge 中的 entry 做匹配。
+MMIOBridge supports protocol-layer retransmission on the CHI bus. According to
+the CHI bus protocol, a transaction can initiate protocol-layer retransmission
+only after receiving RetryAck and PCrdGrant. The TxnID of RetryAck matches the
+TxnID of the request on the TXREQ channel, so RetryAck can be mapped one-to-one
+with entries in MMIOBridge via TxnID. However, PCrdGrant only requires the SrcID
+and PCrdType fields to match RetryAck, and cannot be directly matched with
+entries in MMIOBridge via TxnID.
 
-基于上述 CHI 协议的规定，CoupledL2 在收到 PCrdGrant 时，无法直接根据 PCrdGrant 的字段判断该 P-Credit 应该仲裁给
-MMIOBridge 还是 4 个 Slice，更无法判断如何将 P-Credit 对应到某一项 MMIOBridgeEntry 或某一项 MSHR。因此
-P-Credit 的仲裁逻辑位于 CoupledL2 的顶层。当收到 PCrdGrant 时 CoupledL2 会将其暂存在顶层的寄存器中（主要记录
-SrcID 和 PCrdType 等关键字段），收到 RetryAck 的 MSHR / MIOBridgeEntry 会用 RetryAck 的 SrcID
-和 PCrdType 与 PCrdGrant 寄存器堆进行匹配，如果匹配到，寄存器堆的这一项会被释放，如果没有匹配到会一直等待下游的 PCrdGrant
-直到匹配成功。
+Based on the CHI protocol specifications, when CoupledL2 receives a PCrdGrant,
+it cannot directly determine whether the P-Credit should be arbitrated to the
+MMIOBridge or the four slices based on the PCrdGrant fields, nor can it
+determine how to map the P-Credit to a specific MMIOBridgeEntry or MSHR.
+Therefore, the P-Credit arbitration logic resides at the top level of CoupledL2.
+Upon receiving a PCrdGrant, CoupledL2 temporarily stores it in a top-level
+register (recording key fields such as SrcID and PCrdType). The
+MSHR/MMIOBridgeEntry that receives a RetryAck will match the RetryAck's SrcID
+and PCrdType with the PCrdGrant register bank. If a match is found, the
+corresponding register entry is released; if not, it will wait for a downstream
+PCrdGrant until a successful match occurs.

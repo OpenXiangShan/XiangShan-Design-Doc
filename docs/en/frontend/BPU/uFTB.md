@@ -81,7 +81,7 @@ TODO: The diagram does not match Kunming Lake and needs to be updated.
 
 ## Interface timing
 
-### Result Output Interface
+### Result output interface
 
 ![Result Output Interface](../figure/BPU/uFTB/port1.png)
 

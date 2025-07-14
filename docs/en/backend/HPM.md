@@ -31,7 +31,7 @@ Table: Submodule List
   RISC-V Privileged Specification, with additional support for sstc and sscofpmf
   extensions.
 - The clock cycles executed by the hart (cycle)
-- Number of instructions committed by the hardware thread (minstret)
+- Number of instructions committed by the hart (minstret)
 - Hardware Timer (time)
 - Counter overflow flag (time)
 - 29 hardware performance counters (hpmcounter3 - hpmcounter3)
@@ -43,8 +43,8 @@ Table: Submodule List
 The basic functions of HPM are as follows:
 
 * Disable all performance event monitoring via the mcountinhibit register.
-* Initialize performance event counters for each monitoring unit, including:
-  mcycle, minstret, mhpmcounter3 - mhpmcounter31.
+* Initialize echo performance event counters, including: mcycle, minstret,
+  mhpmcounter3 - mhpmcounter31.
 * Configure performance event selectors for each monitoring unit, including:
   mhpmcounter3 - mhpmcounter31. The Xiangshan Kunminghu architecture allows up
   to four event combinations per selector. After writing the event index value,

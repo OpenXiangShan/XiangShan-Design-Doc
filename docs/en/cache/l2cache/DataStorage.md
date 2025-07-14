@@ -1,4 +1,6 @@
-# 数据 SRAM DataStorage
+# Data SRAM DataStorage
 
-DataStorage 模块负责 CoupledL2 数据 SRAM 的读写，采用单端口 SRAM 搭建。请求只会在 MainPipe s3 流水级与
-DataStorage 交互。DataStorage 每拍只能处理一个读请求或写请求。
+The DataStorage module is responsible for reading and writing the CoupledL2 data
+SRAM, constructed using single-port SRAM. Requests only interact with
+DataStorage during the MainPipe s3 pipeline stage. DataStorage can handle only
+one read or write request per clock cycle.

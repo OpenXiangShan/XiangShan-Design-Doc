@@ -1,25 +1,30 @@
-# 三级模块 Miss Queue
+# Level-3 Module: Miss Queue
 
-Miss Queue 指的是如下模块：
+The Miss Queue refers to the following module:
 
 * L2TlbMissQueue missQueue
 
-## 设计规格
+## Design specifications
 
-1. 缓冲请求等待资源
+1. Buffering requests while waiting for resources
 
-## 功能
+## Function
 
-### 缓冲请求等待资源
+### Buffering requests while waiting for resources
 
-Miss Queue 的本质是一个队列，接收来自 Page Cache 和 Last Level Page Table Walker 的请求，发送给 Page
-Cache。当 Page Cache 发送给 PTW 但请求是 isFirst 或者 PTW busy，则发送给 Miss Queue，当 Page Cache
-发送给 LLPTW 但 LLPTW busy，则发送给 Miss Queue。
+The essence of the Miss Queue is a queue that receives requests from the Page
+Cache and the Last Level Page Table Walker, and sends them to the Page Cache. If
+the Page Cache sends a request to the PTW but the request is isFirst or the PTW
+is busy, it is sent to the Miss Queue. Similarly, if the Page Cache sends a
+request to the LLPTW but the LLPTW is busy, it is also sent to the Miss Queue.
 
-## 整体框图
+## Overall Block Diagram
 
-Miss Queue 的整体结构较为简单，不再赘述。关于 Miss Queue 与其他 L2 TLB 中模块的连接关系，参见 5.3.3 节。
+The overall structure of the Miss Queue is relatively simple and will not be
+elaborated further. For the connection relationships between the Miss Queue and
+other modules in the L2 TLB, refer to Section 5.3.3.
 
-## 接口时序
+## Interface timing
 
-Miss Queue 的本质是一个队列，接口时序比较简单，不再赘述，
+The essence of the Miss Queue is a queue, and its interface timing is relatively
+straightforward, so it will not be elaborated further.
