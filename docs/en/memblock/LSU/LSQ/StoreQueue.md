@@ -1,314 +1,399 @@
-# Store 队列 StoreQueue
+# Store Queue (StoreQueue)
 
-## 功能描述
+## Functional Description
 
-StoreQueue是一个队列，用来装所有的 store 指令，功能如下：
+StoreQueue is a queue that holds all store instructions, with the following
+functionalities:
 
-* 在跟踪 store 指令的执行状态
+* Tracking the execution status of store instructions
 
-* 存储 store 的数据，跟踪数据的状态（是否到达）
+* Stores the store data and tracks its status (whether it has arrived).
 
-* 为load提供查询接口，让load可以forward相同地址的store
+* Provides a query interface for loads, allowing loads to forward stores with
+  the same address.
 
-* 负责 MMIO store和NonCacheable store的执行
+* Responsible for executing MMIO stores and NonCacheable stores
 
-* 将被 ROB 提交的 store 写到 sbuffer 中
+* Write stores committed by the ROB into the sbuffer
 
-* 维护地址和数据就绪指针，用于LoadQueueRAW的释放和LoadQueueReplay的唤醒
+* Maintain address and data ready pointers for LoadQueueRAW release and
+  LoadQueueReplay wake-up
 
-store进行了地址与数据分离发射的优化，即 StoreUnit 是 store 的地址发射出来走的流水线，StdExeUnit 是 store
-的数据发射出来走的流水线，是两个不同的保留站，store 的数据就绪了就可以发射到 StdExeUnit，store 的地址就绪了就可以发射到
-StoreUnit。
+Stores have been optimized with separate address and data dispatch, meaning the
+StoreUnit is the pipeline for dispatching store addresses, while the StdExeUnit
+is the pipeline for dispatching store data. These are two different reservation
+stations. Store data can be dispatched to the StdExeUnit once ready, and store
+addresses can be dispatched to the StoreUnit once ready.
 
-* StoreQueue中每一项保存了store指令的基础信息：
+* Each entry in the StoreQueue stores the basic information of a store
+  instruction:
 
-Table: StoreQueue存储的基础信息
+Table: Basic information stored in StoreQueue
 
-| Field       | 描述               |
-| ----------- | ---------------- |
-| uop         | store指令uop       |
-| dataModule  | 128bits数据和数据有效掩码 |
-| paddrModule | 物理地址             |
-| vaddrModule | 虚拟地址             |
+| Field       | Description                      |
+| ----------- | -------------------------------- |
+| uop         | store instruction uop            |
+| dataModule  | 128-bit data and data valid mask |
+| paddrModule | Physical address                 |
+| vaddrModule | Virtual Address                  |
 
 
-* StoreQueue中每一项都有若干状态位来表示这个store处于什么样的状态:
+* Each entry in the StoreQueue has several status bits indicating the state of
+  the store.
 
-Table: StoreQueue存储的状态信息
+Table: State information stored in the StoreQueue
 
-| Field         | 描述                                               |
-| ------------- | ------------------------------------------------ |
-| allocated     | 设置这个entry的allocated状态，开始记录这条store 的生命周期。         |
-|               | 当这条store指令被提交到Sbuffer时，allocated状态被清除。           |
-| addrvalid     | 表示是否已经经过了地址转换得到物理地址，用于 load forward 检查时的 cam 比较。 |
-| datavalid     | 表示store 的数据是否已经被发射出来，是否已经可用                      |
-| committed     | store 是否已经被 ROB commit 了                         |
-| unaligned     | 非对齐Store                                         |
-| cross16Byte   | 跨16字节边界                                          |
-| pending       | 在这条 store 是否是 MMIO 空间的 store，主要是用于控制 MMIO 的状态机   |
-| nc            | NonCacheable store                               |
-| mmio          | mmio store                                       |
-| atomic        | 原子store                                          |
-| memBackTypeMM | 是否是 PMA 为 main memory类                           |
-| prefetch      | 当提交到Sbuffer是否需要预取                                |
-| isVec         | 向量store                                          |
-| vecLastFlow   | 向量store flow的最后一个uop                             |
-| vecMbCommit   | 从合并缓冲区提交到 rob 的向量Store                           |
-| hasException  | store指令有异常                                       |
-| waitStoreS2   | 等待Store Unit s2的mmio和异常结果                        |
+| Field         | Description                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| allocated     | Set the allocated state for this entry to begin tracking the lifecycle of this store.                                                       |
+|               | When this store instruction is committed to the Sbuffer, the allocated status is cleared.                                                   |
+| addrvalid     | Indicates whether the physical address has been obtained through address translation, used for CAM comparison during load forward checking. |
+| datavalid     | Indicates whether the store data has been issued and is available.                                                                          |
+| committed     | Whether the store has been committed by the ROB.                                                                                            |
+| unaligned     | Unaligned Store                                                                                                                             |
+| cross16Byte   | Crossing a 16-byte boundary                                                                                                                 |
+| pending       | Whether this store is in MMIO space, primarily used to control the state machine of MMIO                                                    |
+| nc            | NonCacheable store                                                                                                                          |
+| mmio          | mmio store                                                                                                                                  |
+| atomic        | Atomic store                                                                                                                                |
+| memBackTypeMM | Whether the PMA is of the main memory type                                                                                                  |
+| prefetch      | Whether prefetching is required when submitting to Sbuffer                                                                                  |
+| isVec         | Vector store                                                                                                                                |
+| vecLastFlow   | The last uop of the vector store flow                                                                                                       |
+| vecMbCommit   | Vector stores committed from the merge buffer to the ROB.                                                                                   |
+| hasException  | Store instruction has an exception                                                                                                          |
+| waitStoreS2   | Wait for the mmio and exception results from Store Unit s2.                                                                                 |
 
-### 特性 1: 数据前递
+### Feature 1: Data forwarding
 
-* load需要查询StoreQueue来找到在它之前的相同地址的与它最近的依赖store的数据。
+* A load needs to query the StoreQueue to find the data of the most recent
+  dependent store with the same address that precedes it.
 
-    * 查询总线(io.forwrd.sqIdx)和StoreQueue的enqPtr指针比较，找出所有比load指令老的StoreQueue中的entry。以flag相同或不同分为2种情况
+    * Compare the query bus (io.forwrd.sqIdx) with StoreQueue's enqPtr pointer
+      to identify all StoreQueue entries older than the load instruction.
+      Divided into two cases based on whether flags match or differ.
 
-      * 如果是same flag, 则older Store范围是 [tail, sqIdx - 1],
-        如图\ref{fig:LSQ-StoreQueue-Forward-Mask} a）所示； 否则older Store范围是[tail,
-        VirtualLoadQueueSize - 1]和[0,
-        sqIdx]，如图\ref{fig:LSQ-StoreQueue-Forward-Mask} b）所示
+      * If the same flag is set, the range of older stores is [tail, sqIdx - 1],
+        as shown in Figure \ref{fig:LSQ-StoreQueue-Forward-Mask} a). Otherwise,
+        the range of older stores is [tail, VirtualLoadQueueSize - 1] and [0,
+        sqIdx], as shown in Figure \ref{fig:LSQ-StoreQueue-Forward-Mask} b).
 
-      ![StoreQueue前递范围生成](./figure/LSQ-StoreQueue-Forward-Mask.svg){#fig:LSQ-StoreQueue-Forward-Mask
+      ![StoreQueue forwarding range
+      generation](./figure/LSQ-StoreQueue-Forward-Mask.svg){#fig:LSQ-StoreQueue-Forward-Mask
       width=90%}
 
 
-    * 查询总线用虚拟地址和物理地址同时查询，如果发现物理地址匹配但是虚拟地址不匹配；或者虚拟地址匹配但是物理地址不匹配的情况就需要将那条 load 设置为
-      replayInst，等 load 到 ROB head 后重新取指令执行。
+    * The query bus uses both virtual and physical addresses for lookup. If a
+      physical address match is found but the virtual address does not match, or
+      vice versa, the corresponding load instruction is marked as replayInst and
+      will be re-executed once the load reaches the ROB head.
 
-    * 如果只发现一笔entry匹配且数据准备好，则直接forward
+    * If only one matching entry is found and its data is ready, forward it
+      directly.
 
-    * 如果只发现一笔entry匹配且数据没有准备好，就需要让保留站负责重发
+    * If only one matching entry is found and the data is not ready, the
+      reservation station must be responsible for resending
 
-    * 如果发现多笔匹配，则选择最老的一笔store前递
+    * If multiple matches are found, forward the oldest store.
 
-    * StoreQueue以1字节为单位，采用树形数据选择逻辑,如图\ref{fig:LSQ-StoreQueue-Forward}所示
+    * The StoreQueue operates in 1-byte units, employing a tree-based data
+      selection logic, as shown in Figure \ref{fig:LSQ-StoreQueue-Forward}.
 
   \newpage
 
-  ![StoreQueue前递数据选择](./figure/LSQ-StoreQueue-Forward.svg){#fig:LSQ-StoreQueue-Forward
+  ![StoreQueue Forward Data
+  Selection](./figure/LSQ-StoreQueue-Forward.svg){#fig:LSQ-StoreQueue-Forward
   width=80%}
 
 
-* 参与数据前递的store需要满足：
+* Stores participating in data forwarding must satisfy:
 
-    * allocated：这条 store 还在 store queue 内，还没有写到 sbuffer
+    * allocated: This store is still within the store queue and has not been
+      written to sbuffer yet.
 
-    * datavalid：这条 store 的数据已经就绪
+    * datavalid: The data for this store is ready.
 
-    * addrvalid：这条 store 已经完成了虚实地址转换，得到了物理地址
+    * addrvalid: This store has completed virtual-to-physical address
+      translation and obtained the physical address.
 
-    * 如果启用了访存以来预测器，则SSID (Store-Set-ID)
-      标记了之前load预测执行失败历史信息，如果当前load命中之前历史中的SSID，会等之前所有older的store都执行完；如果没有命中就只会等物理地址相同的older
-      Store执行完成。
+    * If the memory dependency predictor is enabled, the SSID (Store-Set-ID)
+      marks historical information of previously failed load prediction
+      executions. If the current load hits an SSID in the history, it waits for
+      all older stores to complete; if there is no hit, it only waits for older
+      stores with the same physical address to complete.
 
-### 特性 2：非对齐store指令
+### Feature 2: Misaligned store instructions
 
-StoreQueue支持处理非对齐的Store指令，每一个非对齐的Store指令占用一项，并在写入dataBuffer对地址和数据对齐后写入。
+The StoreQueue supports handling unaligned store instructions. Each unaligned
+store instruction occupies one entry and is written after aligning the address
+and data in the dataBuffer.
 
-### 特性 3：向量Store指令
+### Feature 3: Vector Store Instructions
 
-如图\ref{fig:LSQ-StoreQueue-Vector}所示，StoreQueue会给向量store指令预分配一些项。StoreQueue通过vecMbCommit控制向量store的提交：
+As shown in Figure \ref{fig:LSQ-StoreQueue-Vector}, StoreQueue pre-allocates
+entries for vector store instructions. StoreQueue controls the commit of vector
+stores via vecMbCommit:
 
-  * 针对每个 store，从反馈向量 fbk 中获取相应的信息。
+  * For each store, retrieve the corresponding information from the feedback
+    vector fbk.
 
-    判断该 store 是否符合提交条件（valid 且标记为 commit 或 flush），并且检查该 store 是否与 uop(i)
-    对应的指令匹配（通过 robIdx 和 uopIdx）。只有当满足所有条件时，才会将该 store
-    标记为提交。判断VecStorePipelineWidth内是否有指令满足条件，满足则 判断该向量store提交，否则为提交。
+    Determines if the store meets the commit conditions (valid and marked as
+    commit or flush) and checks if the store matches the instruction
+    corresponding to uop(i) (via robIdx and uopIdx). The store is marked as
+    committed only when all conditions are met. Checks if any instruction within
+    VecStorePipelineWidth meets the conditions; if so, the vector store is
+    considered committed; otherwise, it is not.
 
-  * 特殊情况处理（Store 跨页）:
+  * Special case handling (Store crossing page boundaries):
 
-    在特殊情况下（当 store 跨页且 storeMisalignBuffer 中有相同的 uop），如果该 store
-    符合条件io.maControl.toStoreQueue.withSameUop，会强制将 vecMbCommit设置为 true，表示该 store
-    无论如何都已提交。
+    Under special circumstances (when a store crosses page boundaries and
+    storeMisalignBuffer contains the same uop), if the store meets the condition
+    io.maControl.toStoreQueue.withSameUop, vecMbCommit is forcibly set to true,
+    indicating that the store is committed regardless of other factors.
 
-![向量Store指令](./figure/LSQ-StoreQueue-Vector.svg){#fig:LSQ-StoreQueue-Vector
+![Vector store
+instruction](./figure/LSQ-StoreQueue-Vector.svg){#fig:LSQ-StoreQueue-Vector
 width=25%}
 
 
-### 特性 4：CMO
+### Feature 4: CMO
 
-StoreQueue支持CMO指令，CMO指令共用MMIO的状态机控制:
+StoreQueue supports CMO instructions, which share the MMIO state machine
+control:
 
-  * s_idle: 空闲状态，接收到CMO的store请求后进入到s_req状态;
+  * s_idle: Idle state, transitions to s_req upon receiving a CMO store request.
 
-  * s_req: 刷新Sbuffer，等待刷行完成之后, 通过CMOReq发送CMO操作请求, 进入s_resp状态
+  * s_req: Refresh the Sbuffer, wait for the line flush to complete, then send a
+    CMO operation request via CMOReq, and enter the s_resp state
 
-  * s_resp: 接受到CMOResp返回的响应，进入s_wb状态
+  * s_resp: Upon receiving the response from CMOResp, transitions to s_wb state.
 
-  * s_wb: 等待ROB提交CMO指令，进入s_idle状态
+  * s_wb: Waits for the ROB to commit the CMO instruction, then transitions to
+    the s_idle state.
 
-### 特性 5：CBO
+### Feature 5: CBO
 
-StoreQueue支持CBO.zero指令:
+StoreQueue supports CBO.zero instruction:
 
-  * CBO.zero指令的数据部分将0写入dataModule
+  * The data portion of the CBO.zero instruction writes 0 to the dataModule.
 
-  * CBO.zero写入Sbuffer时：刷新Sbuffer，等待刷新完毕之后，通过cboZeroStout写回。
+  * When CBO.zero is written to Sbuffer: flush the Sbuffer, wait for the flush
+    to complete, and then write back via cboZeroStout.
 
-### 特性 6: MMIO与NonCacheable Store指令
+### Feature 6: MMIO and NonCacheable Store Instructions
 
-* MMIO Store指令执行
+* Execution of MMIO Store instructions
 
-  * MMIO 空间的 store 也只能等它到达 ROB 的 head 时才能执行，但是跟 load 稍微有些不同，store 到达 ROB 的 head
-    时，它不一定位于 store queue 的尾部，有可能有的 store 已经提交，但是还在 store queue 中没有写入到
-    sbuffer，需要等待这些 store 写到 sbuffer 之后，才能让这条 MMIO 的 store 去执行
+  * Stores to MMIO space can only be executed when they reach the head of the
+    ROB, but they differ slightly from loads. When a store reaches the head of
+    the ROB, it may not necessarily be at the tail of the store queue. Some
+    stores may have already been committed but are still in the store queue and
+    have not been written to the sbuffer. These stores must first be written to
+    the sbuffer before the MMIO store can proceed.
 
-  * 利用一个状态机去控制MMIO的store执行
+  * Use a state machine to control the execution of MMIO stores.
 
-    * s_idle：空闲状态，接收到MMIO的store请求后进入到s_req状态;
+    * s_idle: Idle state, transitions to s_req upon receiving an MMIO store
+      request;
 
-    * s_req：给MMIO通道发请求，请求被MMIO通道接受后进入s_resp状态;
+    * s_req: Send a request to the MMIO channel. Once the request is accepted by
+      the MMIO channel, it transitions to the s_resp state.
 
-    * s_resp：MMIO通道返回响应，接收后记录是否产生异常，并进入到 s_wb 状态
+    * s_resp: The MMIO channel returns a response. After receiving it, record
+      whether an exception is generated and transition to the s_wb state.
 
-    * s_wb：将结果转化为内部信号，写回给 ROB，成功后,如果有异常，则进入s_idle, 否则进入到 s_wait 状态
+    * s_wb: Convert the result into internal signals and write back to ROB. Upon
+      success, if there is an exception, transition to s_idle; otherwise,
+      proceed to the s_wait state.
 
-    * s_wait：等待 ROB 将这条 store 指令提交，提交后重新回到 s_idle 状态
+    * s_wait: Wait for the ROB to commit this store instruction. After commit,
+      return to the s_idle state.
 
-* NonCacheable Store指令执行
+* NonCacheable Store instruction execution
 
-  * NonCacheable空间的store指令，需要等待提交之后，才能从StoreQueue按序发送请求
+  * For store instructions in NonCacheable space, they must wait until after
+    commit before being sent out in order from the StoreQueue
 
-  * 利用一个状态机去控制NonCacheable的store执行
+  * Use a state machine to control NonCacheable store execution.
 
-    * nc_idle：空闲状态，接收到NonCacheable的store请求后进入到nc_req状态;
+    * nc_idle: Idle state, transitions to nc_req upon receiving a NonCacheable
+      store request.
 
-    * nc_req：给NonCacheable通道发请求，请求被NonCachable通道接受后,
-      如果启用uncacheOutstanding功能，则进入nc_idle，否则进入nc_resp状态;
+    * nc_req: Sends a request to the NonCacheable channel. After the request is
+      accepted by the NonCacheable channel, if the uncacheOutstanding feature is
+      enabled, it transitions to nc_idle; otherwise, it enters the nc_resp
+      state.
 
-    * nc_resp：接受NonCacheable通道返回响应，并进入到nc_idle状态
+    * nc_resp: Accepts the response from the NonCacheable channel and
+      transitions to the nc_idle state
 
-### 特性 7: store指令提交以及写入SBuffer
+### Feature 7: Store instruction commit and write to SBuffer
 
-StoreQueue采用提前提交的方式
-* 提前提交规则:
+The StoreQueue adopts an early commit approach.
+* Early Commit Rules:
 
-  * 检查进入提交阶段的条件
+  * Check the conditions for entering the commit phase.
 
-    * 指令有效。
+    * Instruction valid.
 
-    * 指令的ROB对头指针不超过待提交指针。
+    * The ROB head pointer of the instruction does not exceed the pending commit
+      pointer.
 
-    * 指令不需要取消。
+    * Instruction does not need to be canceled.
 
-    * 指令不等待Store操作完成，或者是向量指令
+    * The instruction does not wait for the Store operation to complete, or it
+      is a vector instruction
 
-  * 如果是CommitGroup的第一条指令, 则
+  * If it is the first instruction in the CommitGroup, then
 
-    * 检查MMIO状态: 没有MMIO操作或者有MMIO操作并且MMIO store以及提交。
+    * Check MMIO status: No MMIO operation or an MMIO operation exists and the
+      MMIO store has been committed.
 
-    * 如果是向量指令，否则需满足vecMbCommit条件，。
+    * For vector instructions, otherwise the vecMbCommit condition must be
+      satisfied.
 
-  * 如果不是CommitGroup的第一条指令，则：
+  * If it is not the first instruction in the CommitGroup, then:
 
-    * 提交状态依赖于前一条指令的提交状态。
+    * The commit state depends on the commit state of the previous instruction.
 
-    * 如果是向量指令，需满足vecMbCommit条件。
+    * For vector instructions, the vecMbCommit condition must be satisfied.
 
-提交之后可以按顺序写到 sbuffer, 先将这些 store 写到 dataBuffer 中，dataBuffer
-是一个两项的缓冲区（0，1通道），用来处理从大项数 store queue
-中的读出延迟。只有0通道可以编写未对齐的指令,同时为了简化设计，即使两个端口出现异常，但仍然只有一个未对齐出队。
+After submission, stores can be written sequentially to the sbuffer. These
+stores are first written to the dataBuffer, which is a two-entry buffer
+(channels 0 and 1) used to handle read latency from the larger store queue. Only
+channel 0 can handle unaligned instructions. To simplify the design, even if
+exceptions occur on both ports, only one unaligned dequeue is allowed.
 
-* 写入有效信号生成:
+* Write valid signal generation:
 
-  * 0通道指令存在非对齐且跨越16字节边界时：
+  * When a 0-channel instruction is misaligned and crosses a 16-byte boundary:
 
-    * 0通道的指令已分配和提交
+    * Instructions in Channel 0 have been allocated and committed
 
-    * dataBuffer的0，1通道能同时接受指令，
+    * Channels 0 and 1 of the dataBuffer can simultaneously accept instructions.
 
-    * 0通道的指令不是向量指令，并且地址和数据有效；或者是向量且vsMergeBuffer以及提交。
+    * Channel 0 instruction is not a vector instruction and the address and data
+      are valid; or it is a vector instruction with vsMergeBuffer and committed.
 
-    * 没有跨越4K页表；或者跨越4K页表但是可以被出队,并且1）如果是0通道：允许有异常的数据写入; 2）如果是1通道：不允许有异常的数据写入。
+    * Does not cross a 4K page table; or crosses a 4K page table but can be
+      dequeued, and 1) if it is channel 0: allows writing data with exceptions;
+      2) if it is channel 1: does not allow writing data with exceptions.
 
-    * 之前的指令没有NonCacheable指令，如果是第一条指令，自身不能是Noncacheable指令
+    * The previous instruction was not a NonCacheable instruction. If it is the
+      first instruction, it cannot itself be a Noncacheable instruction.
 
-  * 否则，需要满足
+  * Otherwise, the following conditions must be met
 
-    * 指令已分配和提交。
+    * Instructions have been allocated and committed.
 
-    * 不是向量且地址和数据有效，或者是向量且vsMergeBuffer以及提交。
+    * Not a vector and the address and data are valid, or it is a vector and
+      vsMergeBuffer is submitted.
 
-    * 之前的指令没有NonCacheable和MMIO指令，如果是第一条指令，自身不能是Noncacheable和MMIO指令。
+    * Previous instructions were neither NonCacheable nor MMIO instructions. If
+      it is the first instruction, it cannot itself be a Noncacheable or MMIO
+      instruction.
 
-    * 如果未对齐store，则不能跨越16字节边界，且地址和数据有效或有异常
+    * For unaligned stores, they must not cross a 16-byte boundary, and the
+      address and data must be valid or an exception will occur.
 
-* 地址和数据生成:
+* Address and data generation:
 
-  * 地址拆分为高低两部分：
+  * Address is split into high and low parts:
 
-    * 低位地址：8字节对齐地址
+    * Low-order address: 8-byte aligned address
 
-    * 高位地址：低位地址加上8偏移量
+    * High address: Low address plus an 8-byte offset
 
-  * 数据拆分为高低两部分：
+  * Data is split into high and low parts:
 
-    * 跨16字节边界数据：原始数据左移地址低4位偏移量包含的字节数
+    * Crossing 16-byte boundary data: The original data is left-shifted by the
+      number of bytes contained in the lower 4-bit offset of the address.
 
-    * 低位数据：跨16字节边界数据的低128位；
+    * Lower data: The lower 128 bits of data crossing a 16-byte boundary;
 
-    * 高位数据：跨16字节边界数据的高128位；
+    * High-order data: The upper 128 bits of data crossing a 16-byte boundary.
 
-  * 写入选择逻辑:
+  * Write selection logic:
 
-    * 如果dataBuffer能接受非对齐指令写入,通道0的指令是非对齐并且跨越了16字节边界，则
+    * If dataBuffer can accept misaligned instruction writes, and the
+      instruction in channel 0 is misaligned and crosses a 16-byte boundary,
+      then
 
-      * 检查是否跨4K页表同时跨4K页表可以出队: 通道0使用低位地址和低位数据写入dataBuffer;
-        通道1使用StoreMisaligBuffer的物理地址和高位数据写入dataBuffer
+      * Check if it crosses a 4K page table and can be dequeued while crossing:
+        Channel 0 uses the low address and low data to write to dataBuffer;
+        Channel 1 uses the physical address from StoreMisaligBuffer and high
+        data to write to dataBuffer.
 
-      * 否则: 通道0使用低位地址和低位数据写入dataBuffer; 通道1使用高位地址和高位数据写入dataBuffer
+      * Otherwise: Channel 0 uses the lower address and lower data to write to
+        dataBuffer; Channel 1 uses the higher address and higher data to write
+        to dataBuffer.
 
-    * 如果通道指令没有跨越16字节并且非对齐，则使用16字节对齐地址和对齐数据写入dataBuffer
+    * If the channel instruction does not cross a 16-byte boundary and is
+      unaligned, use a 16-byte aligned address and aligned data to write to the
+      dataBuffer.
 
-    * 否则，将原始数据和地址写给dataBuffer
+    * Otherwise, pass the original data and address to dataBuffer.
 
-### 特征 7：强制刷新Sbuffer
+### Feature 7: Force flush Sbuffer
 
-StoreQueue采用双阈值的方法控制强制刷新Sbuffer：上阈值和下阈值。当StoreQueue的有效项数大于上阈值时，
-StoreQueue强制刷新Sbuffer，直到StoreQueue的有效项数小于下阈值时，停止刷新Sbuffer，
+StoreQueue employs a dual-threshold method to control forced Sbuffer flushing:
+upper threshold and lower threshold. When the number of valid entries in
+StoreQueue exceeds the upper threshold, StoreQueue forces Sbuffer flushing until
+the number of valid entries falls below the lower threshold, at which point
+Sbuffer flushing stops.
 
 \newpage
 
-## 整体框图
+## Overall Block Diagram
 
-![StoreQueue整体框架](./figure/LSQ-StoreQueue.svg){#fig:LSQ-StoreQueue width=90%}
+![StoreQueue overall framework](./figure/LSQ-StoreQueue.svg){#fig:LSQ-StoreQueue
+width=90%}
 
-## 接口时序
+## Interface timing
 
-### 入队接口时序实例
+### Enqueue interface timing example
 
-![StoreQueue整体框架](./figure/LSQ-StoreQueue-Enq-Timing.svg){#fig:LSQ-StoreQueue-Enq-Timing
+![StoreQueue Overall
+Framework](./figure/LSQ-StoreQueue-Enq-Timing.svg){#fig:LSQ-StoreQueue-Enq-Timing
 width=90%}
 
 \newpage
 
-### 数据更新接口时序
+### Data update interface timing.
 
-![数据更新接口时序](./figure/LSQ-StoreQueue-Data-Timing.svg){#fig:LSQ-StoreQueue-Data-Timing
+![Data Update Interface
+Timing](./figure/LSQ-StoreQueue-Data-Timing.svg){#fig:LSQ-StoreQueue-Data-Timing
 width=90%}
 
-### 地址更新接口时序
+### Address Update Interface Timing
 
-StoreQueue地址更新和数据更新类似，StoreUnit通过s1阶段的io_lsq更新地址，在s2阶段通过io_lsq_replenish更新异常，与数据更新不同的是，更新地址只需要一拍，而不是两拍
+StoreQueue address updates are similar to data updates. The StoreUnit updates
+the address via io_lsq in the s1 stage and updates exceptions via
+io_lsq_replenish in the s2 stage. Unlike data updates, address updates only
+require one cycle instead of two.
 
-### MMIO接口时序实例
+### MMIO interface timing example
 
-![MMIO接口时序实例](./figure/LSQ-StoreQueue-MMIO-Timing.svg){#fig:LSQ-StoreQueue-MMIO-Timing
-width=90%}
-
-\newpage
-### NonCacheable接口时序实例
-
-![NonCacheable接口时序实例](./figure/LSQ-StoreQueue-NC-Timing.svg){#fig:LSQ-StoreQueue-NC-Timing
-width=90%}
-
-### CBO接口时序实例
-
-![CBO接口时序实例](./figure/LSQ-StoreQueue-CBO-Timing.svg){#fig:LSQ-StoreQueue-CBO-Timing
+![MMIO Interface Timing
+Example](./figure/LSQ-StoreQueue-MMIO-Timing.svg){#fig:LSQ-StoreQueue-MMIO-Timing
 width=90%}
 
 \newpage
-### CMO接口时序实例
+### NonCacheable Interface Timing Example
 
-![CMO接口时序实例](./figure/LSQ-StoreQueue-CMO-Timing.svg){#fig:LSQ-StoreQueue-CMO-Timing
+![NonCacheable Interface Timing
+Example](./figure/LSQ-StoreQueue-NC-Timing.svg){#fig:LSQ-StoreQueue-NC-Timing
+width=90%}
+
+### CBO interface timing example
+
+![CBO interface timing
+example](./figure/LSQ-StoreQueue-CBO-Timing.svg){#fig:LSQ-StoreQueue-CBO-Timing
+width=90%}
+
+\newpage
+### CMO Interface Timing Example
+
+![CMO interface timing
+example](./figure/LSQ-StoreQueue-CMO-Timing.svg){#fig:LSQ-StoreQueue-CMO-Timing
 width=90%}

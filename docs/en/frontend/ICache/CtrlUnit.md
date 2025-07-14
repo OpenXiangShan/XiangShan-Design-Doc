@@ -1,16 +1,18 @@
-# CtrlUnit 子模块文档
+# CtrlUnit Submodule Documentation
 
-目前 CtrlUnit 主要负责 ECC 校验使能/错误注入等功能
+Currently, CtrlUnit mainly handles ECC check enable/error injection functions
 
 ## mmio-mapped CSR
 
-CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地址可由参数 `cacheCtrlAddressOpt`
-配置，默认地址为`0x38022080`。总大小为 128B。
+CtrlUnit implements a set of mmio-mapped CSRs connected to the tilelink bus,
+with the address configurable via parameter `cacheCtrlAddressOpt`, defaulting to
+`0x38022080`. The total size is 128B.
 
-当参数 `cacheCtrlAddressOpt` 为 `None` 时，CtrlUnit **不会实例化**。此时 ECC
-校验使能**默认开启**，软件不可控制关闭；软件不可控制错误注入。
+When parameter `cacheCtrlAddressOpt` is `None`, CtrlUnit **will not be
+instantiated**. In this case, ECC check enable**is enabled by default**, and
+software cannot disable it; software cannot control error injection.
 
-目前实现的 CSR 如下：
+Currently implemented CSRs are as follows:
 
 ```plain
               64     10        7         4         2        1        0
@@ -20,14 +22,14 @@ CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地
 0x08 ecciaddr  | WARL |       paddr        |
 ```
 
-| CSR      | field   | desp                                                   |
-| -------- | ------- | ------------------------------------------------------ |
-| eccctrl  | enable  | ECC 错误校验使能，原 `sfetchctl(0)`                            |
-| eccctrl  | inject  | ECC 错误注入使能，写 1 开始注入，读恒 0                               |
-| eccctrl  | itarget | ECC 错误注入目标，见后表                                         |
-| eccctrl  | istatus | ECC 错误注入状态（read-only），见后表                              |
-| eccctrl  | ierror  | ECC 错误原因（read-only），仅在`eccctrl.istatus===error`时有效，见后表 |
-| ecciaddr | paddr   | ECC 错误注入物理地址                                           |
+| CSR      | field   | desp                                                                                     |
+| -------- | ------- | ---------------------------------------------------------------------------------------- |
+| eccctrl  | enable  | ECC error check enable, originally `sfetchctl(0)`                                        |
+| eccctrl  | inject  | ECC error injection enabled, write 1 to start injection, read always 0                   |
+| eccctrl  | itarget | ECC error injection target, see table below                                              |
+| eccctrl  | istatus | ECC error injection status (read-only), see table below                                  |
+| eccctrl  | ierror  | ECC error reason (read-only), valid only when `eccctrl.istatus===error`, see table below |
+| ecciaddr | paddr   | ECC error injection physical address                                                     |
 
 `eccctrl.itarget`:
 
@@ -41,7 +43,7 @@ CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地
 
 | value | status   |
 | ----- | -------- |
-| 0     | idle     |
+| 0     | Idle     |
 | 1     | working  |
 | 2     | injected |
 | 7     | error    |
@@ -49,43 +51,53 @@ CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地
 
 `eccctrl.ierror`:
 
-| value | error                                            |
-| ----- | ------------------------------------------------ |
-| 0     | ECC 未使能 (i.e. `!eccctrl.enable`)                 |
-| 1     | inject 目标 SRAM 无效 (i.e. `eccctrl.itarget==rsvd`) |
-| 2     | inject 目标地址 (i.e. `ecciaddr.paddr`) 不在 ICache 中  |
-| 3-7   | rsvd                                             |
+| value | error                                                                         |
+| ----- | ----------------------------------------------------------------------------- |
+| 0     | ECC not enabled (i.e., `!eccctrl.enable`)                                     |
+| 1     | Inject target SRAM invalid (i.e. `eccctrl.itarget==rsvd`)                     |
+| 2     | The target address for injection (i.e. `ecciaddr.paddr`) is not in the ICache |
+| 3-7   | rsvd                                                                          |
 
-## 错误校验使能
+## Error Check Enable
 
-CtrlUnit 的 `eccctrl.enable` 位直接连接到 MainPipe，控制 ECC 校验使能。当该位为 0 时，ICache 不会进行 ECC
-校验。但仍会在重填时计算校验码并存储，这可能会有少量的额外功耗；如果不计算，则在未使能转换成使能时需要冲刷 ICache（否则读出的 parity code
-可能是错的）。
+The `eccctrl.enable` bit of CtrlUnit is directly connected to MainPipe,
+controlling ECC check enable. When this bit is 0, ICache will not perform ECC
+checks. However, it still calculates and stores the check code during refill,
+which may incur slight additional power consumption; if not calculated, flushing
+ICache is required when switching from disabled to enabled (otherwise the read
+parity code may be incorrect).
 
-## 错误注入使能
+## Error Injection Enable
 
-CtrlUnit 内部使用一个状态机控制错误注入过程，其 status （注意：与 `eccctrl.istatus` 不同）有：
+The CtrlUnit internally uses a state machine to control the error injection
+process, with its status (note: different from `eccctrl.istatus`) as follows:
 
-- idle：注入控制器闲置
-- readMetaReq：发送读取 metaArray 请求
-- readMetaResp：接收读取 metaArray 响应
-- writeMeta：写入 metaArray
-- writeData：写入 dataArray
+- idle: Injection controller idle
+- readMetaReq: Send read request to metaArray
+- readMetaResp: Receives read metaArray response
+- writeMeta: Write to metaArray
+- writeData: Writes to dataArray
 
-当软件向 `eccctrl.inject` 写入 1 时，进行以下简单检查，检查通过时状态机进入 `readMetaReq` 状态：
+When software writes 1 to `eccctrl.inject`, the following simple checks are
+performed. If passed, the state machine transitions to the `readMetaReq` state:
 
-- 若 `eccctrl.enable` 为 0，报错 `eccctrl.ierror=0`
-- 若 `eccctrl.itarget` 为 rsvd(1/3)，报错 `eccctrl.ierror=1`
+- If `eccctrl.enable` is 0, report error `eccctrl.ierror=0`
+- If `eccctrl.itarget` is rsvd(1/3), report error `eccctrl.ierror=1`
 
-在 `readMetaReq` 状态下，CtrlUnit 向 MetaArray 发送 `ecciaddr.paddr` 地址对应的 set
-读取的请求，等待握手。握手后转移到 `readMetaResp` 状态。
+In the `readMetaReq` state, CtrlUnit sends a read request to MetaArray for the
+set corresponding to address `ecciaddr.paddr`, waiting for handshake. After
+handshake, it transitions to the `readMetaResp` state.
 
-在 `readMetaResp` 状态下，CtrlUnit 接收到 MetaArray 的响应，检查 `ecciaddr.paddr` 地址对应的 ptag
-是否命中，若未命中则报错 `eccctrl.ierror=2`。否则，根据 `eccctrl.itarget` 进入 `writeMeta` 或
-`writeData` 状态。
+In the `readMetaResp` state, CtrlUnit receives the response from MetaArray and
+checks whether the ptag corresponding to the `ecciaddr.paddr` address hits. If
+not, it reports error `eccctrl.ierror=2`. Otherwise, based on `eccctrl.itarget`,
+it transitions to either the `writeMeta` or `writeData` state.
 
-在 `writeMeta` 或 `writeData` 状态下，CtrlUnit 向 MetaArray/DataArray 写入任意数据，同时拉高
-`poison` 位，写入完成后状态机进入 `idle` 状态。
+In the `writeMeta` or `writeData` state, CtrlUnit writes arbitrary data to
+MetaArray/DataArray while asserting the `poison` bit. After writing, the state
+machine transitions to the `idle` state.
 
-ICache 顶层中实现了一个 Mux，当 CtrlUnit 的状态机不为 `idle` 时，将 MetaArray/DataArray 的读写口连接到
-CtrlUnit，而非 MainPipe/IPrefetchPipe/MissUnit。当状态机 `idle` 时反之。
+The ICache top level implements a Mux. When the CtrlUnit's state machine is not
+in `idle`, it connects the read/write ports of MetaArray/DataArray to CtrlUnit
+instead of MainPipe/IPrefetchPipe/MissUnit. When the state machine is in `idle`,
+the opposite occurs.

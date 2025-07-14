@@ -1,81 +1,119 @@
 \newpage
-# 读后读违例检查 LoadQueueRAR
+# Read-After-Read Violation Check LoadQueueRAR
 
-## 功能描述
+## Functional Description
 
-多核环境下会出现load to
-load违例。单核环境下相同地址的load乱序执行本来是不关心的，但是如果两个load之间有另外一个核做了相同地址的store，并且本身这个核的两个load做了乱序调度，就有可能导致新的load没有看到store更新的结果，但是旧的load看到了，出现了顺序错误。
+Load-to-load violations can occur in a multi-core environment. In a single-core
+environment, out-of-order execution of loads to the same address is generally
+not a concern. However, if another core performs a store to the same address
+between two loads, and the two loads on the original core are scheduled out of
+order, it may result in the newer load not seeing the updated result from the
+store while the older load does, leading to a sequence error.
 
-多核环境下的load-load违例有一个特征，当前DCache一定会收到L2
-cache发来的Probe请求，使得DCache主动释放掉这个数据副本，这时DCache会通知load queue，将相同地址的load
-queue中已经完成访存的项做一个release标记。后续发往流水线的load指令会查询load
-queue中在它之后相同地址的load指令，如果存在release标记，就发生了load-load违例。
+In a multi-core environment, a load-load violation has a characteristic where
+the current DCache will inevitably receive a Probe request from the L2 cache,
+prompting the DCache to actively release this data copy. At this point, the
+DCache will notify the load queue to mark the entries in the load queue that
+have already completed memory access for the same address with a release flag.
+Subsequent load instructions sent to the pipeline will query the load queue for
+load instructions with the same address that come after them. If a release flag
+is found, a load-load violation occurs.
 
-LoadQueueRAR用于保存已经完成的load指令的用于load to
-load违例检测的信息。当load指令处于load流水线s2栈时，查询并分配空闲项将信息保存入LQRAR，在流水线s3栈时得到load to
-load违例检查的结果 ，如果出现违例则需要刷新流水线，给RedirectGenerator部件发送重定向请求, 冲刷违例的load之后的所有指令。
+LoadQueueRAR stores information for completed load instructions to detect
+load-to-load violations. When a load instruction is at the s2 stage of the load
+pipeline, it queries and allocates a free entry to save the information into
+LQRAR. At the s3 stage, the load-to-load violation check result is obtained. If
+a violation occurs, the pipeline is flushed, and a redirect request is sent to
+the RedirectGenerator unit to squash all instructions following the violating
+load.
 
-LoadQueueRAR中需要标记以下信息：
+The following information needs to be marked in LoadQueueRAR:
 
-* Allocated：表示entry是否有效。
-* Uop：MicroOp相关信息。
-* Paddr：进入LoadQueueRAR指令的物理地址压缩后的地址，一共16bits。
-* Released：表示该指令所访问的cacheline是否被release，多核环境下 L1
-  cache会接收到L2cache的probe请求。需要注意的是如果该指令是nc指令，在入队时就会被标记release。
+* Allocated: Indicates whether the entry is valid.
+* Uop: MicroOp-related information.
+* Paddr: The compressed physical address of the instruction entering
+  LoadQueueRAR, totaling 16 bits.
+* Released: Indicates whether the cacheline accessed by the instruction has been
+  released. In a multi-core environment, the L1 cache receives probe requests
+  from the L2 cache. Note that if the instruction is non-cacheable (nc), it will
+  be marked as released upon entry.
 
-### 特性 1：请求入队
+### Feature 1: Request Enqueue
 
-当query到达load流水线的s2时，判断是否满足入队条件，如果在当前load指令之前有未完成的load指令,且当前指令没有被flush时，当前load可以入队。
+When the query reaches stage s2 of the load pipeline, it determines whether the
+enqueue condition is met. If there are unfinished load instructions before the
+current load instruction and the current instruction has not been flushed, the
+current load can be enqueued.
 
-在freelist中得到可以分配的entry以及index。
+Obtain the allocatable entry and its index from the freelist.
 
-在PaddrModule中保存入队信息，包含query压缩后的物理地址（16bits），分配entry的index。
+The enqueued information is stored in the PaddrModule, including the compressed
+physical address (16 bits) of the query and the index of the allocated entry.
 
 
-### 特性 2：load to load 违例检查
+### Feature 2: Load-to-Load Violation Check
 
-当 load 到达流水线的 s2 时，会检查RAR队列中是否存在与当前load指令物理地址相同且比当前指令年轻的load指令，如果这些 load
-已经拿到了数据，并且被标记了release，说明发生 load-load 违例，需要刷新当前发生违例load之后的所有指令。
+When a load reaches stage s2 of the pipeline, it checks whether there are any
+younger load instructions in the RAR queue with the same physical address as the
+current load instruction. If these loads have already obtained the data and are
+marked as released, it indicates a load-load violation. All instructions
+following the violating load must be flushed.
 
-一共分两拍：
+It is divided into two cycles:
 
-* 第一拍进行条件匹配，得到mask。
-* 第二拍生成是否发生违例的响应信号。
+* The first cycle performs condition matching to generate the mask.
+* The second cycle generates the response signal indicating whether a violation
+  occurred.
 
-### 特性 3：Release 条件
+### Feature 3: Release Conditions
 
-LoadQueueRAR中的load指令被标记为release有四种情况：
+There are four scenarios where a load instruction in LoadQueueRAR is marked as
+released:
 
-* missQueue模块的replace_req在mainpipe流水线的s3栈发起release释放dcache块，release信号在下一拍进入loadQueue。
-* probeQueue模块的probe_req在mainpipe流水线的s3栈发起release释放dcache块，release信号在下一拍进入loadQueue。
-* atomicsUnit模块的请求在mainpipe流水线的s3栈发生miss时需要释放dcache块，release信号在下一拍进入loadQueue。
-* 如果入队请求是nc，在入队时被标记release。
+* The replace_req signal in the missQueue module initiates the release of a
+  dcache block at the s3 stage of the mainpipe pipeline. The release signal
+  enters the loadQueue in the next cycle.
+* The probe_req signal in the probeQueue module initiates the release of a
+  dcache block at the s3 stage of the mainpipe pipeline. The release signal
+  enters the loadQueue in the next cycle.
+* When a request from the atomicsUnit module misses in the s3 stage of the
+  mainpipe pipeline, the dcache block must be released. The release signal
+  enters the loadQueue in the next cycle.
+* If the enqueue request is non-cacheable (nc), it is marked as released upon
+  enqueue.
 
-## 整体框图
+## Overall Block Diagram
 <!-- 请使用 svg -->
-![LoadQueueRAR整体框图](./figure/LoadQueueRAR.svg){#fig:LoadQueueRAR width=80%}
+![LoadQueueRAR Overall Block
+Diagram](./figure/LoadQueueRAR.svg){#fig:LoadQueueRAR width=80%}
 
 \newpage
-## 接口时序
+## Interface timing
 
-### LoadQueueRAR请求入队时序实例
+### Example of LoadQueueRAR Request Enqueue Timing
 
-![LoadQueueRAR请求入队时序](./figure/LoadQueueRAR-enqueue.svg){#fig:LoadQueueRAR-enqueue
-width=70%}
+![LoadQueueRAR Request Enqueue
+Timing](./figure/LoadQueueRAR-enqueue.svg){#fig:LoadQueueRAR-enqueue width=70%}
 
-当io_query_ * _req_valid和io_query_ *
-_req_ready都为高时，表示握手成功，needEnqueue和io_canAllocate_* 都为高时，将io_doAllocate_*
-置为高，表示query需要需要入队且FreeList可以分配， io_allocateSlot_* 为接收query入队的entry，
-写入entry的信息为io_w*。
+When both io_query_*_req_valid and io_query_*_req_ready are high, it signifies a
+successful handshake. If both needEnqueue and io_canAllocate_* are high,
+io_doAllocate_* is set high, indicating the query needs to be enqueued and the
+FreeList can allocate. io_allocateSlot_* represents the entry receiving the
+enqueued query, and the information written to the entry is io_w*.
 
-### load-load 违例检查时序实例
+### Timing Example of Load-Load Violation Check
 
-![load-load违例检查时序](./figure/LoadQueueRAR-load-to-load.svg){#fig:RAR-load-to-load
-width=70%}
+![Load-Load Violation Check
+Timing](./figure/LoadQueueRAR-load-to-load.svg){#fig:RAR-load-to-load width=70%}
 
-当io_query_* _req_valid和io_query_*
-_req_ready都为高时，表示握手成功，LoadQueueRAR接收ld-ld违例查询请求，当拍得到mask结果，在下一拍将io_query_*_resp_valid置为高，给出响应。
+When both io_query_*_req_valid and io_query_*_req_ready are high, it indicates a
+successful handshake. The LoadQueueRAR receives the ld-ld violation query
+request, obtains the mask result in the same cycle, and sets
+io_query_*_resp_valid high in the next cycle to provide the response.
 
-图中第3拍接收到第一个违例查询请求，在第4拍得到违例查询请求的响应。请求的信息为io_query_* _req_bits_，响应的信息为io_query_*
-_resp_bits_。当io_query_* _resp_valid和io_query_*
-_resp_bits_rep_frm_fetch都为高时，表示发生ld-ld违例，刷新当前违例load之后的所有指令。
+In the diagram, the first violation query request is received in cycle 3, and
+the response to the violation query request is obtained in cycle 4. The request
+information is io_query_*_req_bits_, and the response information is
+io_query_*_resp_bits_. When both io_query_*_resp_valid and
+io_query_*_resp_bits_rep_frm_fetch are high, it indicates a load-load violation,
+and all instructions following the current violating load must be flushed.

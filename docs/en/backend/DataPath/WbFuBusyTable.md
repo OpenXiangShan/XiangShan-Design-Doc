@@ -5,27 +5,54 @@
 - Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-## 功能
+## Function
 
-WbFuBusyTable 模块的主要功能是管理和同步不同执行单元的忙碌表与写回端口的交互。
+The primary function of the WbFuBusyTable module is to manage and synchronize
+the interaction between the busy tables of different execution units and
+write-back ports.
 
-主要流程如下：
+The main process is as follows:
 
-1. 来自整数调度器、浮点调度器、向量调度器、访存调度器的忙碌表信息按类型合并为全局忙碌表。
-2. 将全局忙碌表与执行单元参数绑定，从参数中获取各写回端口的最大延迟和确定性标志（功能单元执行延迟是否是确定延迟），根据延迟配置生成硬件忙碌表。
-3. 根据写回物理寄存器类型判断执行单元是否连接到指定写回端口。
-4. 将各执行单元的忙状态合并到写回端口的忙碌表中。
-5. 将写回端口的忙碌表分发到各调度器的发射队列中。
+1. Busy table information from integer, floating-point, vector, and memory
+   schedulers is merged by type into a global busy table.
+2. Bind the global busy table with execution unit parameters, obtaining the
+   maximum latency and deterministic flags (whether the execution latency of
+   functional units is deterministic) for each write-back port from the
+   parameters, and generate hardware busy tables based on the latency
+   configuration.
+3. Determine whether the execution unit is connected to the specified write-back
+   port based on the type of write-back physical register.
+4. Merge the busy status of each execution unit into the busy table of the
+   write-back port.
+5. Distribute the busy table of write-back ports to the dispatch queues of each
+   scheduler.
 
-### 功能单元忙碌表 FuBusyTable
+### Functional Unit Busy Table FuBusyTable
 
-功能单元忙碌表记录了每个功能单元在不同时间点的忙碌状态，只有确定延迟的功能单元才会有功能单元忙碌表，位宽为功能单元执行的延迟长度，每一位对应一个特定的时间点，"1"
-表示该功能单元在这个时间点处于忙碌状态，"0" 表示空闲。
+The functional unit busy table records the busy status of each functional unit
+at different time points. Only functional units with deterministic latency have
+a functional unit busy table, with a bit width equal to the execution latency of
+the functional unit. Each bit corresponds to a specific time point, where "1"
+indicates the functional unit is busy at that time point, and "0" indicates it
+is idle.
 
-### 功能单元忙碌表写 FuBusyTableWrite
+### Functional Unit Busy Table Write FuBusyTableWrite
 
-功能单元忙碌表写主要功能是更新功能单元忙碌表的状态。它接收各种响应信号，如发射队列出队信号（deqResp）、og0阶段处理完成后返回的响应信号（og0Resp）、og1阶段处理完成后返回的响应信号（og1Resp），根据这些信号的有效性和功能单元类型，对忙碌表进行更新。当有指令成功发射时，会根据响应信号中的功能单元类型和延迟信息，将忙碌表中相应位置置"1"，表示该功能单元处于忙碌状态。当og0或og1阶段指令发射失败时，会根据响应信号中功能单元类型和延迟信息清除掉忙碌表中对应时间点的值，表示该功能单元处于空闲状态。
+The primary function of the functional unit busy table write is to update the
+status of the functional unit busy table. It receives various response signals,
+such as the dequeue signal from the dispatch queue (deqResp), the response
+signal returned after processing in the og0 stage (og0Resp), and the response
+signal returned after processing in the og1 stage (og1Resp). Based on the
+validity of these signals and the functional unit type, the busy table is
+updated. When an instruction is successfully dispatched, the corresponding bit
+in the busy table is set to "1" based on the functional unit type and latency
+information in the response signal, indicating the functional unit is busy. When
+instruction dispatch fails in the og0 or og1 stage, the corresponding time point
+in the busy table is cleared based on the functional unit type and latency
+information in the response signal, indicating the functional unit is idle.
 
-### 功能单元忙碌表读 FuBusyTableRead
+### Functional Unit Busy Table Read FuBusyTableRead
 
-功能单元忙碌表读通过对忙碌表和功能单元类型的处理，生成一个掩码，用于指示哪些指令可以使用相应的功能单元。
+The functional unit busy table read generates a mask by processing the busy
+table and functional unit type, indicating which instructions can use the
+corresponding functional unit.

@@ -5,28 +5,44 @@
 - Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-## 总体设计
+## Overall design
 
-### 整体框图
+### Overall Block Diagram
 
-![整体框图](./figure/Og2ForVector.svg)
+![Overall Block Diagram](./figure/Og2ForVector.svg)
 
-### 接口列表
+### Interface list
 
-见接口文档
+Refer to the interface documentation.
 
 
-## 功能
+## Function
 
-对于普通标量指令，经过 DataPath 后会直接送到 BypassNetwork
-中，通过多路选择生成最终的操作数。对于向量计算指令和向量访存指令，由于读向量寄存器堆的时序比标量更紧张，同时向量执行单元对第一拍数据的时序也有较高的要求，因此在经过
-DataPath 后多引入一个 OG2 阶段，然后再进入 BypassNetwork 进行多路选择。
+For regular scalar instructions, after passing through the DataPath, they are
+directly sent to the BypassNetwork, where the final operands are generated via
+multiplexing. For vector computation and vector memory access instructions,
+since the timing for reading the vector register file is tighter than for
+scalars, and the vector execution unit has stringent timing requirements for the
+first cycle of data, an additional OG2 stage is introduced after the DataPath
+before entering the BypassNetwork for operand selection.
 
-Og2ForVector 模块只进行单纯的打拍，不进行逻辑操作，能否进入 OG2 阶段只需考虑全局的取消。Og2ForVector 模块中含有 OG2
-的阶段的流水级寄存器，当 OG1 阶段的指令没有收到 load cancel 或者重定向刷新就可以进入 OG2 阶段。
+The Og2ForVector module only performs simple pipelining without logical
+operations. Whether an instruction can proceed to the OG2 stage depends solely
+on global cancellation. The Og2ForVector module contains the pipeline registers
+for the OG2 stage. Instructions in the OG1 stage can advance to OG2 if they do
+not encounter a load cancellation or redirection flush.
 
-Og2ForVector 模块的另一个功能是向发射队列发送 OG2 阶段的回应。OG2 阶段没有自身原因的取消，OG2
-能否成功发送到后级只需考虑后级能否接收指令。如果后级不能接收，指令无法进入执行单元，需要向发射队列回应 block
-状态，告诉发射队列之后需要重新发射指令。如果后级可以接收，对于向量计算指令，指令一定能成功执行，此时向发射队列回应 success
-状态，告诉发射队列可以清空对应的队列项；对于向量访存指令，进入访存执行单元后才能确定能否成功执行指令，这里只向发射队列回应 uncertain
-状态，让其保持不动，之后由执行单元发送清空或者重发的回应。
+Another function of the Og2ForVector module is to send OG2-stage responses back
+to the issue queue. The OG2 stage does not have cancellations due to its own
+reasons. Whether an instruction can be successfully sent to the subsequent stage
+depends solely on whether the latter can accept it. If the subsequent stage
+cannot accept the instruction, it cannot proceed to the execution unit, and the
+issue queue is notified with a "block" status, indicating that the instruction
+needs to be reissued later. If the subsequent stage can accept the instruction,
+vector computation instructions are guaranteed to execute successfully, and the
+issue queue is notified with a "success" status, allowing the corresponding
+queue entry to be cleared. For vector memory access instructions, it is only
+after entering the memory execution unit that the success of execution can be
+determined. Here, the issue queue is simply notified with an "uncertain" status
+to remain unchanged, with subsequent clearance or reissue responses being
+handled by the execution unit.

@@ -1,46 +1,71 @@
 \newpage
-# Load 队列 VirtualLoadQueue
+# Load Queue VirtualLoadQueue
 
-## 功能描述
+## Functional Description
 
-Virtualloadqueue是一个队列，用于存储所有load指令的MicroOp，维护load指令之间的顺序，类似于load指令的ROB，其主要功能为跟踪Load指令执行状态。
+The VirtualLoadQueue is a queue that stores MicroOps of all load instructions,
+maintaining the order among load instructions, similar to the ROB for load
+instructions. Its primary function is to track the execution status of load
+instructions.
 
-Virtualloadqueue对于每一个 entry 中的 load 指令都有若干状态位来标识这个 load 处于什么状态：
+The VirtualLoadQueue has several status bits for each entry's load instruction
+to indicate its current state:
 
-* allocated：该项是否分配了load，用于确定load指令的生命周期。
-* isvec：该指令是否是向量load指令。
-* committed: 该项是否提交。
+* allocated: Whether the entry has been allocated a load, used to determine the
+  lifecycle of the load instruction.
+* isvec: Whether the instruction is a vector load instruction.
+* committed: Whether the entry has been committed.
 
-### 特性 1：入队
+### Feature 1: Enqueue
 
-* 入队时机：在指令的 dispatch 阶段，会将 load 指令从 dispatch queue 发送到 load queue，Virtual Load
-  Queue用于保存指令的信息。
-* 流水线写回时机：load 从 iq 发出后，经过 load 流水线，到达流水线的 s3 时，将这条 load 的执行信息反馈给 load queue。
-* 流水线写回的信息：包括dcache 是否命中，load 是否正常拿到了数据（包括 dcache miss 但是可以从 sbuffer 和 store
-  queue forward 完整数据的情况），tlb是否miss，是否需要重发load。load 是否发生了异常，load 是否是 MMIO
-  空间的，是否是向量load，是否产生写后读违例、读后读违例，是否出现dcache的bank冲突。
+* Enqueue timing: During the instruction dispatch phase, load instructions are
+  sent from the dispatch queue to the load queue, where the Virtual Load Queue
+  is used to store the instruction information.
+* Pipeline writeback timing: After a load is issued from the IQ and passes
+  through the load pipeline, upon reaching stage S3 of the pipeline, the
+  execution information of this load is fed back to the load queue.
+* Pipeline writeback information: Includes whether the dcache hit, whether the
+  load successfully obtained data (including cases where dcache missed but
+  complete data could be forwarded from sbuffer and store queue), TLB miss,
+  whether the load needs to be resent, whether the load encountered an
+  exception, whether the load is in MMIO space, whether it is a vector load,
+  whether it caused a write-after-read or read-after-read violation, and whether
+  there was a dcache bank conflict.
 
-### 特性 2：出队
+### Feature 2: Dequeue
 
-* 出队时机：当被分配的entries（allocated为高）到达队头，同时allocated与committed都为1时，表示可以出队，如果是向量load，需要每个元素都committed。
+* Dequeue timing: When allocated entries (with allocated high) reach the head of
+  the queue and both allocated and committed are 1, they are eligible for
+  dequeuing. For vector loads, each element must be committed.
 
-## 整体框图
+## Overall Block Diagram
 <!-- 请使用 svg -->
-![VirtualLoadQueue整体框图](./figure/VirtualLoadQueue.svg)
+![VirtualLoadQueue overall block diagram](./figure/VirtualLoadQueue.svg)
 
-## 接口时序
+## Interface timing
 
-### 接收入队请求时序实例
+### Timing example for receiving enqueue requests
 
 ![VirtualLoadQueue-enqueue](./figure/VirtualLoadQueue-enqueue.svg){#fig:VirtualLoadQueue-enqueue
 width=80%}
 
-当io_enq_canAccept与io_enq_sqcanAccept为高时，表示可以接收派遣指令。当io_enq_req_*_valid为高时表示真实派遣指令到VirtualLoadQueue，派遣指令的信息为rob的位置、Virtualloadqueue的位置以及向量指令元素个数等。完成派遣后对应的allocated拉高，enqPtrExt根据派遣的req个数更新。
+When io_enq_canAccept and io_enq_sqcanAccept are high, it indicates that
+dispatch instructions can be accepted. When io_enq_req_*_valid is high, it
+signifies the actual dispatch of instructions to the VirtualLoadQueue, with
+dispatch information including the ROB position, VirtualLoadQueue position, and
+the number of vector instruction elements, among others. After dispatch, the
+corresponding allocated signal is raised, and enqPtrExt is updated based on the
+number of dispatched requests.
 
-### 流水线writeback时序实例
+### Pipeline writeback timing example
 
 ![VirtualLoadQueue-writeback](./figure/VirtualLoadQueue-writeback.svg){#fig:VirtualLoadQueue-writeback
 width=80%}
 
-当io_ldin_* _valid为高时表示load流水线的s3写回lq，具体内容为io_ldin_*
-_bits_*。allocated_5表示lq的第5项是否分配，当updateAddrValid，且没有replay时，committed_5在下一拍拉高。allocated和committed同时为高表示可以出队。每写回一个表项队尾指针+1。
+When io_ldin_*_valid is high, it indicates that the load pipeline's s3 stage
+writes back to the lq, with the specific content being io_ldin_* _bits_*.
+allocated_5 indicates whether the 5th entry in the lq is allocated. When
+updateAddrValid is asserted and there is no replay, committed_5 is pulled high
+in the next cycle. Both allocated and committed being high signifies that the
+entry can be dequeued. The tail pointer increments by 1 for each entry written
+back.

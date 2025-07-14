@@ -1,439 +1,755 @@
-# 昆明湖 BPU 模块文档
+# Kunming Lake BPU Module Documentation
 
 ## Glossary of Terms
 
-表 1.1 术语说明
+Table 1.1 Terminology
 
-| **缩写** | **全称**                                            | **描述**                         |
-| ------ | ------------------------------------------------- | ------------------------------ |
-| BPU    | Branch Prediction Unit                            | 分支预测单元                         |
-| IFU    | Instruction Fetch Unit                            | 取指单元                           |
-| FTQ    | Fetch Target Queue                                | 取指目标单元                         |
-| uFTB   | Micro Fetch Target Buffer                         | 分支目标缓冲                         |
-| FTB    | Fetch Target Buffer                               | 取指目标缓冲                         |
-| TAGE   | TAgged GEometric length predictor                 | 一种条件分支预测器                      |
-| SC     | statistical corrector predictor                   | 一种用于在统计偏向情况下纠正 TAGE 预测的条件分支预测器 |
-| ITTAGE | Indirect Target TAgged GEometric length predictor | 一种用于预测间接跳转指令目标地址的分支预测器         |
-| RAS    | Return Address Stack                              | 一种用于预测调用指令对应返回指令目标地址的分支预测器     |
+| **abbreviation** | **Full name**                                     | **Description**                                                                                                 |
+| ---------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| BPU              | Branch Prediction Unit                            | Branch Prediction Unit                                                                                          |
+| IFU              | Instruction Fetch Unit                            | Fetch Unit                                                                                                      |
+| FTQ              | Fetch Target Queue.                               | Fetch Target Unit                                                                                               |
+| uFTB             | Micro Fetch Target Buffer                         | Branch Target Buffer                                                                                            |
+| FTB              | Fetch Target Buffer                               | Fetch Target Buffer.                                                                                            |
+| TAGE             | TAgged GEometric length predictor                 | A conditional branch predictor                                                                                  |
+| SC.              | Statistical Corrector Predictor                   | A conditional branch predictor used to correct TAGE predictions under statistically biased conditions           |
+| ITTAGE           | Indirect Target TAgged GEometric length predictor | A branch predictor used to predict the target address of indirect jump instructions                             |
+| RAS              | Return Address Stack                              | A branch predictor used to predict the target address of return instructions corresponding to call instructions |
 
-## 设计规格
+## Design specifications
 
-1. 支持一次生成一个分支预测块及其对应预测器附加信息
-2. 支持无空泡的简单预测
-3. 支持多种精确预测器及覆盖机制
-4. 支持训练预测器
-5. 支持分支历史信息维护及误预测恢复
-6. 支持 topdown 性能事件的统计
+1. Supports generating one branch prediction block and its corresponding
+   predictor auxiliary information at a time.
+2. Supports bubble-free simple prediction
+3. Supports multiple precise predictors and coverage mechanisms
+4. Supports training predictors.
+5. Supports branch history maintenance and misprediction recovery
+6. Supports top-down performance event statistics
 
-## 功能描述
+## Functional Description
 
-### 功能概述
+### Functional Overview
 
-BPU 模块接收来自模块外部后端执行单元及后续流水级的重定向信号，按照地址采用多种预测器为当前 PC 值开始的位置生成预测块及生成 该预测块时各预测器内部的
-meta 信息，传递给后续取指目标队列（FTQ）存储，预测块供取指单元（IFU）使用，meta 信息供未来训练恢复预测器使用。其中，BPU 模块使用全相连
-uFTB 作为 next line predictor，生成理想条件下延迟仅 1 周期的无空泡简单预测结果，该结果会 被直接作为输出传递到
-FTQ。与此同时，这一基础预测结果还将在 BPU
-后续流水线内流动，供高级预测部件使用以提供更为精确的预测结果。一旦高级预测器在后续流水级的预测结果与已有结果不一致，就将会使用高级预测器结果作为新的输出更新后续
-FTQ 中存储预测块结果 并重定向 s0 级 PC，清空新结果流水级之前的流水级的错误路径结果。针对不同种类的指令预测的信息也有不同，条件分支指令的目标地址由
-uFTB 提供，需要预测其方向；无条件直接跳转指令的目标地址由 uFTB 提供，不需要做任何特别的结果预测；间接跳转指令的跳转方向不需要预测，但 uFTB
-提供的跳转地址结果并不一定正确，需要预测。
+The BPU module receives redirect signals from external backend execution units
+and subsequent pipeline stages. It uses multiple predictors to generate
+prediction blocks starting from the current PC value, along with internal meta
+information from each predictor, which is passed to the Fetch Target Queue (FTQ)
+for storage. The prediction blocks are used by the Instruction Fetch Unit (IFU),
+while the meta information is used for future predictor training and recovery.
+The BPU module employs a fully associative uFTB as a next-line predictor,
+generating a simple, bubble-free prediction result with an ideal latency of just
+one cycle. This result is directly passed to the FTQ as output. Simultaneously,
+this baseline prediction result flows through subsequent BPU pipeline stages for
+use by advanced prediction components to provide more accurate results. If an
+advanced predictor in a later stage produces a result inconsistent with the
+existing one, the advanced predictor's result will be used to update the
+prediction block stored in the FTQ and redirect the s0-stage PC, flushing
+incorrect results from earlier pipeline stages. Different types of instructions
+require different prediction information: conditional branch targets are
+provided by uFTB, requiring direction prediction; unconditional direct jump
+targets are provided by uFTB, requiring no special prediction; indirect jump
+directions do not need prediction, but the jump address provided by uFTB may be
+incorrect and requires prediction.
 
-BPU 内的高级预测器包括 FTB、TAGE-SC、ITTAGE 和 RAS。其中，FTB 负责维护预测块的起始地址，终止地址，所含分支指令 PC 地址、类型（
-是否 branch、是否 jalr、是否 jal、是否 call、是否 return）、基础的方向结果。TAGE-SC 是条件分支指令的主预测器，ITTAGE
-用于预测 间接跳转指令。RAS 负责预测 return 类型的间接跳转指令跳转地址。
+The advanced predictors in BPU include FTB, TAGE-SC, ITTAGE, and RAS. Among
+them, FTB is responsible for maintaining the start address, end address, branch
+instruction PC addresses, types (whether branch, jalr, jal, call, or return),
+and basic direction results of prediction blocks. TAGE-SC is the main predictor
+for conditional branch instructions, ITTAGE is used to predict indirect jump
+instructions, and RAS is responsible for predicting the jump address of
+return-type indirect jump instructions.
 
-预测单元内多种预测器使用了分支预测历史作为预测条件，为提高历史与执行真实轨迹的匹配度，分支预测历史也会随预测结果做推测更新。全局分支历史在 BPU
-顶层使用多个更新源进行更新维护，维护时会按照 TAGE、SC 和 ITTAGE 预测需要的长度进行维护，不同分支历史长
-度的分支历史维护算法一致。具体地，TAGE 使用的分支历史长度有 8、13、32、119；ITTAGE 使用的历史长度有 4，8，13，16，32；SC
-使用的历史长度有 0，4，10，16。分支预测历史在 BPU 模块顶层统一维护，更新源按照优先级从低到高依次为 s0 阻塞暂存的分支历史、利用 s1
-预测结果更新的分支历史、利用 s2 预测结果更新的分支历史、利用 s3 预测结果更新的分支历史和 BPU 外部重定向的分支历史。每个分支历 史的具体维护策略为：
+Multiple predictors within the prediction unit use branch prediction history as
+a condition for prediction. To improve the alignment between the history and the
+actual execution path, the branch prediction history is also speculatively
+updated along with the prediction results. The global branch history is
+maintained at the top level of the BPU using multiple update sources, adhering
+to the lengths required by TAGE, SC, and ITTAGE predictions. The maintenance
+algorithm is consistent across different branch history lengths. Specifically,
+TAGE uses branch history lengths of 8, 13, 32, and 119; ITTAGE uses lengths of
+4, 8, 13, 16, and 32; and SC uses lengths of 0, 4, 10, and 16. The branch
+prediction history is uniformly maintained at the top level of the BPU module,
+with update sources prioritized from lowest to highest as follows: stalled
+branch history from s0, branch history updated using s1 prediction results,
+branch history updated using s2 prediction results, branch history updated using
+s3 prediction results, and branch history redirected from outside the BPU. The
+specific maintenance strategy for each branch history is as follows:
 
-s0 阻塞暂存的分支历史：不进行任何主动的更新，始终与最新全局折叠历史保持一致。
+s0 stalled branch history: Does not perform any active updates and always
+remains consistent with the latest global folded history.
 
-s1 预测结果更新的分支历史：利用 s1 阶段的分支预测结果在随流水线传递来的
+Branch history updated by s1 prediction results: Uses the branch prediction
+results from stage s1, passed along the pipeline.
 
-s0 全局折叠历史上更新。具体地，将预测结果根据位于的分支预测 slot shift 进全局分支历史，在 0 号 slot 则直接 shift 进去，在 1 号
-slot 则 shift 进去 0（slot 0 没有 taken）和当前预测结果。
+s0 global folded history update. Specifically, the prediction result is shifted
+into the global branch history based on the branch prediction slot it occupies.
+If in slot 0, it is directly shifted in; if in slot 1, a 0 (slot 0 not taken)
+and the current prediction result are shifted in.
 
-s2 预测结果更新的分支历史：利用 s2 阶段的分支预测结果在随流水线传递来的
+Branch history updated by s2 prediction results: Uses the branch prediction
+results from stage s2 as they propagate through the pipeline.
 
-s1 全局折叠历史上更新。更新算法与 s1 相同。s2 的更新仅在 s2 预测结果与之前 s1 不同时生效。
+The global folded history is updated in s1. The update algorithm is the same as
+in s1. The s2 update only takes effect if the s2 prediction result differs from
+the previous s1 result.
 
-s3 更新策略与 s1、s2 相同，更新仅在 s3 结果与之前 s1 或 s2 不同时生效。
+The s3 update strategy is the same as s1 and s2, with updates only taking effect
+if the s3 result differs from previous s1 or s2 results.
 
-重定向的分支历史更新仅在发生重定向时进行，根据重定向信息中 addIntoHist 信号情况，分别将传回的分支历史直接或添加重定向对应
-分支指令的方向结果后用于更新 BPU 的全局分支历史。
+Branch history updates for redirects occur only when a redirect happens.
+Depending on the addIntoHist signal in the redirect information, the returned
+branch history is either used directly or combined with the direction result of
+the redirected branch instruction to update BPU's global branch history.
 
-为保证较为准确的预测结果，各分支预测器都需要不断使用最新的执行结果训练预测器。具体地，更新的预测块及做出该预测时各预测器内部状态的 meta 信息将会在 FTQ
-模块内生成并传递回 BPU 单元供各预测器更新内部状态。
+To ensure relatively accurate prediction results, each branch predictor must
+continuously train itself using the latest execution results. Specifically, the
+predicted blocks to be updated and the meta information of each predictor's
+internal state at the time of prediction are generated in the FTQ module and fed
+back to the BPU unit for updating the predictors' internal states.
 
-分支预测并不能保证结果正确性，在预测结果与真实状态不符时，需要将状态恢复到使用错误预测而更新的状态之前，主要为分支历史的恢复及预测块起始地址的重定向。
+Branch prediction does not guarantee correctness. When the prediction result
+does not match the actual state, the state must be restored to before the
+erroneous prediction was used to update it, primarily involving the recovery of
+branch history and the redirection of the prediction block's starting address.
 
-### 分支预测块及 meta 信息生成
+### Branch prediction block and meta information generation.
 
-#### 分支预测块思想
+#### Concept of branch prediction block
 
-分支预测的目的是对执行流中存在的分支指令跳转方向与目标进行预测以在真实执行当前指令前推测地生成后续取指的 PC 范围信息以保证指令的连续供应。
+The purpose of branch prediction is to predict the direction and target of
+branch instructions in the execution flow, generating speculative PC range
+information for subsequent instruction fetches before the actual execution of
+the current instruction, ensuring continuous instruction supply.
 
-一个分支预测块内包含了本分支预测块有效位（BranchPredictionBundle.valid）、起始地址、完整预测结果、FTB 项、折叠的分支历史
-、RAS 预测器栈顶等信息。其中，完整预测结果在第一流水级来自 uFTB，后续来自 FTB 等高级预测器，FTB 项来自 uFTB 与 FTB 读出结果。
+A branch prediction block includes the valid bit (BranchPredictionBundle.valid),
+start address, complete prediction result, FTB entry, folded branch history, RAS
+predictor stack top, etc. The complete prediction result in the first pipeline
+stage comes from uFTB, while subsequent stages come from advanced predictors
+like FTB. The FTB entry is derived from uFTB and FTB read results.
 
-完整预测结果内记录了分支指令跳转方向、块内记录的分支指令信息是否有效(slot_valids，即是否存在该分支指令，一个 valid 对应一个 slot，一个
-slot 对应一条预测块内的分支指令，共计 2 个 slot，其中最后一个 slot
-可能记录块内第二条分支指令或一条无条件跳转/间接跳转指令)、分支指令目标、jalr
-指令目标、分支指令块内偏移、无跳转时指令块结束地址、结束地址是否有误（块起始地址大于结束地 址，表明存在 false
-hit）、最后一条分支指令类型、最后一条指令是否为 RVI 的 call 指令、第二个分支指令 slot
-是否记录分支指令而非无条件/间接跳转指令、是否命中等信息。如前所属，分支预测块内最多出现 2 条分支指令/1 条分支指令+1
-条无条件跳转指令，当预测块内实际记录指令数超出该限制时，后续 FTQ 模块会将其拆分。此外，若分支预测块内不存在分支指令或未超出分支指令数量限制但达到了分支
-预测块的最大宽度（32B）也将被截断。
+The complete prediction result records the branch instruction's jump direction,
+whether the branch instruction information recorded in the block is valid
+(slot_valids, i.e., whether the branch instruction exists; one valid corresponds
+to one slot, one slot corresponds to one branch instruction in the prediction
+block, totaling 2 slots, where the last slot may record the second branch
+instruction in the block or an unconditional/indirect jump instruction), the
+branch instruction target, the jalr instruction target, the branch instruction's
+offset within the block, the end address of the instruction block when no jump
+occurs, whether the end address is incorrect (the block start address is greater
+than the end address, indicating a false hit), the type of the last branch
+instruction, whether the last instruction is an RVI call instruction, whether
+the second branch instruction slot records a branch instruction rather than an
+unconditional/indirect jump instruction, and whether it hit, among other
+information. As mentioned earlier, a prediction block can contain at most 2
+branch instructions or 1 branch instruction + 1 unconditional jump instruction.
+When the actual number of instructions in the prediction block exceeds this
+limit, the subsequent FTQ module will split it. Additionally, if the prediction
+block contains no branch instructions or does not exceed the branch instruction
+limit but reaches the maximum width of the prediction block (32B), it will also
+be truncated.
 
-FTB 项内记录了项是否有效（FTB 采用直接映射方式，若读地址不曾被写入则该标记无效）、第一个分支指令 slot、结尾的分支/跳转共用
-slot、结束地址、指令类型、最后一条指令为 RVI call 指令、是否总是跳转等信息。FTB 项可被用于生成完整预测结果。
+The FTB entry records whether the entry is valid (FTB uses direct mapping; if
+the read address has never been written, the tag is invalid), the first branch
+instruction slot, the shared slot for the ending branch/jump, the end address,
+instruction type, whether the last instruction is an RVI call instruction,
+whether it always jumps, and other information. The FTB entry can be used to
+generate a complete prediction result.
 
-#### 分支预测块生成
+#### Branch prediction block generation
 
-分支预测块中基础的 PC 信息最初由模块外传入的复位地址指定，随后处理器运行过程中正常情况下不断按照预测块的跳转地址推测更新，在遇到误预测时，PC 值将依据
-redirect 通道所给值更新。next line 的完整预测结果由 uFTB 模块读出。完整预测结果中，FTB 项由 FTQ 模块
-根据以往训练结果生成，条件分支指令的跳转方向由 uFTB 生成并在后续由 TAGE-SC 预测器更新，间接跳转指令的跳转地址由 uFTB 生成并在 后续由
-ITTAGE 预测器更新，RAS 预测器会针对 return 类型的间接跳转指令覆盖 ITTAGE 的预测结果。被覆盖的结果仅体现在预测器输出，不
-会立刻反向反馈给结果被覆盖的预测器更新内部状态。
+The basic PC information in the branch prediction block is initially specified
+by the reset address passed from outside the module. During normal processor
+operation, it is continuously updated based on the predicted jump address of the
+prediction block. In case of misprediction, the PC value is updated according to
+the value provided by the redirect channel. The full prediction result for the
+next line is read from the uFTB module. In the full prediction result, the FTB
+entry is generated by the FTQ module based on past training results. The jump
+direction of conditional branch instructions is generated by uFTB and later
+updated by the TAGE-SC predictor. The jump address of indirect jump instructions
+is generated by uFTB and later updated by the ITTAGE predictor. The RAS
+predictor overrides the ITTAGE prediction result for return-type indirect jump
+instructions. The overridden result is only reflected in the predictor output
+and does not immediately feed back to update the internal state of the
+overridden predictor.
 
-#### meta 信息生成
+#### Meta information generation
 
-各预测器为便于自身的更新，会将做出预测时预测器内部状态信息（例如作出该预测时命中预测表序号、命中 index）作为 meta 信息和预 测结果一同随流水线传递。
+To facilitate their own updates, each predictor will include internal state
+information (such as the index of the prediction table hit or the hit index at
+the time of prediction) as meta data, which is propagated along with the
+prediction results through the pipeline.
 
-### 无空泡简单预测
+### Bubble-Free Simple Prediction
 
-uFTB 作为 BPU 的 next line predictor，为处理器作出无空泡的基础预测以连续生成下一个推测 PC 值。
+The uFTB serves as the BPU's next-line predictor, providing the processor with
+bubble-free basic predictions to continuously generate the next speculative PC
+value.
 
-#### uFTB 请求接收
+#### uFTB Request Reception
 
-每次 1 阶段请求有效时，截取传入预测块起始 PC 的 16 到 1 位生成 tag 发送给本模块内的全相连 uFTB 用于读取 FTB 项，FTB
-项记录内容如前所述 。uFTB 内有 32 项使用寄存器搭建的全相连结构。由于使用寄存器实现，各项可在当拍根据其中存储数据是否有效及存储的 tag 值是否与传
-入信息匹配来生成本项是否命中的信号及读出的 FTB 项数据并返回到 uFTB 层次。
+During each valid phase 1 request, the tag is generated by extracting bits 16 to
+1 of the incoming predicted block's starting PC and sent to the fully
+associative uFTB within this module for reading FTB entries. The FTB entry
+contents are as previously described. The uFTB contains 32 entries implemented
+with a fully associative register-based structure. Since registers are used,
+each entry can generate signals indicating whether it is a hit based on the
+validity of stored data and whether the stored tag matches the incoming
+information, along with the read FTB entry data, which is returned to the uFTB
+level within the same cycle.
 
-#### uFTB 数据读取与返回
+#### uFTB Data Read and Return
 
-在当拍，uFTB 存储体已返回命中信号及读出数据。在本阶段将会从返回的命中信号中选出至多一命中项并利用该命中项生成预测结果，生成完整预测结果的算法在后续 FTB
-模块有详细叙述，这里 uFTB 有一额外补充的 counter 机制，为 uFTB 内每一项内至多 2 条分支指令增加一个 2 位宽 counter，若
-counter 大于 1 或 FTB 项内 always_taken 有效（后者机制也存在于 FTB
-模块中）则预测结果为跳转。此外，本级的命中信号及选出的命中路编号还被作为本预测器的 meta 信息等待其他预测器一起进入 s3
-阶段时送出预测器，随最终预测结果一起存储到 FTQ。本预 测器在 2、3 阶段没有其他额外动作。
+In the current cycle, the uFTB memory has returned the hit signal and read data.
+In this stage, at most one hit entry will be selected from the returned hit
+signals to generate the prediction result. The algorithm for generating the
+complete prediction result is detailed in the subsequent FTB module. Here, the
+uFTB has an additional counter mechanism, adding a 2-bit-wide counter for up to
+two branch instructions within each uFTB entry. If the counter is greater than 1
+or the always_taken flag in the FTB entry is valid (the latter mechanism also
+exists in the FTB module), the prediction result is a jump. Additionally, the
+hit signal and selected hit way number from this stage are also used as meta
+information for this predictor, waiting to be sent out with other predictors in
+stage s3 and stored in FTQ along with the final prediction result. This
+predictor has no additional actions in stages 2 and 3.
 
-#### uFTB 数据更新
+#### uFTB Data Update
 
-当该预测块对应指令全部提交时，由 FTQ 传入 BPU 一直连到本模块的 update 通道中将包含 FTQ 模块根据指令提交信息更新的 FTB 项。由于全相连
-uFTB 全部采用寄存器搭建存储体，写操作不会影响并行的读操作，传来的更新信息将始终用于更新。在更新通道有效时，在当拍将利用传入的更新 pc 值生成 tag 与
-uFTB 内现有各项匹配并生成是否匹配及匹配的路信号。在下一拍，若存在已有匹配，将拉高匹配路的写入信号 ，否则利用伪 LRU
-替换算法选出一待替换路拉高对应路写入信号，写入数据即为更新的 FTB 项。
+When all instructions corresponding to the prediction block are committed, the
+update channel from FTQ to BPU, which connects directly to this module, will
+include the FTB entry updated by the FTQ module based on instruction commit
+information. Since the fully associative uFTB is entirely built with registers,
+write operations do not affect parallel read operations, and the incoming update
+information is always used for updates. When the update channel is valid, the
+update PC value is used in the same cycle to generate a tag and match it with
+existing entries in the uFTB, producing match and match way signals. In the next
+cycle, if a match exists, the write signal for the matched way is asserted;
+otherwise, a pseudo-LRU replacement algorithm selects a way to replace, and the
+corresponding write signal is asserted. The write data is the updated FTB entry.
 
-针对每个分支指令的 counter 维护也在 update 通道拉高时一并更新，在 update 通道拉高下一拍，更新 FTB
-项内跳转的分支指令及其之前的分支指令对应的 counter。若 taken 则 counter+1，若不 taken 则 counter-1，如达到饱和（0
-或全 1）则维持当前值不变。
+Maintenance of the counters for each branch instruction is also updated when the
+update channel is asserted. In the cycle following the update channel assertion,
+the counters for the branching instructions within the updated FTB entry and
+those before it are updated. If the branch is taken, the counter is incremented
+by 1; if not taken, it is decremented by 1. If the counter is saturated (0 or
+all 1s), the current value is maintained.
 
-伪 LRU 算法也需要数据更新，其共有两个数据源，其一为作出预测时命中的路编码，其二为 uFTB 更新时要写入的路编码，若其中任意有效 ，则利用其信息更新伪
-LRU 状态，当都有效时一拍内使用组合逻辑依次使用两信息更新。
+The pseudo-LRU algorithm also requires data updates, with two data sources: one
+is the way encoding of the hit during prediction, and the other is the way
+encoding to be written during uFTB updates. If either is valid, its information
+is used to update the pseudo-LRU state. If both are valid in the same cycle,
+combinational logic is used to update the state sequentially with both pieces of
+information.
 
-### 多种高级预测器及覆盖机制
+### Multiple advanced predictors and coverage mechanisms
 
-各高级预测器输出的结果将与之前流水级生成并随流水线传递来的结果（uFTB 的 minimal 结果或之后流水级由 FTB
-提供的完成结果）比较，如有不同将以较新结果冲刷流水线。
+The outputs from each advanced predictor will be compared with the results
+previously generated by pipeline stages and propagated through the pipeline
+(either the minimal results from uFTB or the completed results provided by FTB
+in later stages). If discrepancies are found, the pipeline will be flushed with
+the newer results.
 
 #### Composer
 
-Composer 是一个用于组合多个预测器的模块。在本项目中，其组合了 uFTB、FTB、TAGE-SC、ITTAGE 和 RAS 五个预测器，并对外抽象成了一
-个三级流水覆盖预测器。Composer 中的各个预测器可以通过写自定义寄存器 sbpctl
-来实现开关，可以按需使用预测器。在检测到来自外部的重定向后，Composer
-会把重定向请求发送给各预测器，以用于恢复推测更新的元素。在预测块所有指令提交后，Composer 中的各预测器会进行训练。最终，Composer
-将三级预测结果输出至 Predictor。各预测器的 meta 信息在本模块拼接在一起传递给 FTQ，FTQ 返回的训练用 meta
-信息也在本模块内拆分后发送给各模块。
+Composer is a module used to combine multiple predictors. In this project, it
+combines five predictors—uFTB, FTB, TAGE-SC, ITTAGE, and RAS—and abstracts them
+into a three-stage pipelined coverage predictor. Each predictor in Composer can
+be toggled via custom register writes to sbpctl, allowing selective use of
+predictors. Upon detecting an external redirect, Composer sends the redirect
+request to each predictor for recovering speculatively updated elements. After
+all instructions in the prediction block are committed, the predictors in
+Composer undergo training. Finally, Composer outputs the three-stage prediction
+results to Predictor. The meta information of each predictor is concatenated in
+this module and passed to FTQ, and the training meta information returned by FTQ
+is also split in this module and sent to each predictor.
 
-##### 起始 PC 的配置
+##### Configuration of the starting PC
 
-Composer 的 IO 接口 io_reset_vector 可以实现起始 PC 的配置。只需要将期望的起始 PC 传递给该 IO 即可。
+Composer's IO interface io_reset_vector enables configuration of the starting
+PC. The desired starting PC only needs to be passed to this IO.
 
-##### 与预测器的连接
+##### Connection with Predictors
 
-Composer 将 uFTB、FTB、TAGE-SC、ITTAGE 和 RAS 五个预测器连接起来。共有三个分支预测器的流水级，每个预测器的相同流水级从前向后
-以组合逻辑连接，且每个预测器是固定延迟的，到那个流水级就一定完成预测，所以 Composer 的只需要在对应流水级输出对应预测器的预测结果即可。
+The Composer connects the five predictors: uFTB, FTB, TAGE-SC, ITTAGE, and RAS.
+There are three pipeline stages for branch predictors, with the same stages of
+each predictor connected sequentially from front to back via combinational
+logic. Since each predictor has a fixed latency and completes its prediction by
+a specific stage, the Composer only needs to output the corresponding
+predictor's results at the respective pipeline stage.
 
-##### 预测器的开关
+##### Predictor enable/disable
 
-通过 Zicsr 指令，我们可以读写 sbpctl 这一自定义 CSR 来控制 Composer 中的各预测器的使能。sbpctl[6:0]代表了{LOOP,
-RAS, SC, TAGE, BIM, BTB, uFTB}这七个预测器的使能。其中，高电平代表使能，低电平代表未使能。具体地，spbctl 这一 CSR
-的值通过 Composer 的 IO 接口 io_ctrl_*传入各个预测器，并由各预测器负责使能的实现。当前架构中未加入 Loop 和 BIM
-两预测器，因此对应位无效。
+Through Zicsr instructions, we can read and write the custom CSR sbpctl to
+control the enablement of various predictors in Composer. sbpctl[6:0] represents
+the enablement of seven predictors: {LOOP, RAS, SC, TAGE, BIM, BTB, uFTB}. A
+high level indicates enablement, while a low level indicates disablement.
+Specifically, the value of the spbctl CSR is transmitted to each predictor via
+Composer's IO interface io_ctrl_*, with each predictor responsible for
+implementing its enablement. The current architecture does not include the Loop
+and BIM predictors, so their corresponding bits are invalid.
 
-##### 重定向的恢复
+##### Redirection recovery
 
-Composer 通过 io_s2_redirect、io_s3_redirect 和 io_redirect_*等 IO
-端口接收重定向请求。这些请求被发送给其各个预测器，用于恢复推测更新的元素，如 RAS 栈顶项等。
+The Composer receives redirection requests through IO ports such as
+io_s2_redirect, io_s3_redirect, and io_redirect_*. These requests are sent to
+its predictors to recover speculatively updated elements, such as the top item
+of the RAS stack.
 
 #### FTB
 
-FTB 暂存 FTB 项，为后续的 TAGE、ITTAGE、SC、RAS 等高级预测器提供更为精确的分支指令位置、类型、目标地址等分支预测块关键信息，
-也为总是跳转的分支指令提供基础的方向预测。FTB 模块内有一 FTBBank 模块负责 FTB 项的实际存储，模块内使用了一块多路 SRAM 作为存储
-器。SRAM 规格格式详见后续。
+The FTB temporarily stores FTB entries, providing advanced predictors like TAGE,
+ITTAGE, SC, and RAS with more accurate branch instruction locations, types,
+target addresses, and other key branch prediction block information. It also
+offers basic direction prediction for always-taken branch instructions. The FTB
+module contains an FTBBank module responsible for the actual storage of FTB
+entries, utilizing a multi-port SRAM as the storage medium. The SRAM
+specifications and format are detailed later.
 
-##### 请求接收
+##### Request reception
 
-0 阶段时，FTB 模块向内部 FTBBank 发送读请求，其请求 pc 值为 s0 传入的 PC。
+In stage 0, the FTB module sends a read request to the internal FTBBank, with
+the request PC value being the PC passed from s0.
 
-##### 数据读取与返回
+##### Data read and return
 
-在发送请求的下一拍也就是预测器的 1 阶段，将暂存从 FTB SRAM 中读出的多路信号。
+In the next clock cycle after sending the request, which is stage 1 of the
+predictor, the multi-path signals read from the FTB SRAM will be temporarily
+stored.
 
-再下一拍也就是预测器的 2 阶段，从暂存数据中根据各路的 tag 和实际请求时由 PC 高位生成 tag 的匹配情况生成命中信号并在命中时选出命 中 FTB
-数据。若存在 hit 请求，则返回值为选出的 FTB 项及命中的路信息，若未 hit，则输出数据无意义。
+In the next cycle, i.e., stage 2 of the predictor, the hit signal is generated
+based on the tag matching between the stored data and the tag derived from the
+high bits of the PC during the actual request. If a hit occurs, the selected FTB
+entry and the hit way information are returned. If no hit occurs, the output
+data is meaningless.
 
-FTBBank 模块读出的数据在 FTB 模块内作为 2 阶段的预测结果传递给 BPU 后续预测器的 s2 阶段以获取分支指令类型、PC
-信息，此外这一读出的结果还会被暂存到 FTB 模块内，在 3 阶段作为预测结果以组合逻辑传递给后续预测器。若 FTB 命中，则读出的命中路编号与命中信息、周期
-数等也会随流水线向后传递，最终若该预测块未被流水线中途冲刷，则在 s3 作为 meta 信息传递给后续 FTQ 模块，其中周期数仅在仿真环境 用于性能统计，在
-FPGA 等环境不存在。
+The data read from the FTBBank module is passed as a stage 2 prediction result
+within the FTB module to the s2 stage of subsequent BPU predictors to obtain
+branch instruction type and PC information. Additionally, this read result is
+temporarily stored in the FTB module and passed as a prediction result in stage
+3 via combinational logic to subsequent predictors. If the FTB hits, the hit way
+number, hit information, cycle count, etc., are also propagated downstream with
+the pipeline. Ultimately, if the prediction block is not flushed midway through
+the pipeline, it is passed as meta information to the subsequent FTQ module in
+s3. The cycle count is only used for performance statistics in simulation
+environments and does not exist in FPGA environments.
 
-此外，若 FTB 项内记录的有效分支指令存在 always taken 标志，表示该分支指令历史上不曾有非跳转情况，则 2 阶段的预测结果中对应
-br_taken_mask 也在本模块内直接拉高处理，直接预测该分支指令跳转，不再使用其他高级预测器的预测结果。
+Additionally, if a valid branch instruction recorded in the FTB entry has an
+"always taken" flag, indicating that the branch instruction has never had a
+non-jump case historically, the corresponding br_taken_mask in the phase 2
+prediction result is directly set high within this module. This directly
+predicts the branch instruction as taken, bypassing the prediction results from
+other advanced predictors.
 
 #### TAGE-SC
 
-TAGE-SC 是南湖架构条件分支的主预测器，属于精确预测器（Accurate Predictor，简称 APD）。
+TAGE-SC is the main predictor for conditional branches in the Nanhu
+architecture, classified as an Accurate Predictor (APD).
 
-其中 TAGE 利用历史长度不同的多个预测表，可以挖掘极长的分支历史信息；SC 是统计校正器。
+Among them, TAGE utilizes multiple prediction tables with different history
+lengths to mine extremely long branch history information; SC is a statistical
+corrector.
 
-TAGE 由一个基预测表和多个历史表组成，基预测表用 PC 索引，而历史表用 PC 和一定长度的分支历史折叠后的结果异或索引，不同历
-史表使用的分支历史长度不同。在预测时，还会用 PC 和每个历史表对应的分支历史的另一种折叠结果异或计算 tag，与表中读出的 tag
-进行匹配，如果匹配成功则该表命中。最终的结果取决于命中的历史长度最长的预测表的结果。
+TAGE consists of a base prediction table and multiple history tables. The base
+prediction table is indexed by the PC, while the history tables are indexed by
+the XOR result of the PC and a folded version of the branch history of a certain
+length. Different history tables use branch histories of varying lengths. During
+prediction, a tag is also calculated by XORing the PC with another folded
+version of the branch history corresponding to each history table, which is then
+matched against the tag read from the table. A match indicates a hit for that
+table. The final result depends on the prediction from the history table with
+the longest matching history length.
 
-当 SC 认为 TAGE 有较大的概率误预测时，它会反转最终的预测结果。
+When SC determines that TAGE has a high probability of misprediction, it inverts
+the final prediction result.
 
-在南湖架构中，每次预测最多同时预测 2 条条件分支指令。在访问 TAGE 的各个历史表时，用预测块的起始地址作为
-PC，同时取出两个预测结果，它们所用的分支历史也是相同的。
+In the Nanhu architecture, each prediction can simultaneously predict up to two
+conditional branch instructions. When accessing various history tables of TAGE,
+the starting address of the prediction block is used as the PC, and two
+prediction results are fetched simultaneously, both using the same branch
+history.
 
-##### TAGE 预测时序
+##### TAGE Prediction Timing
 
-TAGE 是高精度条件分支方向预测器。使用不同长度的分支历史和当前 PC 值寻址多个 SRAM 表，当在多个表中出现命中时，优先选择最
-命中的历史长度最长的对应表项的预测结果作为最终结果。
+TAGE is a high-precision conditional branch direction predictor. It uses branch
+histories of varying lengths and the current PC value to address multiple SRAM
+tables. When hits occur in multiple tables, the prediction result from the entry
+with the longest matching history is prioritized as the final result.
 
-TAGE 需要 2 拍延迟：
+TAGE requires a 2-cycle delay:
 
-* 0 拍生成 SRAM 寻址用 index。index 的生成过程就是把折叠历史和 pc 异或，折叠历史的管理不在 ITTAGE 和 TAGE 内部，而在
-  BPU
-* 1 拍读出结果
-* 2 拍输出预测结果
+* Generates the SRAM addressing index in 0 cycles. The index generation process
+  involves XORing the folded history with the PC. The management of the folded
+  history is not handled within ITTAGE and TAGE but within the BPU.
+* 1-cycle Readout Result
+* 2-cycle output prediction result
 
-##### TAGE：折叠历史
+##### TAGE: Folded History
 
-TAGE 类预测器的每一个历史表都有一个特定的历史长度，为了与 PC
-异或后进行历史表的索引，很长的分支历史序列需要被分成很多段，然后全部异或起来。每一段的长度一般等于历史表深度的对数。由于异或的次数一般较多，为了避免预测路径上多级异或的时延，我们会直接存储折叠后的历史。由于不同长度历史折叠方式不同
-，所需折叠历史的份数等于 (历史长度,折叠后长度)
-元组去重后的个数。在更新一位历史时只需要把折叠前的最老的那一位和最新的一位异或到相应的位置，再做一个移位操作即可。
+Each history table in TAGE-type predictors has a specific history length. To
+index the history table after XORing with the PC, long branch history sequences
+are divided into multiple segments, all of which are XORed together. The length
+of each segment is generally equal to the logarithm of the history table depth.
+Due to the typically high number of XOR operations, to avoid the latency of
+multi-level XORs on the prediction path, we directly store the folded history.
+Since different history lengths require different folding methods, the number of
+folded history copies needed equals the count of unique (history length, folded
+length) tuples. When updating a single bit of history, only the oldest and
+newest bits before folding need to be XORed into the corresponding positions,
+followed by a shift operation.
 
-##### TAGE：备选预测逻辑
+##### TAGE: Alternative prediction logic
 
-实现了 USE_ALT_ON_NA
-寄存器，动态决定是否在最长历史匹配结果信心不足时使用备选预测。在实现中处于时序考虑，始终用基预测表的结果作为备选预测，这带来的准确率损失很小。
+The USE_ALT_ON_NA register is implemented to dynamically decide whether to use
+an alternate prediction when the confidence in the longest history match result
+is insufficient. For timing considerations, the base prediction table result is
+always used as the alternate prediction, which results in minimal accuracy loss.
 
-##### SC：时序
+##### SC: Timing
 
-一些应用上，一些分支行为与分支历史或路径相关性较弱，表现出一个统计上的预测偏向性。对于这些分支，相比 TAGE，使用计数器捕捉统计偏向的方法更为有效。TAGE
-在预测非常相关的分支时非常有效，TAGE 未能预测有统计偏向的分支，例如只对一个方向有小偏差，但 与历史路径没有强相关性的分支。
+In some applications, certain branch behaviors exhibit a statistical prediction
+bias with weak correlation to branch history or path. For these branches, using
+counters to capture statistical bias is more effective than TAGE. TAGE is highly
+effective in predicting strongly correlated branches but fails to predict
+branches with statistical bias, such as those with a slight deviation in one
+direction but no strong correlation to historical paths.
 
-统计校正的目的是检测不太可靠的预测并将其恢复，来自 TAGE
-的预测以及分支信息（地址、全局历史、全局路径、局部历史）被呈现给统计校正预测器，其决定是否反转预测。SC 负责预测具有统计偏向的条件分支指令并在该情形下反转
-TAGE 预测器的结果。
+The purpose of statistical correction is to detect less reliable predictions and
+recover them. Predictions from TAGE, along with branch information (address,
+global history, global path, local history), are presented to the statistical
+correction predictor, which decides whether to invert the prediction. SC is
+responsible for predicting conditionally biased branch instructions and
+reversing the TAGE predictor's outcome in such cases.
 
-SC 的预测算法依赖 TAGE 里面的是否有历史表 hit 的信号 provided，以及 provider 的预测结果 taken，从而来决定 SC
-自己的预测。provided 是使用 SC 预测的必要条件之一，provider 的 taken 作为 choose bit，选出 SC 最终的预测，这是因为
-SC 在 TAGE 预测结果不同的场景下可能有不同的预测。
+SC's prediction algorithm relies on signals from TAGE, such as whether there is
+a history table hit (provided) and the provider's prediction result (taken), to
+determine its own prediction. The provided signal is one of the necessary
+conditions for using SC prediction, while the provider's taken serves as the
+choose bit to select SC's final prediction. This is because SC may yield
+different predictions depending on TAGE's varying outcomes.
 
-SC 需要 3 拍延迟：
+SC requires a 3-cycle delay:
 
-* 0 拍生成寻址 index 得到 s0_idx，index 的生成过程就是把折叠历史和 pc 异或，折叠历史的管理不在 ITTAGE 和 TAGE
-  内部，而在 BPU 里
-* 1 拍读出 SCTable 对应 s0_idx 的计数器数据 s1_scResps
-* 2 拍根据 s1_scResps 选择是否需要反转预测结果
-* 3 拍输出完整的预测结果
+* 0-cycle generation of the addressing index s0_idx. The index is generated by
+  XORing the folded history with the PC. The management of the folded history is
+  not within ITTAGE or TAGE but within the BPU.
+* 1. Read out the counter data s1_scResps corresponding to s0_idx from the
+  SCTable.
+* In the second cycle, determine whether the prediction result needs to be
+  inverted based on s1_scResps.
+* Three cycles to output the complete prediction result.
 
 #### ITTAGE
 
-ITTAGE 接收来自 BPU 内部的预测请求，其内部由一个基预测表和多个历史表组成，每个表项中都有一个用于存储间接跳转指令目标地址的 字段。基预测表用 PC
-索引，而历史表用 PC 和一定长度的分支历史折叠后的结果异或索引，不同历史表使用的分支历史长度不同。在预测时，还会用 PC
-和每个历史表对应的分支历史的另一种折叠结果异或计算 tag，与表中读出的 tag
-进行匹配，如果匹配成功则该表命中。最终的结果取决于命中的历史长度最长的预测表的结果。最终，ITTAGE 将预测结果输出至 composer。
+ITTAGE receives prediction requests from within the BPU. It consists of a base
+prediction table and multiple history tables, each entry containing a field to
+store the target address of indirect jump instructions. The base prediction
+table is indexed by PC, while history tables are indexed by XORing the PC with a
+folded result of a certain length of branch history. Different history tables
+use varying lengths of branch history. During prediction, a tag is computed by
+XORing the PC with another folded result of the branch history corresponding to
+each history table, then matched against the tag read from the table. A match
+indicates a hit. The final result depends on the outcome from the history table
+with the longest matching history length. Ultimately, ITTAGE outputs the
+prediction result to the composer.
 
-##### 间接跳转指令的预测
+##### Prediction of indirect jump instructions
 
-ITTAGE 用于预测间接跳转指令。普通分支指令和无条件跳转指令的跳转目标直接编码于指令中，便于预测，而间接跳转指令的跳转地址
-来自运行时可变的寄存器，从而有多种可能选择，需要根据分支历史对其作出预测。为此，ITTAGE 的每个表项在 TAGE 表项的基础上加
-入了所预测的跳转地址项，最后输出结果为选出的命中预测跳转地址而非选出的跳转方向。由于每个 FTB 项仅存储至多一条间接跳转指 令信息，ITTAGE
-预测器每周期也最多预测一条间接跳转指令的目标地址。
+ITTAGE is used to predict indirect jump instructions. The jump targets of
+ordinary branch instructions and unconditional jump instructions are directly
+encoded in the instructions, making them easy to predict. However, the jump
+addresses of indirect jump instructions come from runtime-variable registers,
+leading to multiple possible choices, requiring prediction based on branch
+history. To this end, each entry in ITTAGE adds a predicted jump address field
+on top of the TAGE entry, with the final output being the selected predicted
+jump address rather than the predicted jump direction. Since each FTB entry
+stores at most one indirect jump instruction, the ITTAGE predictor predicts the
+target address of at most one indirect jump instruction per cycle.
 
-ITTAGE 需要 3 拍延迟：
+ITTAGE requires a 3-cycle delay:
 
-* 0 拍生成寻址 index
-* 1 拍读出数据
-* 2 拍选出命中结果
-* 3 拍输出
+* Index generation takes 0 cycles.
+* 1 Read out data
+* 2-cycle selection of hit results
+* 3-cycle output
 
-##### 折叠分支历史
+##### Folded Branch History
 
-历史表有特定的历史长度，为了与 PC
-异或后进行历史表的索引，很长的分支历史序列需要被分成很多段，然后全部异或起来。每一段的长度一般等于历史表深度的对数。由于异或的次数一般较多，为了避免预测路径上多级异或的时延，我们会直接存储折叠后的历史。由于不同长度历史折叠方式不同，所需折叠历史的份数等于
-(历史长度,折叠后长度) 元组去重后的个数。在更新一位历史时只需要把折叠前 的最老的那一位和最新的一位异或到相应的位置，再做一个移位操作即可。
+The history table has a specific history length. To index the history table
+after XORing with the PC, a long branch history sequence must be divided into
+multiple segments, all of which are then XORed together. Each segment's length
+typically equals the logarithm of the history table's depth. Due to the
+generally high number of XOR operations, storing the folded history directly
+avoids the delay of multi-level XOR operations in the prediction path. Since
+different history lengths require different folding methods, the number of
+folded history copies needed equals the count of unique (history length, folded
+length) tuples. When updating a single bit of history, only the oldest and
+newest bits need to be XORed into their respective positions, followed by a
+shift operation.
 
 #### RAS
 
-RAS 使用栈结构来预测函数调用与返回这类具有成对匹配特性的执行流的返回地址。其中调用（push/call）类指令的特征为目标寄存器地址为 1 或 5 的
-jal/jalr 指令。返回（ret）类指令的特征为源寄存器为 1 或 5 的 jalr 指令。这类指令为无条件跳转指令，其类型、所在块内偏 移量已在 FTB
-中读出。
+The RAS uses a stack structure to predict the return addresses of execution
+flows with paired matching characteristics, such as function calls and returns.
+The call (push/call) type instructions are characterized by jal/jalr
+instructions with target register addresses of 1 or 5. The return (ret) type
+instructions are characterized by jalr instructions with source registers of 1
+or 5. These are unconditional jump instructions, and their type and offset
+within the block are already read from the FTB.
 
-在实现中，RAS 预测器在 s2 和 s3 两阶段提供预测结果。
+In the implementation, the RAS predictor provides prediction results in both the
+s2 and s3 stages.
 
-##### 2 阶段结果
+##### Stage 2 results.
 
-在 2 阶段，由于 s3 阶段还可能存在预测结果需要更新，当前 FTB 项并不一定为最终执行路径，此时作出的预测推测了此时 3 阶段预测结果（
-也即前一个预测块）不会刷新当前流水级内的预测起始地址。若 2 阶段从 FTB 传来的 FTB 项有效且其中存在 push 类（call）指令，则将该指
-令之后下一指令的 PC 值压入 RAS 栈；若 s2 阶段传来 FTB 项有效且其中存在 pop 类（return）指令，则将当前栈顶的地址作为结果返回并对结
-果出栈。
+In stage 2, since the s3 stage may still have prediction results requiring
+updates, the current FTB entry is not necessarily the final execution path. The
+prediction made at this stage assumes that the s3 prediction result (i.e., the
+previous prediction block) will not refresh the predicted start address in the
+current pipeline stage. If the FTB entry passed from FTB in stage 2 is valid and
+contains a push-type (call) instruction, the PC value of the next instruction
+after this instruction is pushed onto the RAS stack. If the FTB entry passed in
+s2 is valid and contains a pop-type (return) instruction, the address at the top
+of the stack is returned as the result, and the result is popped from the stack.
 
-在 RAS 栈模块内，上述行为分别体现为，在 push 操作时，如当前地址和栈顶地址不同，则压栈一个新项目，其对应计数器为 0，否则将栈顶项的计数器增加
-1。两操作都需将这一顶部信息设置为写 bypass 项以供当前读操作使用。在 pop 操作时，若当前栈顶项计数器为 0，则栈顶 指针减 1，若计数器大于
-0，则将计数器减 1。为时序优化考虑，写入到 RAS 栈内的数据将会延迟一拍后写入，考虑到可能存在本拍写入的数据下一拍需要获取读数据的情况，设计了写
-bypass 机制，准备写入的数据将在本拍首先用于更新写 bypass 相关的项，包括写操作指针及写操作数据。下一拍要求读取的指针若与写 bypass
-记录的指针位置匹配，则使用 bypass 值，否则使用真正的栈顶值。
+Within the RAS stack module, the above behaviors are reflected as follows:
+During a push operation, if the current address differs from the top-of-stack
+address, a new entry with a counter value of 0 is pushed onto the stack;
+otherwise, the counter of the top entry is incremented by 1. Both operations
+require setting this top information as a write bypass entry for current read
+operations. During a pop operation, if the counter of the top entry is 0, the
+top pointer is decremented by 1; if the counter is greater than 0, the counter
+is decremented by 1. For timing optimization, data written to the RAS stack is
+delayed by one cycle. Considering cases where data written in the current cycle
+may need to be read in the next cycle, a write bypass mechanism is designed.
+Data to be written is first used in the current cycle to update write
+bypass-related entries, including the write pointer and write data. If the read
+pointer requested in the next cycle matches the write bypass pointer, the bypass
+value is used; otherwise, the actual top-of-stack value is used.
 
-##### 3 阶段结果
+##### Stage 3 result
 
-在 3 阶段，2 阶段曾发生过的推测 push/pop 操作记录会随流水线传递过来，3 阶段会根据 3 阶段 FTB 项（此时不再存在后续流水级，也即能进 入
-3 阶段的 FTB 项不会被后续流水级冲刷）结果以与 2 阶段相同逻辑生成 push/pop 控制信号，若发现 2 阶段推测结果与 3 阶段判定结果不同， 即
-RAS 位于 2 阶段时，当时 3 阶段预测冲刷过 BPU 流水线，则 2 阶段做出的预测结果所基于的情况已经发生变化，对 RAS
-栈的操作不正确，需要仿照误预测进行状态恢复，具体细节见后。
+In stage 3, the speculative push/pop operation records that occurred in stage 2
+are passed along the pipeline. Stage 3 generates push/pop control signals using
+the same logic as stage 2, based on the FTB entry in stage 3 (at this point,
+there are no subsequent pipeline stages, meaning FTB entries that reach stage 3
+will not be flushed by later stages). If it is found that the speculative result
+from stage 2 differs from the determined result in stage 3—i.e., when the RAS
+was in stage 2, stage 3 had predicted a flush of the BPU pipeline—then the
+prediction result from stage 2 was based on a scenario that has since changed,
+and the RAS stack operation was incorrect. State recovery similar to
+misprediction is required, with specific details to follow.
 
-### 预测器训练
+### Predictor training
 
-预测器作出的每一个预测，在其中所有指令都成功提交后会由 FTQ 生成预测块更新信息，与传递到 FTQ 的各预测器 meta 信息一起送回预测器进行训练。
+Every prediction made by the predictor, after all instructions in it are
+successfully committed, generates prediction block update information by the
+FTQ. This information, along with the meta information from each predictor
+passed to the FTQ, is sent back to the predictor for training.
 
-#### 预测器训练数据接收
+#### Predictor Training Data Reception
 
-从 FTQ 传入的预测器训练数据在 BPU 模 FTB 项、更新 PC 等其他信号一起传递给各预测器。各预测器视其时序压力再暂存 update 信号或立刻进 行
+The predictor training data passed from FTQ to the BPU module, along with FTB
+entries, updated PC, and other signals, is forwarded to each predictor. Each
+predictor either temporarily stores the update signal or processes it
+immediately, depending on its timing pressure.
 
 #### FTB
 
-FTB 项的更新具体逻辑详见 FTQ 模块。
+For the specific update logic of FTB entries, please refer to the FTQ module.
 
-收到 update 请求后，FTB 模块会根据 meta 信息中记录的这一预测做出时原来的读取结果是否 hit 决定更新时机。若 meta 中显示做出预测时
-hit，则在本拍立刻更新将新的 FTB 数据写入 SRAM，否则需要延迟 2 周期等待读出 FTB 内现有结果决定写入路后才可更新。
+Upon receiving an update request, the FTB module determines the update timing
+based on whether the original read result was a hit, as recorded in the meta
+information. If the meta indicates a hit during prediction, the new FTB data is
+immediately written to SRAM in the current cycle. Otherwise, the update is
+delayed by 2 cycles to wait for the existing FTB result to be read out and
+determine the write path before updating.
 
-在 FTBBank 内部，当存在更新请求时，该模块行为也因立即更新和推迟更新两情况而有所不同。立即更新时，FTBBank 内的 SRAM
-写通道拉高，按照给定的信息完成写入。推迟 2 周期更新时，FTBBank 首先收到一个 update
-的读请求且优先级高于普通预测的读请求，而后下一拍读出数据，选出给定地址命中的路编码传递给外部 FTB 模块(命中场景：两次针对这一 FTB
-项的请求，第一次请求未命中，它更新之前发生了第 二次访问，当前第一次的更新已完成，此更新为第二次对应的更新)。而若这一拍未命中，则下一拍需要写入到在读出 FTB
-项后一拍由路选取算法分配的路中。路选取规则为，若所有路均已写满，则使用替换算法（此处为伪 LRU，详见 ICache 文档）选取要替换的路，否则选取 一空路。
+Within the FTBBank, when an update request exists, the module's behavior differs
+depending on whether it is an immediate or delayed update. For immediate
+updates, the SRAM write channel in the FTBBank is activated, and the write is
+completed based on the given information. For a 2-cycle delayed update, the
+FTBBank first receives a read request for the update, which takes priority over
+regular prediction read requests. In the next cycle, the data is read out, and
+the path encoding that matches the given address is passed to the external FTB
+module (hit scenario: two requests for this FTB entry, the first request missed,
+and before its update, a second access occurred. The update corresponding to the
+first request is now complete, and this update is for the second request). If
+there is no hit in this cycle, the write is performed in the next cycle to a
+path selected by the path allocation algorithm after reading the FTB entry. The
+path selection rule is as follows: if all paths are full, the replacement
+algorithm (here, pseudo-LRU; see the ICache documentation for details) selects
+the path to replace; otherwise, an empty path is chosen.
 
 #### Composer
 
-Composer 通过 IO 端口
-io_update_*将训练信号发送给其各个预测器。总的来说，为防止错误执行路径对预测器内容的污染，各部分预测器在预测块的所有指令提交后进行训练。它们的训练内容来自自身的预测信息和预测块中指令的译码结果和执行结果，它们会被从
-FTQ 中 读出，并送回 BPU。其中，自身的预测信息会在预测后打包传进 FTQ 中存储；指令的译码结果来自 IFU 的预译码模块，在取到指令后写回
-FTQ；而执行结果来自各个执行单元。
+The Composer sends training signals to its predictors through the IO port
+io_update_*. In general, to prevent contamination of predictor contents by
+incorrect execution paths, each predictor is trained after all instructions in
+the prediction block are committed. Their training content comes from their own
+prediction information and the decoding and execution results of instructions in
+the prediction block, which are read from the FTQ and sent back to the BPU. The
+prediction information is packed and stored in the FTQ after prediction; the
+decoding results of instructions come from the IFU's pre-decoding module and are
+written back to the FTQ after fetching the instructions; and the execution
+results come from various execution units.
 
 #### TAGE-SC & ITTAGE
 
-表项中包含一个 useful 域，它的值不为 0 表示该项是一个有用的项，便不会被训练时的分配算法当作空项分配出去。在训练时，用一个饱
-和计数器动态监测分配的成功/失败次数，当分配失败的次数足够多，计数器达到饱和时，把所有的 useful 域清零。
+Each entry contains a useful field. A non-zero value indicates that the entry is
+useful and will not be allocated as an empty entry during training. During
+training, a saturating counter dynamically monitors the success/failure rate of
+allocations. When the number of allocation failures is sufficiently high and the
+counter saturates, all useful fields are cleared.
 
 #### RAS
 
-当 RAS 在 2 阶段的推测结果与 3 阶段不同或之前的预测结果遇到了 redirect，需要恢复状态。其中，redirect 信息在实际恢复前被暂存到
-RAS 内寄存器，延迟一拍再更新。3 阶段检测到不同的下一拍完成更新。若为 redirect 中的 call 误预测（出错指令预译码为 call 类型指令）或
-3 阶段的 push 操作不匹配，则进行 recover_push 操作，将原来错误 pop 的 RAS 栈顶重新 push 进去。若为 redirect 中的
-ret 误预测（出错指令预译码为 pop 指令）或 3 阶段的 pop 操作不匹配，则进行 recover_pop 操作，弹出 RAS
-栈顶本应弹出的地址。栈指针在 redirect 时恢复为 redirect 传来的栈指针，否则为当前值。栈顶在 redirect 恢复时恢复为 redirect
-传来的栈顶项，否则为当前值，恢复的新地址在 redirect 时为 redirect 信号下一条指令的值，否则为 2 阶段推测值。
+When the speculative result of RAS in stage 2 differs from stage 3 or a previous
+prediction result encounters a redirect, the state must be recovered. The
+redirect information is temporarily stored in RAS registers before actual
+recovery, delayed by one cycle before updating. Stage 3 detects the difference
+and completes the update in the next cycle. If it is a call misprediction in the
+redirect (the erroneous instruction is pre-decoded as a call-type instruction)
+or a stage 3 push operation mismatch, a recover_push operation is performed to
+push the erroneously popped RAS stack top back in. If it is a ret misprediction
+in the redirect (the erroneous instruction is pre-decoded as a pop instruction)
+or a stage 3 pop operation mismatch, a recover_pop operation is performed to pop
+the address that should have been popped from the RAS stack top. The stack
+pointer is restored to the one transmitted by the redirect during redirection;
+otherwise, it remains the current value. The stack top is restored to the stack
+top item transmitted by the redirect during recovery; otherwise, it remains the
+current value. The new recovery address is the value of the next instruction
+under the redirect signal during redirection; otherwise, it is the speculative
+value from stage 2.
 
-在 RAS 栈内部，状态恢复时同样生成 push、pop 等操作，这类操作的处理方式与前述 2 阶段相同，此处仅列举存在不同的情况。在 push 操作
-且非分配新项的情况下，若处于 recover 状态，sp、栈顶指针、顶部返回地址要设置为更新值。在 pop 操作且当前栈顶计数器非 0 时，so、
-栈顶指针、顶部返回地址要设置为更新值。在既非 push 也非 pop 时，需要恢复 sp、栈顶指针、顶部返回地址同时处理写 bypass。
+Within the RAS stack, state recovery also generates operations such as push and
+pop. The handling of these operations is the same as in the aforementioned two
+stages, with only differing cases listed here. For a push operation without
+allocating a new entry, if in the recover state, the sp, stack top pointer, and
+top return address are set to updated values. For a pop operation when the
+current stack top counter is not 0, the so, stack top pointer, and top return
+address are set to updated values. For operations that are neither push nor pop,
+the sp, stack top pointer, and top return address must be restored while
+handling write bypass.
 
-### 分支历史信息维护
+### Branch history information maintenance
 
-#### 推测更新
+#### Speculative Update
 
-在流水级中预测器生成推测结果后，后续请求所用的分支历史也将包含这一推测值以提高预测准确率。
+After the predictor generates speculative results in the pipeline stage,
+subsequent requests will include this speculative value in the branch history to
+improve prediction accuracy.
 
-#### redirect 恢复
+#### redirect recovery
 
-在遇到分支预测错误时，分支历史也被一并恢复到出错状态前，这样可以保证分支历史的准确度。
+When encountering a branch prediction error, the branch history is also restored
+to its state before the error, ensuring the accuracy of the branch history.
 
-### topdown 性能分析事件统计
+### Top-down performance analysis event statistics.
 
-在 BPU 流水级中预测器生成推测结果可能因为各种原因阻塞，而阻塞可能最终导致处理器整体的流水线空泡。为对性能瓶颈进行较为准确 的分析定位，昆明湖架构增加了
-topdown
-性能计数器，收集流水线中各流水级的空泡/阻塞信息并将指令提交时空泡（实际提交指令数与发射数理想值间差值）归因到具体的模块，从而实现对瓶颈部件的定位。上述性能分析建模方法细节详见
-Intel 发表的论文《A Top-Down method for performance analysis and counters
-architecture》。在 BPU 可以统计到的阻塞事件包括因各预测器误预测恢复所引入的流水线空泡、因后端访存违例恢复所引入的流水线空泡、因 BPU 内部
-override 预测刷新较老预测结果所引入的流水线空泡、因分支指令训练预 测器而阻塞 BPU 所引入的流水线空泡和因 FTQ 满无法接收新的分支预测块阻塞
-BPU 所引入的流水线空泡。在 BPU 内不处理各空泡原因间的优先级，而只是在符合对应的统计条件时将空泡控制信号拉高并随处理器流水线传递。
+In the BPU pipeline stages, predictor-generated speculative results may stall
+for various reasons, potentially leading to pipeline bubbles in the processor.
+To accurately analyze and locate performance bottlenecks, the Kunming Lake
+architecture includes top-down performance counters that collect stall/blockage
+information from each pipeline stage and attribute pipeline bubbles (the
+difference between the actual number of committed instructions and the ideal
+issue count) to specific modules, enabling precise bottleneck identification.
+The details of this performance analysis and modeling method are described in
+Intel's paper, "A Top-Down Method for Performance Analysis and Counters
+Architecture." Stalling events that can be tracked within the BPU include
+pipeline bubbles caused by misprediction recovery from various predictors,
+recovery from backend memory access violations, pipeline bubbles due to
+BPU-internal override predictions flushing older results, bubbles caused by BPU
+stalls during branch instruction training, and bubbles due to FTQ being full and
+unable to accept new branch prediction blocks. The BPU does not prioritize the
+causes of bubbles but simply raises the bubble control signal when the
+corresponding statistical conditions are met and propagates it through the
+processor pipeline.
 
-目前 BPU 内有 FTB（含 uFTB 和主 FTB）、TAGE、SC、ITTAGE 和 RAS 共计 5 种预测器。Topdown
-将分支误预测原因细分到以上 5 个预测器。具体地 ，将每个误预测空泡分解到各预测器的条件为：
+Currently, the BPU contains five predictors: FTB (including uFTB and main FTB),
+TAGE, SC, ITTAGE, and RAS. Topdown further breaks down branch misprediction
+causes into these five predictors. Specifically, the conditions for attributing
+each misprediction bubble to the respective predictors are:
 
-1. FTB：发生了分支指令相关的重定向且误预测的指令在对应预测块的 FTB 内并没有记录
-2. TAGE：发生了分支指令相关的重定向且误预测的指令在对应预测块的 FTB 内有记录，但 SC 预测器并未给出对应的预测
-3. SC：发生了分支指令相关的重定向且误预测的指令在对应预测块的 FTB 内有记录，同时 SC 预测器给出了对应的预测结果
-4. ITTAGE：发生了分支指令相关的重定向，误预测的指令为 jalr 指令但不是 return 指令且在 FTB 项中命中
-5. RAS：发生了分支指令相关的重定向。误预测指令为 return 指令（一类特殊的 jalr 指令，详见后续 RAS 模块说明）。
+1. FTB: A branch instruction-related redirection occurred, and the mispredicted
+   instruction was not recorded in the corresponding prediction block's FTB.
+2. TAGE: A branch instruction-related redirect occurred, and the mispredicted
+   instruction is recorded in the corresponding prediction block's FTB, but the
+   SC predictor did not provide the corresponding prediction.
+3. SC: A branch instruction-related redirect occurs, and the mispredicted
+   instruction is recorded in the FTB of the corresponding prediction block,
+   while the SC predictor provides the corresponding prediction result.
+4. ITTAGE: A branch instruction-related redirect occurred, with the mispredicted
+   instruction being a jalr instruction but not a return instruction, and it hit
+   in the FTB entry.
+5. RAS: A branch instruction-related redirect occurred. The mispredicted
+   instruction is a return instruction (a special type of jalr instruction; see
+   the subsequent RAS module description for details).
 
-后端访存违例恢复所引入的流水线空泡判断条件为后端发来的重定向信号指示重定向来自访存违例。
+The condition for pipeline bubbles introduced by backend memory violation
+recovery is that the redirect signal from the backend indicates the redirect is
+due to a memory violation.
 
-BPU 内部 override 引入的流水线空泡有两个可能的来源，分别为 BPU 第 2 和第 3 流水级的重定向信号。
+Pipeline bubbles caused by internal BPU overrides have two possible sources: the
+redirect signals from the second and third pipeline stages of the BPU.
 
-因分支预测器训练而引入的流水线空泡有 3 个可能的来源，分别为 BPU 第 1，2 和 3 流水线的 ready 信号。上述 ready 信号为 BPU
-内各预测器的 ready 信号取或操作的结果。
+Pipeline bubbles introduced by branch predictor training have three possible
+sources: the ready signals of BPU's first, second, and third pipelines. These
+ready signals are the result of an OR operation on the ready signals from each
+predictor within the BPU.
 
-因 FTQ 满而引入的流水线空泡判断条件为 BPU 发往 FTQ 模块的握手接口 ready 信号拉低。
+The condition for pipeline bubble insertion due to FTQ being full is determined
+by the ready signal of the handshake interface from the BPU to the FTQ module
+being pulled low.
 
-对分支误预测和访存违例所导致的空泡，其将被标记在当前 BPU 各流水级的 topdown 信号中。对 BPU 内部 overrride 引入的空泡，其将被标记在
-override 当前所在流水级和更早流水级，而不影响比这一 override 更早的预测块所在流水级。对分支预测器训练所导致的空泡处理类似 BPU
-override。
+Bubbles caused by branch mispredictions and memory violations will be marked in
+the topdown signals of each BPU pipeline stage. Bubbles introduced by BPU
+internal overrides will be marked in the current pipeline stage of the override
+and earlier stages, without affecting the pipeline stages of prediction blocks
+earlier than this override. The handling of bubbles caused by branch predictor
+training is similar to BPU overrides.
 
-## 总体设计
+## Overall design
 
-### 整体框图
+### Overall Block Diagram
 
-![整体框图](../figure/BPU/BPU/structure.svg)
+![Overall Block Diagram](../figure/BPU/BPU/structure.svg)
 
-### 接口时序
+### Interface timing
 
-#### BPU 到 FTQ 接口时序
+#### BPU to FTQ Interface Timing
 
-![BPU 到 FTQ 接口时序](../figure/BPU/BPU/port1.png)
+![BPU to FTQ Interface Timing](../figure/BPU/BPU/port1.png)
 
-上图展示了 BPU 到 FTQ 的预测结果接口时序。图中针对 0x1FFFF80020 起始地址的预测结果在流水线内 1、2、3 阶段分别输出，若结果与之前
-流水级不一致则 redirect 信号拉高表明需要刷新预测流水线。
+The above diagram shows the timing of the prediction result interface from BPU
+to FTQ. For the prediction results starting at address 0x1FFFF80020, outputs are
+generated in pipeline stages 1, 2, and 3, respectively. If the result differs
+from the previous pipeline stage, the redirect signal is raised to indicate the
+need to flush the prediction pipeline.
 
-#### FTQ 到 BPU redirect 接口时序
+#### FTQ to BPU redirect interface timing.
 
-![FTQ 到 BPU redirect 接口时序](../figure/BPU/BPU/port2.png)
+![FTQ to BPU redirect interface timing](../figure/BPU/BPU/port2.png)
 
-上图展示了 FTQ 到 BPU 的 redirect 接口时序，redirect 核心信号为 cfiUpdate_target，其指定了 redirect
-的目标地址为 0x200000109a。
+The above diagram shows the timing of the redirect interface from FTQ to BPU.
+The core signal of redirect is `cfiUpdate_target`, which specifies the redirect
+target address as 0x200000109a.
 
-#### FTQ 到 BPU update 接口时序
+#### FTQ to BPU update interface timing
 
-![FTQ 到 BPU update 接口时序](../figure/BPU/BPU/port3.png)
+![FTQ to BPU update interface timing](../figure/BPU/BPU/port3.png)
 
-上图展示了 FTQ 到 BPU 的 update 接口时序，这一更新是为 0x2000000e00 开始预测块准备的，其目标跳转地址为 0x200000e0e。
+The diagram above illustrates the timing of the update interface from FTQ to
+BPU. This update prepares for the prediction block starting at 0x2000000e00,
+with a target jump address of 0x200000e0e.
 
-## 寄存器配置
+## Register Configuration
 
-| **寄存器** | **地址** | **复位值** | **属性** | **描述**                                                                                                                                  |
-| ------- | ------ | ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| sbpctl  | 0x5C0  | 64'd0   | RW     | bit0: uFTB 使能信号<br>bit1: FTB 使能信号<br>bit2: BIM 使能信号（保留）<br>bit3: TAGE 使能信号<br>bit4: SC 使能信号<br>bit5: RAS 使能信号<br>bit6： loop 预测器使能信号（保留） |
+| **register** | **address** | **reset value** | **attribute** | **Description**                                                                                                                                                                                                             |
+| ------------ | ----------- | --------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| sbpctl       | 0x5C0       | 64'd0           | RW            | bit0: uFTB enable signal<br>bit1: FTB enable signal<br>bit2: BIM enable signal (reserved)<br>bit3: TAGE enable signal<br>bit4: SC enable signal<br>bit5: RAS enable signal<br>bit6: loop predictor enable signal (reserved) |
 
-注：RO——只读寄存器；RW——可读可写寄存器。
+Note: RO—Read-only register; RW—Read-write register.
 
-## 参考文档
+## Reference documents
 
 1. Reinman G, Austin T, Calder B. A scalable front-end architecture for fast
    instruction delivery[J]. ACM SIGARCH Computer Architecture News, 1999, 27(2):

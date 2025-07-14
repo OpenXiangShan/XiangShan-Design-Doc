@@ -1,8 +1,8 @@
-# 访存队列 LSQ
+# Load Store Queue: LSQ
 
-## 子模块列表
+## Submodule List
 
-| 子模块                                         | Descrption |
+| Submodule                                   | Descrption |
 | ------------------------------------------- | ---------- |
 | [VirtualLoadQueue](VirtualLoadQueue.md)     | TODO       |
 | [LoadQueueRAR](LoadQueueRAR.md)             | TODO       |
@@ -13,58 +13,65 @@
 | [StoreQueue](StoreQueue.md)                 | DONE       |
 
 
-## 功能描述
+## Functional Description
 
-LSQ包括了LoadQueue和StoreQueue两个部分，并做了一层wrapper，便于端口的连接。Lsqwrapper的作用主要只是连线。
+The LSQ consists of two parts, LoadQueue and StoreQueue, with a wrapper layer
+for convenient port connections. The primary function of Lsqwrapper is just
+wiring.
 
   * LoadQueue
 
-    * LoadQueueRAR: RAR违例检查队列
+    * LoadQueueRAR: RAR violation check queue
 
-    * LoadQueueRAW：RAW违例检查队列
+    * LoadQueueRAW: RAW violation check queue
 
-    * LoadQueueUncache: MMIO/Noncacheable load指令处理队列
+    * LoadQueueUncache: MMIO/Noncacheable load instruction processing queue
 
-    * LoadQueueReplay: Load指令调度重发队列
+    * LoadQueueReplay: Load instruction scheduling replay queue
 
-    * LoadExceptionBuffer: Load指令异常处理队列
+    * LoadExceptionBuffer: Exception handling queue for Load instructions
 
-    * VirtualLoadQueue: Load指令顺序维护队列
+    * VirtualLoadQueue: Sequential maintenance queue for Load instructions
 
   * StoreQueue
 
-#### 特性 1：更新Load指令的LqPtr和Store指令的SqPtr
+#### Feature 1: Update LqPtr for Load instructions and SqPtr for Store instructions
 
-* 由于时序的影响，LqPtr和SqPtr的分配被拆分为两部分，如图
+* Due to timing considerations, the allocation of LqPtr and SqPtr is split into
+  two parts, as shown in the figure
 
-  ![LSQ分配](./figure/LSQ-LsqEnqCtrl.svg){#fig:LSQ-LsqEnqCtrl width=60%}
+  ![LSQ allocation](./figure/LSQ-LsqEnqCtrl.svg){#fig:LSQ-LsqEnqCtrl width=60%}
 
-  * Dispatch阶段
+  * Dispatch stage
 
-    * 统计每条指令的LoadFlow或者StoreFlow数，并以累加的方式计算出LqPtr或者SqPtr
+    * Count the number of LoadFlow or StoreFlow for each instruction and
+      calculate the LqPtr or SqPtr in a cumulative manner
 
-  * LSQ入队阶段
+  * LSQ enqueue phase
 
-    * 根据LoadQueue或者StoreQueue维护的enqPtr以累加的方式计算出准确的LqPtr或者SqPtr
+    * Accurately calculate LqPtr or SqPtr by accumulating based on the enqPtr
+      maintained by LoadQueue or StoreQueue
 
-  * LsqEnqCtrl更新逻辑
+  * LsqEnqCtrl update logic
 
-    * 如果出现刷新流水线，则根据刷新Load或者Store指令数和commit数更新
+    * If a pipeline flush occurs, update based on the number of flushed Load or
+      Store instructions and the commit count
 
-    * 如果没有出现刷新流水线，但是有分配的请求，责根据enq和commit数更新
+    * If no pipeline flush occurs but there is an allocation request, update
+      based on the enqueue and commit counts
 
-    * 否则，根据commit数更新
+    * Otherwise, update based on the commit count
 
-## 整体框图
+## Overall Block Diagram
 
-![LSQ整体框架](./figure/LSQ.svg){#fig:LSQ width=40%}
+![Overall LSQ Framework](./figure/LSQ.svg){#fig:LSQ width=40%}
 
 
 \newpage
 
-## 接口时序
+## Interface timing
 
-### Load指令和Store指令入队接口时序实例
+### Timing example of Load and Store instruction enqueue interface
 
-![入队更新](./figure/LSQ-LsqEnqCtrl-Timing.svg){#fig:LSQ-LsqEnqCtrl-Timing
+![Enqueue Update](./figure/LSQ-LsqEnqCtrl-Timing.svg){#fig:LSQ-LsqEnqCtrl-Timing
 width=90%}

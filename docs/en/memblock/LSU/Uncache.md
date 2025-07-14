@@ -1,136 +1,199 @@
-# Uncache 处理单元 Uncache
+# Uncache Handling Unit Uncache
 
-| 更新时间       | 代码版本                                                                                                                                                    | 更新人                                            | 备注   |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---- |
-| 2025.02.26 | [eca6983](https://github.com/OpenXiangShan/XiangShan/blob/eca6983f19d9c20aa907987dff616649c3d204a2/src/main/scala/xiangshan/cache/dcache/Uncache.scala) | [Maxpicca-Li](https://github.com/Maxpicca-Li/) | 完成初版 |
-|            |                                                                                                                                                         |                                                |      |
+| Update time | Code Version                                                                                                                                            | Updated by                                     | Notes                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------- |
+| 2025.02.26  | [eca6983](https://github.com/OpenXiangShan/XiangShan/blob/eca6983f19d9c20aa907987dff616649c3d204a2/src/main/scala/xiangshan/cache/dcache/Uncache.scala) | [Maxpicca-Li](https://github.com/Maxpicca-Li/) | Initial version completed |
+|             |                                                                                                                                                         |                                                |                           |
 
-## 功能描述
+## Functional Description
 
-Uncache 作为LSQ和总线的桥梁，主要用于处理 uncache 访问到总线的请求和响应。目前 Uncache 不支持向量访问、非对齐访问、原子访问。
+The Uncache serves as a bridge between the LSQ and the bus, primarily handling
+uncache access requests and responses to the bus. Currently, the Uncache does
+not support vector accesses, unaligned accesses, or atomic accesses.
 
-Uncache 的功能概述如下：
+The functional overview of Uncache is as follows:
 
-1. 接收 LSQ 传过来的 uncache 请求，包括 LoadQueueUncache 传来的 uncache load 请求 和 StoreQueue
-   传来的 uncache store 请求
-2. 选择候机的 uncache 请求发送到总线，等待并接收总线回复
-3. 将处理完的 uncache 请求返回给 LSQ
-4. 前递寄存的 uncache store 请求的数据给 LoadUnit 中正在执行的 load
+1. Receives uncache requests from LSQ, including uncache load requests from
+   LoadQueueUncache and uncache store requests from StoreQueue.
+2. Selecting a pending uncache request to send to the bus and waiting for the
+   bus response
+3. Return the processed uncache request to LSQ
+4. Forwarding the registered uncache store request data to the load being
+   executed in LoadUnit
 
-Uncache Buffer 结构上，目前有 4 项（项数可配）Entries 和 States，一个总的状态 `uState`。下列为各项具体细节。
+In the Uncache Buffer structure, there are currently 4 entries (configurable)
+for Entries and States, along with a global state `uState`. Below are the
+specific details for each entry.
 
-Uncache 的 Entry 结构如下：
+The structure of an Uncache Entry is as follows:
 
-* `cmd`：标识请求是 load 还是 store，当前版本0为load，1为store。
-* `addr`：请求物理地址。
-* `vaddr`：请求虚拟地址。主要用于前递时判断虚实地址是否 match
-* `data`：store 要写入的数据，或 load 要读取的数据，目前仅支持 64 bits 以内的数据访问。
-* `mask`：请求访问掩码，每 byte 使用一位来表示当前有没有数据，共 8 位。
-* `nc`：请求是否是 NC 访问。
-* `atomic`：请求是否是原子访问。
-* `memBackTypeMM`：请求所访问的地址，是否是 PMA 为 main memory 类型，但 PBMT 为 NC 类型。主要用于 L2 Cache
-  NC 相关逻辑。
-* `resp_nderr`：总线告知 Uncache，该请求是否能处理。
+* `cmd`: Identifies whether the request is a load or store. In the current
+  version, 0 indicates load and 1 indicates store.
+* `addr`: Physical address of the request.
+* `vaddr`: The virtual address of the request. Mainly used to determine
+  virtual-physical address matches during forwarding.
+* `data`: Stores the data to be written or the data to be read for load
+  operations. Currently, only data accesses within 64 bits are supported.
+* `mask`: The access mask for the request, with each byte represented by one bit
+  to indicate whether data is present, totaling 8 bits.
+* `nc`: Indicates whether the request is an NC (Non-Cacheable) access.
+* `atomic`: Indicates whether the request is an atomic access.
+* `memBackTypeMM`: Indicates whether the requested address is of PMA type main
+  memory but PBMT type NC. Primarily used for L2 Cache NC-related logic.
+* `resp_nderr`: The bus indicates whether the request can be processed as
+  Uncache.
 
-Uncache 的 State 结构如下：
+The State structure of the Uncache is as follows:
 
-* `valid`：该项是否有效。
-* `inflight`：1 表示该项请求已经发往总线。
-* `waitSame`：1 表示当前 buffer 里存在与该项请求所访问数据块重合的其他请求，已经发往总线。
-* `waitReturn`：1 表示该项的请求已经接收到总线回复，等待写回 LSQ。
+* `valid`: Indicates whether the entry is valid.
+* `inflight`: 1 indicates the request has been sent to the bus.
+* `waitSame`: 1 indicates that there are other requests in the current buffer
+  that overlap with the data block accessed by this request and have already
+  been sent to the bus.
+* `waitReturn`: 1 indicates the request has received a bus response and is
+  waiting to write back to LSQ.
 
-Uncache 的 `uState`，表征忽视 outstanding 时一个请求项的各个状态：
+Uncache's `uState`, representing the various states of a request entry when
+ignoring outstanding:
 
-* `s_idle` 默认状态
-* `s_inflight` 已经发送了一个请求到总线上，但还未收到回复
-* `s_wait_return` 已经收到回复，但还未返回给 LSQ
+* `s_idle` Default state
+* `s_inflight`: Indicates that a request has been sent to the bus but no
+  response has been received yet.
+* `s_wait_return` has received a response but has not yet returned it to the LSQ
 
-状态转换如下：
+State transitions are as follows:
 
-![ustate 状态转换示意图](./figure/Uncache-uState.svg)
+![ustate state transition diagram](./figure/Uncache-uState.svg)
 
-### 特性 1：入队逻辑
+### Feature 1: Enqueue Logic
 
-（1）每一拍最多处理 1 个从 LSQ 发来的请求，然后检查请求是否能进入 Buffer，若能，则检查是合并到老项还是分配新项。该请求的入队行为有：
+(1) Each cycle processes at most one request from the LSQ, then checks if the
+request can enter the Buffer. If it can, it further checks whether to merge it
+with an existing entry or allocate a new one. The enqueue behavior for this
+request includes:
 
-1. 分配新项，标记 valid
+1. Allocate a new entry, mark it as valid
 
-   1. 无相同块地址项
-2. 分配新项，标记 valid 和 waitSame
+   1. No entry with the same block address
+2. Allocate a new entry, mark it as valid and waitSame
 
-   1. 有相同块地址项：满足首要合并条件，不满足次要合并条件。
-3. 合并到老项
+   1. Entries with the same block address: Meet the primary merging condition
+      but not the secondary merging condition.
+3. Merge into existing entry
 
-   1. 有相同块地址项：满足首要合并条件，满足次要合并条件。
-4. 拒绝
+   1. Entry with the same block address: Meets the primary merging condition and
+      the secondary merging condition.
+4. Reject
 
-   1. ubuffer 满
-   2. 有相同块地址项：不满足首要合并条件
+   1. ubuffer full
+   2. Entries with the same block address: Primary merging condition not met
 
-其中，块地址，即 blockAddr，为每 8 Bytes 的起始地址。首要合并条件指，来项和老项均为 NC 访问、各个属性相同、与老项合并后的 mask
-满足连续且自然对齐、且该项当拍没有**正在或已经**完成了总线访问。次要合并条件是指老项有效、还没有发送总线访问、也没有当拍被选中发往总线访问（因为如果一旦正在或已经发往总线，总线请求已经无法更改，只能分配新项，等待老项收到总线请求后再发送该请求）。
+Here, block address (blockAddr) refers to the starting address of every 8 bytes.
+The primary merging condition means both the incoming and existing entries are
+NC accesses, share identical attributes, the merged mask is contiguous and
+naturally aligned, and the entry has not **initiated or completed** a bus access
+in the current cycle. The secondary merging condition requires the existing
+entry to be valid, not yet sent for bus access, and not selected for bus access
+in the current cycle (since once a bus request is initiated or completed, it
+cannot be altered, necessitating a new entry allocation to wait for the existing
+request to complete before sending the new one).
 
-另外，分配新项，会设置 entry 的各个内容；合并老项，会更新 mask，data, addr 等内容。其中 addr 更新需要保证自然对齐。
+Additionally, allocating a new entry will set all contents of the entry; merging
+into an existing entry will update mask, data, addr, etc. The addr update must
+ensure natural alignment.
 
-> 由于总线访问不一定保序，尤其是 outstanding 时，总线上会同时处理多个 uncache
-> 访问请求。故相同地址的请求不能同时出现在总线中，以保证该地址数据块的被访问顺序。故只有新项满足首要和次要的合并条件，才能合并到老项。
+> Due to potential non-sequential bus access, especially during outstanding
+> operations, multiple uncache access requests may be processed simultaneously
+> on the bus. Thus, requests with the same address cannot coexist on the bus to
+> ensure sequential access to the data block. Therefore, a new entry can only
+> merge with an older one if it meets both primary and secondary merging
+> conditions.
 
-（2）下一拍，返回所分配的 Uncache Buffer 项目 ID。由 LoadQueueUncache 或 StoreQueue 保管该 ID，用于映射
-uncache 返回的 resp。因为 Uncache Buffer 有合并功能，即其返回的 resp 可能对应 LoadQueueUncache 中的多个项。
+(2) In the next cycle, return the allocated Uncache Buffer entry ID. This ID is
+held by LoadQueueUncache or StoreQueue to map the uncache response. Since the
+Uncache Buffer supports merging, its returned response may correspond to
+multiple entries in LoadQueueUncache.
 
-### 特性 2：出队逻辑
+### Feature 2: Dequeue Logic
 
-从当拍已经完成总线访问的项（即状态高位有 `valid` 和 `waitReturn`）中，选择一项，返回给 LSQ，并清除所有 state 标识位。
+From entries that have completed bus access in the current cycle (i.e., those
+with `valid` and `waitReturn` set in the high bits of their state), select one
+to return to LSQ and clear all state flags.
 
-### 特性 3：总线交互和 outstanding 逻辑
+### Feature 3: Bus interaction and outstanding logic
 
-总线交互和 outstanding 逻辑分以下两个部分：
+Bus interaction and outstanding logic are divided into two parts:
 
-（1）发起请求
+(1) Initiate request
 
-无 outstanding 时，仅当 `ustate` 为 `s_idle` 时才能发送请求到总线上。从各个项中选出一个目前可以发往总线的请求，即各状态位仅
-`valid` 置 1 ，发往总线。有 outstanding 时，可无视 `ustate` 即选择请求项，并发往总线。其中 `source` 位为该请求项的
-id。
+Without outstanding, requests can only be sent to the bus when `ustate` is
+`s_idle`. Select one request from the entries that is currently eligible for bus
+transmission, i.e., only the `valid` status bit is set to 1, and send it to the
+bus. With outstanding, requests can be selected and sent to the bus regardless
+of `ustate`, where `source` indicates the request entry's ID.
 
-当请求发往总线时，需要遍历请求项，将相同块地址的其他项的 `waitSame` 置位。
+When a request is sent to the bus, it is necessary to traverse the request
+entries and set the `waitSame` flag for other entries with the same block
+address.
 
-（2）收到回复
+(2) Upon receiving a response
 
-当收到总线回复时，根据 `source` 位确定该请求对应的 buffer 项，更新数据并置位 `waitReturn`。
+When a bus response is received, the corresponding buffer entry is determined
+based on the `source` bits, and the data is updated with the `waitReturn` flag
+set.
 
-此外，需要遍历请求项，将当前相同块地址的 `waitSame` 清除。
+Additionally, it is necessary to traverse the request entries and clear any
+`waitSame` with the same block address.
 
-### 特性 4：前递逻辑
+### Feature 4: Forwarding logic
 
-理论需求上，前递逻辑主要针对 NC 访问。当开启 outstanding 时，uncache NC store 从 StoreQueue 成功写入
-Uncache Buffer 后，StoreQueue 便会将该项出队，不在维护。故此时的 Uncache Buffer 将承担前递该 store
-数据的责任。由于 Uncache Buffer 的入队逻辑存在合并，同一时间，相同地址在 Uncache Buffer 中最多出现 2 项。若出现 2
-项，其中一项一定为 `inflight`，另一项一定为 `waitSame`。因为 StoreQueue 的顺序出队，前者数据更老，后者数据更新。
+Theoretically, the forwarding logic primarily targets NC accesses. When
+outstanding is enabled, once an uncache NC store successfully writes from the
+StoreQueue into the Uncache Buffer, the StoreQueue dequeues that entry and no
+longer maintains it. Hence, the Uncache Buffer assumes responsibility for
+forwarding the store data. Due to the merging logic in the Uncache Buffer's
+enqueue process, the same address can appear in at most 2 entries
+simultaneously. If there are 2 entries, one must be `inflight` and the other
+`waitSame`. Because the StoreQueue dequeues in order, the former contains older
+data while the latter has newer data.
 
-实际处理上，当 uncache NC load 向 Uncache Buffer 发起前递请求时，Uncache
-会比较现有项的块地址，有可能会找到匹配的项，这个项可能是已经发往总线的，也可能是还未发往总线的。前者数据更老，后者数据更新即优先级更高。在第一拍 `f0`
-主要进行虚拟块地址匹配，以在当拍返回 `forwardMaskFast`，在第二拍 `f1` 进行的物理块地址匹配和数据合并，并返回结果。
+In actual processing, when an uncache NC load initiates a forwarding request to
+the Uncache Buffer, the Uncache compares the block addresses of existing
+entries. A matching entry may be found, which could either be one already sent
+to the bus or one yet to be sent. The former contains older data, while the
+latter has newer data with higher priority. In the first cycle `f0`, virtual
+block address matching is primarily performed to return `forwardMaskFast` within
+the same cycle. In the second cycle `f1`, physical block address matching and
+data merging are performed, and the result is returned.
 
-### 特性 5：刷新逻辑
+### Feature 5: Flush logic
 
-刷新，是指将 Uncache Buffer 内的所有项全部完成总线访问并返回给 LSQ 后才能接受新项的进入。当产生 fence \ atomic \ cmo
-或前递出现虚实地址不匹配时，会刷新 Uncache Buffer。此时 `do_uarch_drain`
-置位，不再接受新项的进入。当所有项都完成任务后，`do_uarch_drain` 清除，开始正常接受新项的进入。
+Flushing refers to completing all bus accesses for entries in the Uncache Buffer
+and returning them to the LSQ before accepting new entries. The Uncache Buffer
+is flushed when a fence, atomic, or cmo operation occurs, or when a forwarding
+request results in a virtual-physical address mismatch. At this time,
+`do_uarch_drain` is set, and no new entries are accepted. Once all entries have
+completed their tasks, `do_uarch_drain` is cleared, and the buffer resumes
+normal operation to accept new entries.
 
-## 整体框图
+## Overall Block Diagram
 
 <!-- 请使用 svg -->
 
-![ubuffer整体框图](./figure/Uncache.svg)
+![Overall Block Diagram of ubuffer](./figure/Uncache.svg)
 
-## 接口时序
+## Interface timing
 
-### LSQ 接口时序实例
+### LSQ Interface Timing Example
 
-下图是一个比较详细的接口案例，共 4 个 uncache 访问。第 5 拍前陆续接收 m1、m2、m3，并在其请求发起的随后一拍返回 `idResp`。第 6
-拍 Uncache 满，m4 被停滞。第 9+n 拍完成 s1 的所有访问并写回，释放了一个项。故第 10+n 拍 `io_lsq_req_ready`
-拉高，m4 被接收。之后的拍数里陆续写回其他 uncache 访问请求。 ![Uncache 与 LSQ
-的接口时序示意图](./figure/Uncache-timing-with-lsq.svg)
+The figure below shows a detailed interface example with four uncache accesses.
+Before the 5th cycle, m1, m2, and m3 are received sequentially, and `idResp` is
+returned in the cycle following their request initiation. By the 6th cycle, the
+Uncache is full, and m4 is stalled. By the 9+n cycle, all accesses for s1 are
+completed and written back, freeing one entry. Thus, in the 10+n cycle,
+`io_lsq_req_ready` is asserted, and m4 is accepted. Subsequent cycles gradually
+write back other uncache access requests. ![Schematic of Uncache and LSQ
+Interface Timing](./figure/Uncache-timing-with-lsq.svg)
 
 <!--
 {
@@ -154,10 +217,13 @@ Uncache Buffer 后，StoreQueue 便会将该项出队，不在维护。故此时
 }
 -->
 
-### 总线 接口时序实例
+### Bus interface timing example
 
-（1）没有 outstanding 时，每段只能发出一个 uncache 请求（由 `uState` 控制流出量），直至收到 d 通道回复，才能再次发起
-uncache 请求。 ![Uncache 与总线的接口时序示意图](./figure/Uncache-timing-with-bus.svg)
+(1) When there are no outstanding requests, only one uncache request can be
+issued per segment (controlled by `uState` for outflow regulation). Another
+uncache request can only be initiated after receiving a response on the d
+channel. ![Uncache Interface Timing Diagram with
+Bus](./figure/Uncache-timing-with-bus.svg)
 
 <!-- 
 {
@@ -178,11 +244,13 @@ uncache 请求。 ![Uncache 与总线的接口时序示意图](./figure/Uncache-
 }
  -->
 
-（2）有 outstanding 时，每段可发出多个 uncache 访问（由 `auto_client_out_a_ready` 控制流出量）。如下图，第
-2、3拍连续发出两个请求，并在第 6+n、第 8+n拍收到访问结果。
+(2) When there are outstanding requests, multiple uncache accesses can be issued
+per segment (controlled by `auto_client_out_a_ready` for outflow rate). As shown
+in the figure below, two requests are issued consecutively in cycles 2 and 3,
+and the access results are received in cycles 6+n and 8+n.
 
-![outstanding 时 Uncache
-与总线的接口时序示意图](./figure/Uncache-timing-with-bus-outstanding.svg)
+![Schematic of Uncache and Bus Interface Timing During Outstanding
+Operations](./figure/Uncache-timing-with-bus-outstanding.svg)
 
 <!-- 
 {

@@ -1,209 +1,255 @@
-# Load 指令执行单元 LoadUnit
+# Load instruction execution unit LoadUnit
 
-## 功能描述
+## Functional Description
 
-load指令流水线，接收load发射队列发送的load指令，在流水线中处理完成后将结果写回LoadQueue和ROB，用于指令提交以及唤醒后续依赖本条指令的其他指令。同时，LoadUnit需要给发射队列、Load/StoreQueue反馈一些必要的信息。LoadUnit支持128bits数据宽度。
+The load instruction pipeline receives load instructions from the load dispatch
+queue. After processing in the pipeline, the results are written back to the
+LoadQueue and ROB for instruction commit and to wake up subsequent instructions
+dependent on this one. Meanwhile, the LoadUnit provides necessary feedback to
+the dispatch queue and Load/StoreQueue. The LoadUnit supports a data width of
+128 bits.
 
-### 特性 1：LoadUnit 各级流水线功能
+### Feature 1: Functions of LoadUnit Pipeline Stages
 
-* stage 0
+* Stage 0.
 
-    * 接收不同来源的请求，并做仲裁。
+    * Receive requests from different sources and perform arbitration.
 
-    * 得到仲裁的指令向tlb和dcache发送查询请求。
+    * The arbitrated instruction sends query requests to the TLB and D-cache.
 
-    * 流水线流给stage 1。
+    * Pipeline flows to stage 1.
 
-  仲裁的优先级从高到低列于下表。
+  The arbitration priorities from highest to lowest are listed in the table
+  below.
 
-  Table: LoadUnit请求优先级
+  Table: LoadUnit Request Priority.
 
-  | stage 0请求来源                     | 优先级 |
-  | ------------------------------- | --- |
-  | MisalignBuffer的load请求           | 高   |
-  | dcache miss导致的loadQueueReplay重发 |     |
-  | LoadUnit的快速重发                   |     |
-  | uncache请求                       |     |
-  | nc请求                            |     |
-  | LoadQueueReplay的其他重发            |     |
-  | 高置信度的硬件预取请求                     |     |
-  | 向量load请求                        |     |
-  | 标量load/软件预取请求                   |     |
-  | load pointchaising请求            |     |
-  | 低置信度的硬件预取请求                     | 低   |
+  | Stage 0 request source.                                 | Priority |
+  | ------------------------------------------------------- | -------- |
+  | Load requests from the MisalignBuffer.                  | High.    |
+  | Resending due to loadQueueReplay caused by dcache miss. |          |
+  | Fast replay of LoadUnit                                 |          |
+  | Uncacheable request                                     |          |
+  | Non-cacheable request.                                  |          |
+  | Other replays from LoadQueueReplay                      |          |
+  | High-confidence hardware prefetch requests.             |          |
+  | Vector load request                                     |          |
+  | Scalar load/software prefetch requests.                 |          |
+  | load pointchaising request                              |          |
+  | Low-confidence hardware prefetch request                | Low.     |
 
-  目前昆明湖架构不支持load pointchaising。
+  The current Kunminghu architecture does not support load pointchaising.
 
 * stage 1
 
-    * 接收来自stage 0的请求。
+    * Receive requests from stage 0.
 
-    * s1_kill：当fast replay虚实地址匹配失败，l2l fwd失败，或redirect信号有效时，会将s1_kill信号置为true。
+    * s1_kill: The s1_kill signal is set to true when fast replay
+      virtual-physical address matching fails, L2L forwarding fails, or the
+      redirect signal is active.
 
-    * 可能向tlb或dcache追发kill信号。
+    * May issue a kill signal to the TLB or D-cache.
 
-    * 收到tlb的回复，根据物理地址查询dcache；对于hint的情况，一并发给dcache。
+    * Upon receiving a response from the TLB, query the DCache based on the
+      physical address; for hint cases, send them to the DCache simultaneously.
 
-    * 向storequeue && sbuffer查询st-ld forward。
+    * Queries storequeue && sbuffer for st-ld forward.
 
-    * 接收storeunit请求，判断是否存在st-ld违例。
+    * Receives store unit requests and checks for st-ld violations.
 
-    * 检查是否发生异常。
+    * Check if an exception occurs.
 
-    * 如果是nc指令，进行PBMT 检查
+    * For NC instructions, perform PBMT check
 
-    * 如果是prf_i指令，向前端发送请求
+    * If it is a prf_i instruction, send a request to the frontend.
 
-* stage 2
+* Stage 2.
 
-    * 接收来自stage 1的请求。
+    * Receive requests from stage 1.
 
-    * 接收pmp检查的回复，判断是否发生异常；同时整合异常来源。
+    * Receives the PMP check response to determine if an exception occurred;
+      simultaneously integrates the source of the exception.
 
-    * 接收dcache的回复信息，判断是否需要重发等。
+    * Receives the response from the dcache to determine if a resend is needed.
 
-    * 查询LoadQueue和StoreQueue是否发生ld-ld或st-ld违例
+    * Queries LoadQueue and StoreQueue for ld-ld or st-ld violations
 
-    * 向后端发送快速唤醒信号
+    * Send fast wake-up signal to the backend
 
-    * 整合重发原因
+    * Integrates reasons for resending.
 
-    * 如果是nc指令，进行PMA & PMP检查
+    * For non-cacheable (nc) instructions, perform PMA & PMP checks.
 
 * stage 3
 
-    * 接收来自stage 2的请求。
+    * Receive requests from stage 2.
 
-    * 向SMS预取器及L1预取器发送预取请求
+    * Send prefetch requests to the SMS prefetcher and L1 prefetcher.
 
-    * 接收dcache返回的数据或前递的数据，进行拼接和选择
+    * Receive data returned from dcache or forwarded data, perform concatenation
+      and selection
 
-    * 接收uncache的load请求写回
+    * Receives uncache load request writeback
 
-    * 将完成的load请求写回后端
+    * Writes back completed load requests to the backend.
 
-    * 将load指令的执行状态更新至LoadQueue中
+    * Update the execution status of the load instruction in the LoadQueue
 
-    * 向后端发送重定向请求
+    * Send a redirect request to the backend.
 
-### 特性 2: 支持向量load指令
+### Feature 2: Supports vector load instructions.
 
-* LoadUnit处理非对齐Load指令流程和标量类似，优先级低于标脸。特别的:
+* The LoadUnit handles unaligned load instructions similarly to scalar ones,
+  with lower priority than scalar. Specifically:
 
-    * stage 0:
+    * Stage 0:
 
-        * 接受vlSplit的执行请求，优先级高于标量请求,并且不需要计算虚拟地址
+        * Accept execution requests from vlSplit, which have higher priority
+          than scalar requests and do not require virtual address calculation
 
-    * stage 1:
+    * Stage 1:
 
-        * 计算vecVaddrOffset和vecTriggerMask
+        * Calculate vecVaddrOffset and vecTriggerMask
 
-    * stage 3:
+    * Stage 3:
 
-        * 不需要向后端发送feedback_slow响应
+        * No need to send a feedback_slow response to the backend
 
-        * 向量load发起Writeback，通过vecldout发送给后端
+        * Vector load initiates Writeback and sends it to the backend via
+          vecldout.
 
-### 特性 3: 支持MMIO load指令
+### Feature 3: Supports MMIO load instructions
 
-* MMIO load指令只是为了唤醒依赖于该指令的消费者指令。
+* MMIO load instructions are only intended to wake up consumer instructions
+  dependent on them.
 
-    * MMIO load指令在s0向后端发送唤醒请求
+    * MMIO load instruction sends wake-up request to the backend in s0
 
-    * MMIO load在stage s3写回数据
+    * MMIO load writes back data in stage s3.
 
-### 特性 4: 支持Noncacheable load指令
+### Feature 4: Supports Non-cacheable load instructions.
 
-* LoadUnit处理非对齐Load指令流程和标量类似，优先级高于标量请求。特别的, Noncacheable load指令将2次上流水线：
+* The process for handling non-aligned Load instructions in LoadUnit is similar
+  to scalar requests, with higher priority than scalar requests. Specifically,
+  Noncacheable load instructions will engage the pipeline twice:
 
-    * 第一次上流水线，判断指令NC属性
+    * First pipeline stage: determines the NC attribute of the instruction
 
-    * 第二次上流水线:
+    * Second pipeline stage:
 
-        * stage 0: 阶段判断出 NC 指令，无需进行 tlb 翻译。
+        * Stage 0: Identifies NC instructions, no TLB translation required.
 
-        * stage 1: 发送前递请求到StoreQueue，
+        * Stage 1: Send forwarding request to StoreQueue
 
-        * stage 2: 判断store数据前递情况（数据未准备好-重发处理，虚实地址不匹配-重定向 N 处理）。发送 RAR/RAW 违例请求，
+        * Stage 2: Determines store data forwarding conditions (data not ready -
+          replay handling, virtual-physical address mismatch - redirect N
+          handling). Sends RAR/RAW violation requests.
 
-        * stage 3: 判读违例情况（ldld vio-重定向，stld
-          vio-重定向处理），如果RAR或RAW满/没有ready，需要LoadQueueUncache重发。如果不需要重发，则通过ldout写回。
+        * Stage 3: Determine violation scenarios (ldld vio-redirect, stld
+          vio-redirect handling). If RAR or RAW is full/not ready, a resend from
+          LoadQueueUncache is required. If no resend is needed, write back via
+          ldout.
 
-* 不支持非对齐的Noncacheable load指令
+* Non-aligned Noncacheable load instructions are not supported.
 
-* 支持从LoadQueueUncachce获得前递数据。
+* Supports obtaining forwarded data from the LoadQueueUncache.
 
-### 特性 5: 支持非对齐load指令
+### Feature 5: Support for misaligned load instructions
 
-* 非对齐load指令将4次上流水线：
+* Non-aligned load instructions will engage the pipeline four times:
 
-    * 第一次上流水线，判断是否是非对齐指令,如果是非对齐指令，则LoadMisaligneBuffer发送非对齐请求;
+    * First pipeline stage: Determine if it is a misaligned instruction; if so,
+      the LoadMisalignedBuffer sends a misaligned request
 
-    * 第二次上流水线，执行拆分的第一条对齐的load指令，成功执行后，向LoadMisalignBuffer发送响应，否则从LoadMisalignBuffer里重发;
+    * The second time the pipeline is engaged, the first aligned load
+      instruction from the split is executed. Upon successful execution, a
+      response is sent to the LoadMisalignBuffer; otherwise, it is resent from
+      the LoadMisalignBuffer.
 
-    * 第三次上流水线，执行拆分的第二条对齐的load指令,成功执行后，向LoadMisalignBuffer发送响应，否则从LoadMisialignBuffer里重发；
+    * The third time in the pipeline, executing the second split aligned load
+      instruction. Upon successful execution, a response is sent to the
+      LoadMisalignBuffer; otherwise, it is resent from the LoadMisalignBuffer.
 
-    * 第四次上流水线，在s0唤醒load指令之后的消费者，同时，load指令从LoadMisalignBuffer写回。
+    * The fourth pipeline stage wakes up the consumers following the load
+      instruction in s0, while the load instruction writes back from the
+      LoadMisalignBuffer.
 
-* Load处理非对齐Store指令流程和标量类似，特别的:
+* The process for handling non-aligned Store instructions in Load is similar to
+  that of scalar operations, with the following specifics:
 
-    * stage 0:
+    * Stage 0:
 
-        * 接受来自LoadMisalignBuffer的勤求，优先级高于向量和标量请求,并且不需要计算虚拟地址
+        * Accept requests from the LoadMisalignBuffer with higher priority than
+          vector and scalar requests, and without the need to calculate virtual
+          addresses.
 
-    * stage 3:
+    * Stage 3:
 
-        * 如果不是来自于LoadMisalignBuffer的请求并且没有跨越16字节边界的非对齐请求，那么需要进入LoadMisalignBuffer处理,
-          通过io_misalign_buf接口，向LoadMisalignBuffer发送入队请求
+        * If the request is not from the LoadMisalignBuffer and is a non-aligned
+          request that does not cross a 16-byte boundary, it needs to be
+          processed by the LoadMisalignBuffer. A queue request is sent to the
+          LoadMisalignBuffer via the io_misalign_buf interface.
 
 
-        * 如果是来自与LoadMisalignBuffer的请求并且没有跨越16字节边界请求，则需要向LoadMisliagnBuffer发送重发或者写回响应,通过io_misalign_ldout接口，向LoadMisalignBuffer发送响应
+        * If the request is from LoadMisalignBuffer and does not cross a 16-byte
+          boundary, it needs to send a replay or writeback response to
+          LoadMisalignBuffer. The response is sent via the io_misalign_ldout
+          interface.
 
 
-        * 如果misalignNeedWakeUp == true, 则直接写回，否则需要进入LoadMisalignBuffer重发
+        * If misalignNeedWakeUp == true, write back directly; otherwise, proceed
+          to the LoadMisalignBuffer for retransmission.
 
-### 特性 6: 支持预取请求
+### Feature 6: Supports prefetch requests
 
-* LoadUnit接受两种预取请求
+* The LoadUnit accepts two types of prefetch requests.
 
-    * 高置信度预取(confidence > 0)
+    * High-confidence prefetch (confidence > 0)
 
-    * 低置信度预取(confidence == 0)
+    * Low-confidence prefetch (confidence == 0)
 
-* 支持预取训练
+* Support for prefetch training
 
     * stage s2:
 
-        * 通过io_prefetch_train_l1训练L1预取
+        * Trains the L1 prefetch via io_prefetch_train_l1.
 
-        * 通过io_prefetch_train训练SMS预取
-
-\newpage
-
-## 整体框图
-
-![LoadUnit整体框图](./figure/LSU-LoadUnit.svg){#fig:LSU-LoadUnit}
-
+        * Trains SMS prefetch via io_prefetch_train
 
 \newpage
 
-## 接口时序
+## Overall Block Diagram
 
-### LoadUnit接口时序实例
-
-![LoadUnit接口时序](./figure/LSU-LoadUnit-Timing.svg){#fig:LSU-LoadUnit-timing}
-
-load指令进入LoadUnit后，在stage 0 请求TLB和DCache，stage 1得到TLB返回的paddr，stage
-2得到是否命中DCache。在stage 2进行RAW和RAR违例检查，stage 3通过io_lsq_ldin更新LoadQueue。在stage
-3通过ldout写回。
+![Overall Block Diagram of
+LoadUnit](./figure/LSU-LoadUnit.svg){#fig:LSU-LoadUnit}
 
 
 \newpage
 
-### stage 0不同源仲裁时序实例
+## Interface timing
 
-![stage 0不同源仲裁时序](./figure/LSU-LoadUnit-s0-arb.svg){#fig:LSU-LoadUnit-s0-arb}
+### LoadUnit interface timing example.
 
-图中示例了不同来源的load指令在stage 0的仲裁，第三个clk只有io_ldin_valid有效，且握手成功，在下一拍进入stage
-1。第五个clk中io_ldin_valid和io_replay_valid同时有效，由于replay请求比标量load的优先级高，所以replay请求获得仲裁，进入stage
-1。
+![LoadUnit interface
+timing](./figure/LSU-LoadUnit-Timing.svg){#fig:LSU-LoadUnit-timing}
+
+After a load instruction enters the LoadUnit, it requests TLB and DCache in
+stage 0, obtains the paddr returned by TLB in stage 1, and determines DCache
+hit/miss in stage 2. RAW and RAR violation checks are performed in stage 2. The
+LoadQueue is updated via io_lsq_ldin in stage 3. Write-back occurs via ldout in
+stage 3.
+
+
+\newpage
+
+### Timing example of arbitration for different sources in stage 0
+
+![Timing diagram of arbitration for different sources in stage
+0](./figure/LSU-LoadUnit-s0-arb.svg){#fig:LSU-LoadUnit-s0-arb}
+
+The diagram illustrates arbitration of load instructions from different sources
+in stage 0. In the third clock cycle, only io_ldin_valid is active and the
+handshake succeeds, advancing to stage 1 in the next cycle. In the fifth clock
+cycle, both io_ldin_valid and io_replay_valid are active, but since replay
+requests have higher priority than scalar loads, the replay request wins
+arbitration and proceeds to stage 1.

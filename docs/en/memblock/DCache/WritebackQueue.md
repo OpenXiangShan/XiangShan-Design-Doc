@@ -1,45 +1,57 @@
 # Write Back Queue WritebackQueue
 
-## 功能描述
+## Functional Description
 
-Writeback Queue包含18项WritebackEntry，负责通过TL-C的C通道向L2
-Cache写回替换块(Release)，以及对Probe请求做出应答 (ProbeAck)。
+The Writeback Queue contains 18 WritebackEntry items, responsible for writing
+back replacement blocks to the L2 Cache through the C channel of TL-C (Release)
+and responding to Probe requests (ProbeAck).
 
-### 特性 1：WritebackQueue空项分配与拒绝
+### Feature 1: WritebackQueue Entry Allocation and Rejection
 
-为了时序考虑, 在wbq满的时候新请求会被拒绝; 而当wbq不满的时候所有请求都会被接收,
-此时为新请求分配空项。当前版本中不再支持WritebackQueue中请求的合并。
+For timing considerations, new requests will be rejected when the wbq is full;
+when the wbq is not full, all requests will be accepted, and an empty entry will
+be allocated for the new request. The current version no longer supports merging
+requests in the WritebackQueue.
 
-### 特性 2：请求阻塞条件
+### Feature 2: Request Blocking Conditions
 
-TileLink 手册对并发事务的限制要求如果master有pending Grant(即还没有发送GrantAck), 则不能发送相同地址的Release.
-因此所有 miss 请求在进入MissQueue时如果发现和WritebackQueue中某一项有相同地址, 则该miss请求会被阻塞.
+The TileLink specification imposes restrictions on concurrent transactions,
+requiring that if a master has a pending Grant (i.e., GrantAck has not yet been
+sent), it cannot issue a Release for the same address. Consequently, any miss
+request entering the MissQueue that detects an entry with the same address in
+the WritebackQueue will be blocked.
 
-## 整体框图
+## Overall Block Diagram
 
-WritebackQueue整体架构如[@fig:DCache-WritebackQueue]所示。
+The overall architecture of the WritebackQueue is shown in
+[@fig:DCache-WritebackQueue].
 
-![WritebackQueue流程图](./figure/DCache-WritebackQueue.svg){#fig:DCache-WritebackQueue}
+![WritebackQueue
+Flowchart](./figure/DCache-WritebackQueue.svg){#fig:DCache-WritebackQueue}
 
 
-## 接口时序
+## Interface timing
 
-### 请求接口时序实例
+### Request Interface Timing Example
 
-[@fig:DCache-WritebackQueue-timing]展示了一个需要写回L2的请求在WritebackQueue上的接口时序。
+[@fig:DCache-WritebackQueue-timing] shows the interface timing of a request that
+needs to be written back to L2 in the WritebackQueue.
 
-![WritebackQueue时序](./figure/DCache-WritebackQueue-timing.svg){#fig:DCache-WritebackQueue-timing}
+![WritebackQueue
+Timing](./figure/DCache-WritebackQueue-timing.svg){#fig:DCache-WritebackQueue-timing}
 
-## WritebackEntry模块
-### WritebackEntry状态机设计
-状态设计：WritebackEntry中的状态机设计如[@tbl:WritebackEntry-state]和[@fig:DCache-WritebackEntry]所示:
+## WritebackEntry Module
+### WritebackEntry State Machine Design
+State Design: The state machine design in WritebackEntry is shown in
+[@tbl:WritebackEntry-state] and [@fig:DCache-WritebackEntry]:
 
-Table: WritebackEntry状态寄存器含义 {#tbl:WritebackEntry-state}
+Table: WritebackEntry State Register Descriptions {#tbl:WritebackEntry-state}
 
-| 状态             | Descrption                |
-| -------------- | ------------------------- |
-| s_invalid      | 复位状态，该 WritebackEntry 为空项 |
-| s_release_req  | 正在发送Release或者ProbeAck请求   |
-| s_release_resp | 等待ReleaseAck请求            |
+| Status         | Descrption                                         |
+| -------------- | -------------------------------------------------- |
+| s_invalid      | Reset state, this WritebackEntry is an empty entry |
+| s_release_req  | Sending a Release or ProbeAck request              |
+| s_release_resp | Waiting for ReleaseAck Request                     |
 
-![WriteBackEntry状态机示意图](./figure/DCache-WritebackEntry.svg){#fig:DCache-WritebackEntry}
+![WriteBackEntry State Machine
+Diagram](./figure/DCache-WritebackEntry.svg){#fig:DCache-WritebackEntry}

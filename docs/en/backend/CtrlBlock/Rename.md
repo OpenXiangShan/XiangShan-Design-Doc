@@ -1,566 +1,791 @@
-# Rename 重命名
+# Rename renaming
 
 - Version: V2R2
 - Status: OK
 - Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码信息为指令分配 robIdx
-和物理寄存器，通过操作数查询对应的物理寄存器。同时，该模块还会根据指令译码信息、指令提交信息和来自 RenameTable 的寄存器释放信息维护
-freeList 的状态，以及根据指令译码信息和指令提交信息向 RenameTable 发送写请求，以更新推测执行时的寄存器映射状态。此外，该模块还会处理来自
-ROB 的重定向请求，根据重定向信息重新更新 freeList 的状态。在完成重命名后，Rename 将重命名后的指令信息发送至 Dispatch 模块。
+The Rename module receives instruction decode information from the Decode module
+and allocates robIdx and physical registers based on the decode information,
+querying the corresponding physical registers for operands. Simultaneously, the
+module maintains the state of the freeList according to the instruction decode
+information, instruction commit information, and register release information
+from RenameTable. It also sends write requests to RenameTable to update the
+register mapping state during speculative execution, based on the instruction
+decode and commit information. Additionally, the module handles redirect
+requests from the ROB, updating the freeList state according to the redirect
+information. After renaming, Rename sends the renamed instruction information to
+the Dispatch module.
 
-## 基本功能
+## Basic functionality
 
-将逻辑寄存器映射到物理寄存器，为指令中的逻辑寄存器各自分配一个物理寄存器。
+Mapping logical registers to physical registers, assigning a physical register
+to each logical register in the instruction.
 
-寄存器重命名维护重命名相关的表或指针。维护逻辑寄存器到物理寄存器的映射表，记录每一个逻辑寄存器对应的最近分配的物理寄存器号。
+Register renaming maintains rename-related tables or pointers. It manages the
+mapping table from logical registers to physical registers, recording the most
+recently allocated physical register number for each logical register.
 
-对于整型、浮点和向量寄存器分别维护 224 项、192 项和 128
-项物理寄存器状态表，记录物理寄存器的状态，记录是否分配，通过空闲物理寄存器分配指针记录未被分配的物理寄存器。
+For integer, floating-point, and vector registers, separate physical register
+state tables are maintained with 224, 192, and 128 entries, respectively. These
+tables record the allocation status of physical registers and track unallocated
+physical registers using free physical register allocation pointers.
 
-维护一张提交的逻辑寄存器对应物理寄存器的映射表（RenameTable, RAT），记录提交状态的逻辑寄存器和物理寄存器的映射关系。
+Maintains a committed logical-to-physical register mapping table (RenameTable,
+RAT) recording the mapping relationship between logical and physical registers
+in committed state.
 
-维护一个提交状态的空闲物理寄存器分配的指针。寄存器重命名技术消除指令之间的寄存器读后写相关（WAR），和写后写相关（WAW），当指令执行发生例外或转移指令猜测错误而取消后面的指令时可以保证现场的精确。
+Maintains a commit-state pointer for free physical register allocation. Register
+renaming technology eliminates write-after-read (WAR) and write-after-write
+(WAW) dependencies between instructions, ensuring precise state recovery when
+instructions are canceled due to exceptions or mispredicted branch instructions.
 
-## 重命名输入
+## Rename Input
 
-- 来自译码阶段输入（途中FusionDecoder会对DecodeStage吐出的指令进行宏操作融合的修改，会根据相邻指令的组合种类改变valid，uop等信息，而且会根据相邻指令的ftqptr与ftqoffset的不同组合修改该融合指令的提交类型CommitType）
-- 接受 RAT 的推测重名数据返回
-- 指令融合信息，以及根据指令融合情况修改译码输入指令流
-- ssit，waittable 信息
-- Ctrlblock snapshot 控制信息及出入队指针
-- rab 提交信息
+- Input from the decode stage (the FusionDecoder modifies the instructions
+  output by the DecodeStage for macro-op fusion, adjusting valid, uop, and other
+  information based on adjacent instruction combinations. It also modifies the
+  commit type CommitType of the fused instruction based on the ftqptr and
+  ftqoffset combinations of adjacent instructions.)
+- Accepts speculative rename data feedback from RAT
+- Instruction fusion information, and modifying decoded instruction stream based
+  on fusion conditions.
+- SSIT, waittable information
+- Ctrlblock snapshot control information and enqueue/dequeue pointers
+- RAB commit information
 
-## 重命名输出
+## Rename Output
 
-- 与 rat：写重命名信息。
-- 与 dispatch：流水输出 rename 后的 uop 信息：在 dispatch recv 有效时。
-- 与 snapshot：enqdata，允许生成快照。
+- Interact with RAT: Write rename information.
+- Interact with dispatch: Pipeline output of renamed uop information when
+  dispatch recv is valid.
+- With snapshot: enqdata, allowing snapshot generation.
 
-## 分配整数物理寄存器 {#sec:alloc-int-prf}
+## Allocating integer physical registers {#sec:alloc-int-prf}
 
-在接收到来自 Decode 模块的有效整数指令译码信息后，Rename 模块会根据 io\_in\_[0-5]\_bits\_rfWen 信号和
-io\_in\_[0-5]\_bits\_ldest 信号来判断是否需要分配新的整数物理寄存器。若 rfWen 为高电平且 ldest 不为
-0，则需要分配新的整数物理寄存器。如果需要分配新的整数物理寄存器，则向 intFreeList
-发送分配请求，并在当拍获得分配结果，否则，不发送分配请求。另外，Rename 模块支持整数 Move 指令消除。如果检测到译码后的指令为整数 Move
-指令，亦不分配新的整数物理寄存器。
+Upon receiving valid integer instruction decoding information from the Decode
+module, the Rename module determines whether a new integer physical register
+needs to be allocated based on the signals io\_in\_[0-5]\_bits\_rfWen and
+io\_in\_[0-5]\_bits\_ldest. If rfWen is high and ldest is not 0, a new integer
+physical register is allocated. If allocation is required, a request is sent to
+intFreeList, and the allocation result is obtained in the same cycle; otherwise,
+no request is sent. Additionally, the Rename module supports integer Move
+instruction elimination. If a decoded instruction is identified as an integer
+Move instruction, no new integer physical register is allocated.
 
-## 分配浮点或向量物理寄存器 {#sec:alloc-fp-vec-prf}
+## Allocating floating-point or vector physical registers {#sec:alloc-fp-vec-prf}
 
-在接收到来自 Decode 模块的有效向量浮点指令译码信息后，Rename 模块会根据 io\_in\_[0-5]\_bits\_fpWen 和
-io\_in\_[0-5]\_bits\_vecWen 信号来判断是否需要分配新的向量浮点物理寄存器。若 fpWen 或 vecWen
-信号为高电平，则需要分配新的浮点或向量物理寄存器。如果需要分配新的浮点或向量物理寄存器，则向 fpFreeList 或 vecFreeList
-发送分配请求，并在当拍获得分配结果，否则，不发送分配请求。
+Upon receiving valid vector floating-point instruction decode information from
+the Decode module, the Rename module determines whether to allocate new vector
+floating-point physical registers based on the io_in_[0-5]_bits_fpWen and
+io_in_[0-5]_bits_vecWen signals. If the fpWen or vecWen signal is high, a new
+floating-point or vector physical register needs to be allocated. If allocation
+is required, a request is sent to the fpFreeList or vecFreeList, and the
+allocation result is obtained in the same cycle; otherwise, no allocation
+request is sent.
 
-## 设置源操作数的物理寄存器（psrc）
+## Setting the Physical Register for Source Operands (psrc)
 
-如果 Decode 模块传来的指令译码信息中有整数寄存器或向量浮点寄存器型的源操作数，那么在通常情况下，Decode 模块会提前一拍向 RenameTable
-查询逻辑寄存器对应的物理寄存器，并在一拍后于 Rename 模块得到读推测重命名表的结果，而后将结果通过
-io\_out\_[0-5]\_bits\_psrc\_[0-4] 传给 Dispatch
-模块。作为例外情况，如果上条指令的目的操作数和本条指令的源操作数相同，则应将本条指令的 psrc 设置为上条指令的 pdest。
+If the instruction decode information from the Decode module includes integer
+register or vector floating-point register-type source operands, under normal
+circumstances, the Decode module will query the RenameTable one cycle in advance
+to obtain the physical register corresponding to the logical register. The
+result is obtained in the Rename module one cycle later and transmitted to the
+Dispatch module via io_out_[0-5]_bits_psrc_[0-4]. As an exception, if the
+destination operand of the previous instruction is the same as the source
+operand of the current instruction, the psrc of the current instruction should
+be set to the pdest of the previous instruction.
 
-## 设置目的操作数的物理寄存器（pdest）
+## Set the physical register (pdest) for the destination operand
 
-如果Decode模块传来的指令译码信息中提示存在目的操作数（参见 [@sec:alloc-int-prf] 和 [@sec:alloc-fp-vec-prf]
-），那么在通常情况下，Rename 模块通过 io\_out\_[0-5]\_bits\_pdest 将新分配的物理寄存器传给 Dispatch
-模块。作为例外情况，如果该指令为整数 Move 指令，则应将本条指令的 pdest 设置为本条指令的 psrc。
+If the instruction decode information from the Decode module indicates the
+presence of a destination operand (see [@sec:alloc-int-prf] and
+[@sec:alloc-fp-vec-prf]), the Rename module typically assigns a new physical
+register to the Dispatch module via `io_out_[0-5]_bits_pdest`. As an exception,
+if the instruction is an integer Move instruction, its `pdest` should be set to
+its `psrc`.
 
-## 整数指令提交 {#sec:commit-int-inst}
+## Integer Instruction Commit {#sec:commit-int-inst}
 
-当整数指令提交后，Rename 会根据 RenameTableWrapper 传来的 io\_int\_need\_free\_[0-5] 和
-io\_int\_old\_pdest\_[0-5] 信息向 intFreeList 发送 free 信号，从而将相应的整数物理寄存器释放，以供新指令使用。当
-io\_int\_need\_free\_[0-5] 为高电平时，则说明对应通道的 io\_int\_old\_pdest\_[0-5]
-整数物理寄存器需要被释放。此外，Rename 也会将 RAB 发来的 commit 信号发给 intFreeList，以供其维护体系结构状态重命名指针。
+When integer instructions commit, Rename sends free signals to intFreeList based
+on io_int_need_free_[0-5] and io_int_old_pdest_[0-5] from RenameTableWrapper,
+releasing the corresponding integer physical registers for reuse. If
+io_int_need_free_[0-5] is high, the integer physical register in
+io_int_old_pdest_[0-5] must be freed. Rename also forwards commit signals from
+RAB to intFreeList for maintaining architectural state rename pointers.
 
-## 浮点或向量指令提交 {#sec:commit-fp-vec-inst}
+## Commit of Floating-Point or Vector Instructions {#sec:commit-fp-vec-inst}
 
-当 RAB 传来浮点指令提交信息后，Rename 会结合 RAB 和 RenameTableWrapper 传来的提交信息向 fpFreeList 发送
-free 信号，从而释放不再被使用的向量浮点物理寄存器，以供新指令使用。若从 RAB 传来的
-io\_rabCommits\_info\_[0-5]\_fp/vecWen 信号在打一拍后，与打一拍后的 io\_rabCommits\_isCommit 和
-io\_rabCommits\_commitValid\_[0-5] 信号（这两个信号说明当拍处于提交状态且该通道的提交信号有效，详见
-[@sec:w-arch-rat] ）均为高电平，则说明对应通道的 io\_fp/vec\_old\_pdest\_[0-5]
-浮点或向量寄存器需要被释放。此外，Rename 也会将 RAB 发来的 commit 信号发给 fpFreeList，以供其维护体系结构状态重命名指针。
+After receiving floating-point instruction commit information from the RAB,
+Rename combines this with commit information from `RenameTableWrapper` to send
+free signals to `fpFreeList`, releasing unused vector/floating-point physical
+registers for new instructions. If the delayed
+`io_rabCommits_info_[0-5]_fp/vecWen` signal, along with the delayed
+`io_rabCommits_isCommit` and `io_rabCommits_commitValid_[0-5]` signals (which
+indicate the current cycle is in the commit phase and the commit signal for that
+channel is valid, as detailed in [@sec:w-arch-rat]), are all high, then the
+corresponding `io_fp/vec_old_pdest_[0-5]` floating-point or vector register
+needs to be released. Additionally, Rename forwards the commit signal from the
+RAB to `fpFreeList` for maintaining the architectural state rename pointer.
 
-## 重定向
+## Redirect
 
-当重定向信号从 io\_redirect 端口传入后，freeList 会暂停物理寄存器的分配，并会将 freeList
-的物理寄存器分配指针恢复为体系结构状态或某个快照的状态。此外，Rename 模块也不会再向 RenameTable 发送写请求信号。
+When a redirect signal is received via the io\_redirect port, freeList suspends
+physical register allocation and resets the allocation pointer to the
+architectural state or a snapshot state. Additionally, the Rename module stops
+sending write request signals to the RenameTable.
 
-## 重新重命名 {#sec:rename-re-rename}
+## Re-rename {#sec:rename-re-rename}
 
-重定向信号传入一个周期后，Rename 模块进入重新重命名流程。重新重命名信号由 RAB 从 io\_rabCommits 端口传入。重新重命名时，Rename
-模块将不再向 Dispatch 输出有效的指令信号，也将不再向 RenameTable 发送写请求信号。
+One cycle after the redirect signal is received, the Rename module enters the
+re-renaming process. The re-renaming signal is passed to Rename from the RAB via
+the `io_rabCommits` port. During re-renaming, the Rename module will no longer
+output valid instruction signals to Dispatch or send write request signals to
+`RenameTable`.
 
-Rename 模块会向 intFreeList、fpFreeList 和 vecFreeList 通过各自的 io\_walkReq\_[0-5]
-端口发送重新重命名信号，这些重新重命名信号是来自 RAB 模块的
-io\_rabCommits\_walkValid\_[0-5]，io\_rabCommits\_info\_[0-5]\_isMove，io\_rabCommits\_info\_[0-5]\_ldest
-和 io\_rabCommits\_info\_[0-5]\_rf/fp/vecWen 信号。只有当 io\_rabCommits\_isWalk
-为高电平时，io\_walkReq\_[0-5] 传入的信号才是有效的。
+The Rename module sends re-renaming signals to intFreeList, fpFreeList, and
+vecFreeList through their respective io\_walkReq\_[0-5] ports. These re-renaming
+signals originate from the RAB module's io\_rabCommits\_walkValid\_[0-5],
+io\_rabCommits\_info\_[0-5]\_isMove, io\_rabCommits\_info\_[0-5]\_ldest, and
+io\_rabCommits\_info\_[0-5]\_rf/fp/vecWen signals. The signals on
+io\_walkReq\_[0-5] are only valid when io\_rabCommits\_isWalk is high.
 
-对于 intFreeList 而言，当 io\_rabCommits\_walkValid\_[0-5] 为高电平，且对应通道的
-io\_rabCommits\_info\_[0-5]\_rfWen 为高电平，io\_rabCommits\_info\_[0-5]\_ldest 不为
-0，且 io\_rabCommits\_info\_[0-5]\_isMove 为低电平时，对应的 io\_walkReq\_[0-5]
-端口会被发送有效信号，意味着需要进行重新重命名。
+For intFreeList, when io_rabCommits_walkValid_[0-5] is high, and the
+corresponding channel's io_rabCommits_info_[0-5]_rfWen is high,
+io_rabCommits_info_[0-5]_ldest is not 0, and io_rabCommits_info_[0-5]_isMove is
+low, the corresponding io_walkReq_[0-5] port will send a valid signal,
+indicating that re-rename is required.
 
-对于 fpFreeList 和 vecFreeList 而言，当 io\_rabCommits\_walkValid\_[0-5] 为高电平，且对应通道的
-io\_rabCommits\_info\_[0-5]\_fp/vecWen 信号为高电平时，对应的 io\_walkReq\_[0-5]
-端口会被发送有效信号，意味着需要进行重新重命名。
+For `fpFreeList` and `vecFreeList`, when `io_rabCommits_walkValid_[0-5]` is high
+and the corresponding channel's `io_rabCommits_info_[0-5]_fp/vecWen` signal is
+high, the `io_walkReq_[0-5]` port will receive a valid signal, indicating that
+re-renaming is required.
 
-## robIdx分配
+## robIdx Allocation
 
-Rename 模块负责为每条微指令分配 robIdx。该模块内部维护了一个 robIdxHead。正常情况下，Rename 模块会为 Decode
-传入的译码后的指令依次分配连续的 robIdx，并将 robIdxHead 累加，但如果对应通道的 io\_in\_[0-5]\_bits\_lastUop
-为低电平，或 compressUnit 传出的对应通道的 io\_out\_needRobFlags\_[0-5] 为低电平，那么下一个通道的微指令将不会被分配
-robIdx。
+The Rename module is responsible for assigning robIdx to each micro-instruction.
+It internally maintains a robIdxHead. Under normal circumstances, the Rename
+module sequentially assigns consecutive robIdx to the decoded instructions from
+the Decode module and increments the robIdxHead. However, if the corresponding
+channel's io_in_[0-5]_bits_lastUop is low, or the compressUnit's corresponding
+channel's io_out_needRobFlags_[0-5] is low, the next channel's micro-instruction
+will not be assigned a robIdx.
 
-重定向发生的当周期，该模块会将 robIdxHead 重置为重定向的 robIdx，并在下一周期根据 io\_redirect\_bits\_level
-的值决定是否为 robIdxHead 加一。
+In the cycle when a redirect occurs, the module resets robIdxHead to the
+redirected robIdx. In the next cycle, it decides whether to increment robIdxHead
+based on the value of io_redirect_bits_level.
 
-## 决定重命名快照的生成 {#sec:decide-snpt-gen}
+## Determining rename snapshot generation {#sec:decide-snpt-gen}
 
-Rename 模块还负责决定是否生成重命名快照。重命名快照旨在发生重定向后缩短重新重命名的时间。重命名快照是分布式的，它分布在
-RenameTable、RenameTable_1、RenameTable_2、intFreeList、fpFreeList、vecFreeList、Rob、Rab、CtrlBlock
-等诸多模块之中，且快照存储的内容各不相同，因此需要一个模块告诉各个模块何时生成快照，而这个模块便是 Rename。对外，Rename 会将快照生成信号通过
-io\_out\_\*\_bits\_snapshot 传递给其他模块；对内，Rename 也会将快照生成信号传递给
-intFreeList、fpFreeList 和 vecFreeList。
+The Rename module is also responsible for deciding whether to generate rename
+snapshots. Rename snapshots aim to reduce the time required for re-renaming
+after a redirect occurs. Rename snapshots are distributed across multiple
+modules, including `RenameTable`, `RenameTable_1`, `RenameTable_2`,
+`intFreeList`, `fpFreeList`, `vecFreeList`, `Rob`, `Rab`, and `CtrlBlock`, with
+each storing different snapshot contents. Therefore, a module is needed to
+coordinate snapshot generation across these modules, and this module is Rename.
+Externally, Rename transmits the snapshot generation signal to other modules via
+`io_out_*_bits_snapshot`. Internally, Rename also forwards the snapshot
+generation signal to `intFreeList`, `fpFreeList`, and `vecFreeList`.
 
-重命名快照的生成存在诸多限制。首先，Rename 模块内部维护了一个快照计数器 snapshotCtr，只有当这个计数器为 0
-时才可以生成快照；其次，如果当前已经存在其他快照，那么本周期重命名的第一条微指令被分配的 robIdx 必须和最近一次生成的快照的 robIdx 相差
-6，也就是 ROB 提交宽度以上；最后，本周期重命名的第一条微指令必须是其所属指令的第一条微指令，即 io\_in\_0\_bits\_firstUop
-必须为高电平。只有满足了以上三个条件，并且被重命名的六条微指令中存在分支跳转指令时，才会生成快照。此时，那些为分支跳转指令的通道的
-io\_out\_\*\_bits\_snapshot 信号会被拉高，Rename 也会将快照生成信号告诉其内部的子模块。
+There are several constraints on the generation of rename snapshots. First, the
+Rename module internally maintains a snapshot counter, `snapshotCtr`, and a
+snapshot can only be generated when this counter is 0. Second, if another
+snapshot already exists, the `robIdx` assigned to the first micro-op renamed in
+the current cycle must differ by 6 from the `robIdx` of the most recently
+generated snapshot, which is greater than the ROB commit width. Finally, the
+first micro-op renamed in the current cycle must be the first micro-op of its
+corresponding instruction, meaning `io_in_0_bits_firstUop` must be high. Only
+when these three conditions are met, and there is a branch/jump instruction
+among the six micro-ops being renamed, will a snapshot be generated. At this
+point, the `io_out_*_bits_snapshot` signals for the channels containing
+branch/jump instructions will be pulled high, and Rename will also notify its
+internal submodules of the snapshot generation signal.
 
-快照计数器 snapshotCtr
-是一个控制快照生成间隔的计数器。由于距离过近的快照没有意义且会对快照资源造成浪费，因此实现了这样一个计数器。snapshotCtr 初始值设为 4 倍的 RAB
-提交宽度，即 4×8=32。如果当前不存在有效的重命名快照，snapshotCtr 会被置为 0；否则，每重命名 n 条微指令，snapshotCtr 会自减
-n，直到 0 为止。当 snapshotCtr 为 0 后，如果某时刻产生了重命名快照，那么 snapshotCtr
-会被重置为最大值减去当周期重命名的微指令数，即 32-PopCount(io\_out\_\*\_valid && io\_out\_\*\_ready)。
+The snapshot counter snapshotCtr controls the interval between snapshot
+generations. Since snapshots taken too close together are meaningless and waste
+snapshot resources, this counter is implemented. snapshotCtr is initially set to
+4 times the RAB commit width, i.e., 4×8=32. If no valid rename snapshot
+currently exists, snapshotCtr is set to 0; otherwise, it decrements by n for
+every n microinstructions renamed, until it reaches 0. Once snapshotCtr is 0, if
+a rename snapshot is generated at any point, snapshotCtr is reset to the maximum
+value minus the number of microinstructions renamed in that cycle, i.e., 32 -
+PopCount(io_out_*_valid && io_out_*_ready).
 
-## 整体框图
+## Overall Block Diagram
 
-![Rename 整体框图](./figure/Rename-Overall.svg)
+![Overall Rename block diagram](./figure/Rename-Overall.svg)
 
-## 接口时序
+## Interface timing
 
-### Decode 输入接口时序示意图
+### Timing Diagram of Decode Input Interface
 
-![Decode 输入接口时序示意图](./figure/Rename-Input.svg){#fig:rename-input}
+![Timing Diagram of Decode Input
+Interface](./figure/Rename-Input.svg){#fig:rename-input}
 
-[@fig:rename-input] 示意了三个来自 decode 的译码结输入例。当 ready 和 valid 信号同时为高时，对应的 bits 被
-Rename 模块接收。
+[@fig:rename-input] shows three input examples from decode. When both ready and
+valid signals are high, the corresponding bits are received by the Rename
+module.
 
-### Rename 输出接口时序示意图
+### Timing diagram of Rename output interface
 
-![Rename 输出接口时序示意图](./figure/Rename-Output.svg){#fig:rename-output}
+![Timing diagram of Rename output
+interface](./figure/Rename-Output.svg){#fig:rename-output}
 
-[@fig:rename-output] 示意了三个重命名结果的示例。当 ready 和 valid 信号同时为高时，对应的 bits 被 Rename
-模块发送至 Dispatch。
+[@fig:rename-output] illustrates three rename result examples. When both ready
+and valid signals are high, the corresponding bits are sent by Rename module to
+Dispatch.
 
-### 指令提交逻辑时序示意图
+### Timing diagram of instruction commit logic
 
-![指令提交逻辑时序示意图](./figure/Rename-Commit-IO.svg){#fig:rename-commit-io}
+![Timing diagram of instruction commit
+logic](./figure/Rename-Commit-IO.svg){#fig:rename-commit-io}
 
-[@fig:rename-commit-io] 示意了五个来自 ROB 的指令提交输入。当 io\_rabCommits\_isCommit 为高且
-io\_rabCommits\_isWalk 为低时，
-io\_rabCommits\_info\_\*\_\*为指令提交信息。io\_rabCommits\_commitValid\_\* 为高时，对应的
-io\_rabCommits\_info\_\*\_\* 将有效的指令提交信息传入 Rename 模块。同时，io\_\*\_old\_pdest\_\*
-会在延迟一个周期后将需要释放的旧的物理寄存器号传给 Rename 模块，并在再延迟一个周期后将是否需要释放整数物理寄存器信号通过
-io\_int\_need\_free\_\* 端口传入 Rename 模块。
+[@fig:rename-commit-io] illustrates the five instruction commit inputs from the
+ROB. When io_rabCommits_isCommit is high and io_rabCommits_isWalk is low,
+io_rabCommits_info_*_* represents the instruction commit information. When
+io_rabCommits_commitValid_* is high, the corresponding io_rabCommits_info_*_*
+transmits valid instruction commit information to the Rename module. Meanwhile,
+io_*_old_pdest_* will send the old physical register number to be released to
+the Rename module after a one-cycle delay, and after another cycle delay, it
+will transmit the signal indicating whether an integer physical register needs
+to be released via the io_int_need_free_* port to the Rename module.
 
-### 重定向和重新重命名时序示意图
+### Timing Diagram of Redirect and Rename Recovery
 
-![重定向和重新重命名时序示意图](./figure/Rename-Redirect-IO.svg){#fig:rename-redirect-io}
+![Timing diagram of redirect and
+re-rename](./figure/Rename-Redirect-IO.svg){#fig:rename-redirect-io}
 
-[@fig:rename-redirect-io] 示意了重定向发生前后的有关信号。在前两个周期，io\_redirect\_valid 为低电平，Rename
-处于正常工作状态，与 [@fig:rename-commit-io] 相同。此后，io\_redirect\_valid
-信号被拉高一个周期，重定向到来，重定向的有关信息从 io\_redirect\_bits\_\* 发来，Rename
-将从下个周期开始进入重新重命名工作状态。此后的三个周期内，io\_rabCommits\_isCommit
-为低电平，io\_rabCommits\_info\_\*\_\* 不再发来提交信息；与此相对的，io\_rabCommits\_isWalk 为高电平，标志着
-io\_rabCommits\_info\_\*\_\* 发来重新重命名信息，Rename
-需要进行重新重命名工作。io\_rabCommits\_walkValid\_\* 为高时，对应的 io\_rabCommits\_info\_\*\_\*
-发来的重新重命名信息有效。
+[@fig:rename-redirect-io] illustrates the signals before and after a redirect
+occurs. In the first two cycles, io_redirect_valid is low, and Rename operates
+normally, as shown in [@fig:rename-commit-io]. Subsequently, the
+io_redirect_valid signal is pulled high for one cycle, indicating the arrival of
+a redirect. The redirect information is sent via io_redirect_bits_*, and Rename
+will enter the re-rename state starting from the next cycle. In the following
+three cycles, io_rabCommits_isCommit is low, and io_rabCommits_info_*_* no
+longer sends commit information. Conversely, io_rabCommits_isWalk is high,
+indicating that io_rabCommits_info_*_* is sending re-rename information, and
+Rename needs to perform re-rename operations. When io_rabCommits_walkValid_* is
+high, the corresponding io_rabCommits_info_*_* sends valid re-rename
+information.
 
 # RenameTableWrapper
 
-RenameTableWrapper 是一个包装模块，其内部包含整数重命名表 RenameTable 模块、浮点重命名表 RenameTable_1
-模块和向量重命名表 RenameTable_2
-模块。这一包装模块除了简单地将三个重命名表打包以外，还在内部处理了提交和重新重命名相关的逻辑。RenameTableWrapper
-起到了沟通内部重命名表与外部模块的桥梁作用。
+The RenameTableWrapper is a wrapper module that internally contains the integer
+rename table module RenameTable, the floating-point rename table module
+RenameTable_1, and the vector rename table module RenameTable_2. Beyond simply
+bundling these three rename tables, this wrapper module also handles logic
+related to commit and re-rename internally. The RenameTableWrapper serves as a
+bridge between the internal rename tables and external modules.
 
-## 读推测重命名表
+## Read speculative rename table
 
-RenameTableWrapper 共有 12 个整数寄存器读端口、18 个浮点寄存器读端口和 30 个向量浮点寄存器读端口，其中整数寄存器读端口 2
-个为一组、浮点寄存器读端口 3 个为一组、向量寄存器读端口 5 个为一组，各自均有 6
-组读端口。整数寄存器读端口用于读取整数逻辑寄存器到整数物理寄存器的推测映射关系，浮点寄存器读端口用于读取浮点逻辑寄存器到向量浮点物理寄存器的推测映射关系，向量寄存器读端口用于读取向量逻辑寄存器到向量浮点物理寄存器的推测映射关系。
+RenameTableWrapper has 12 integer register read ports, 18 floating-point
+register read ports, and 30 vector floating-point register read ports. The
+integer read ports are grouped in pairs, the floating-point read ports in
+triplets, and the vector read ports in sets of five, with six groups of read
+ports each. The integer read ports retrieve speculative mappings from integer
+logical registers to integer physical registers, the floating-point read ports
+retrieve mappings from floating-point logical registers to vector floating-point
+physical registers, and the vector read ports retrieve mappings from vector
+logical registers to vector floating-point physical registers.
 
-RenameTableWrapper 的读是同步的。这意味着第 `T` 个时钟周期通过
-io\_(int/fp/vec)ReadPorts\_\*\_\*\_addr发送的读请求，要到第 `T+1` 个时钟周期才能从
-io\_(int/fp/vec)ReadPorts\_\*\_\*\_data 得到逻辑寄存器在第 `T` 个时钟周期对应的物理寄存器。
+RenameTableWrapper's read operations are synchronous. This means a read request
+sent via io_(int/fp/vec)ReadPorts_*_*_addr in cycle `T` will return the logical
+register's corresponding physical register in cycle T+1 through
+io_(int/fp/vec)ReadPorts_*_*_data.
 
-RenameTableWrapper 的读是有前递的。如果第 `T` 个时钟周期向某个地址发送读请求的同时，也向某个地址发送写请求，那么在第 `T+1`
-个时钟周期时，读到的是在第 `T` 个时钟周期时向某个地址写入的值。
+Reads from RenameTableWrapper are forwarded. If a read request is sent to an
+address in clock cycle `T` while a write request is also sent to the same
+address, the value read in cycle `T+1` will be the value written to that address
+in cycle `T`.
 
-RenameTableWrapper 的读是有保持功能的。如果第 `T` 个时钟周期，某个读端口的
-io\_(int/fp/vec)ReadPorts\_\*\_\*\_hold为高电平，那么在第 `T+1` 个时钟周期时，读到的值和第 `T`
-个时钟周期时读到的值相同。
+The read operation of RenameTableWrapper has a hold function. If at the `T`
+clock cycle, a read port's io_(int/fp/vec)ReadPorts_*_*_hold is high, then at
+the `T+1` clock cycle, the read value will be the same as that at the `T` clock
+cycle.
 
-## 重命名阶段写推测重命名表
+## Writing to the Speculative Rename Table During Rename Phase
 
-RenameTableWrapper 共有 6 个整数寄存器写端口、6 个浮点寄存器写端口和 6
-个向量寄存器写端口，这些端口用于在重命名阶段写推测重命名表。整数寄存器写端口用于在重命名阶段更新整数逻辑寄存器到整数物理寄存器的推测映射关系，浮点寄存器写端口用于在重命名阶段更新浮点逻辑寄存器到向量浮点物理寄存器的推测映射关系，向量寄存器写端口用于在重命名阶段更新向量逻辑寄存器到向量浮点物理寄存器的推测映射关系。
+RenameTableWrapper has 6 integer register write ports, 6 floating-point register
+write ports, and 6 vector register write ports, used to update speculative
+rename tables during the rename phase. The integer register write ports update
+the speculative mapping from logical integer registers to physical integer
+registers, the floating-point write ports update the mapping from logical
+floating-point registers to vector floating-point physical registers, and the
+vector write ports update the mapping from logical vector registers to vector
+floating-point physical registers.
 
-RenameTableWrapper 的写是同步的。这意味着第 `T` 个时钟周期通过
-io\_(int/fp/vec)RenamePorts\_\*\_addr 和 io\_(int/fp/vec)RenamePorts\_\*\_data
-发送的写请求，要到第 `T+1` 个时钟周期才能被读出。
+Writes to RenameTableWrapper are synchronous. This means that write requests
+sent via io_(int/fp/vec)RenamePorts_*_addr and io_(int/fp/vec)RenamePorts_*_data
+in clock cycle `T` will not be readable until cycle `T+1`.
 
-RenameTableWrapper 的写是有使能的。只有 io\_(int/fp/vec)RenamePorts\_\*\_wen 为高的写请求才是有效的。
+The writes to RenameTableWrapper are enabled. Only write requests with
+io\_(int/fp/vec)RenamePorts\_\*\_wen asserted are valid.
 
-RenameTableWrapper 的写是有优先级的。写通道的编号越大，优先级越大，这意味着如果两个通道向同一个地址写，那么最终写入的结果将是编号大的那个。
+RenameTableWrapper's write operations are prioritized. Higher-numbered write
+channels have higher priority, meaning if two channels write to the same
+address, the result from the higher-numbered channel prevails.
 
-## 提交阶段写体系结构重命名表 {#sec:w-arch-rat}
+## Writing architectural rename table during commit phase {#sec:w-arch-rat}
 
-RenameTableWrapper 通过监听来自 RAB 的 commit 信息来更新体系机构重命名表。如果某个周期的
-io\_rabCommits\_isCommit 信号为高电平，则说明该周期正在提交。此时，若某个
-io\_rabCommits\_commitValid\_\* 信号为高电平，则说明该端口的提交信号有效。此时，需要进一步考察
-io\_rabCommits\_info\_\*\_rfWen、io\_rabCommits\_info\_\*\_fpWen 和
-io\_rabCommits\_info\_\*\_vecWen。如果 io\_rabCommits\_info\_\*\_rfWen
-为高电平，则说明整数寄存器需要更新体系结构重命名表；如果 io\_rabCommits\_info\_\*\_fpWen
-为高电平，则说明浮点寄存器需要更新体系结构重命名表；如果 io\_rabCommits\_info\_\*\_vecWen
-为高电平，则说明向量寄存器需要更新体系结构重命名表。在以上三种情况下，RenameTableWrapper 将会把整数、浮点或向量体系结构重命名表中地址为
-io\_rabCommits\_info\_\*\_ldest 的项修改为 io\_rabCommits\_info\_\*\_pdest。
+The RenameTableWrapper updates the architectural rename table by monitoring
+commit information from RAB. When the io_rabCommits_isCommit signal is high in a
+cycle, it indicates a commit is occurring. If any io_rabCommits_commitValid_*
+signal is high, the commit signal for that port is valid. Further examination is
+then required for io_rabCommits_info_*_rfWen, io_rabCommits_info_*_fpWen, and
+io_rabCommits_info_*_vecWen. If io_rabCommits_info_*_rfWen is high, the integer
+register needs architectural rename table update; if io_rabCommits_info_*_fpWen
+is high, the floating-point register requires update; if
+io_rabCommits_info_*_vecWen is high, the vector register needs update. In these
+cases, RenameTableWrapper will modify the entry at address
+io_rabCommits_info_*_ldest in the integer/floating-point/vector architectural
+rename table to io_rabCommits_info_*_pdest.
 
-## 提交阶段提供物理寄存器释放信息
+## Providing Physical Register Release Information During Commit Phase
 
-RenameTableWrapper 通过提交阶段写体系结构重命名表的情况来提供物理寄存器的释放信息。这些信息包括要释放的整数物理寄存器号
-io\_int\_old\_pdest\_\* 和对应的有效信号 io\_int\_need\_free\_\* ，以及要释放的向量浮点物理寄存器号
-io\_(fp/vec)\_old\_pdest\_\*。这些信号直接来自于 RenameTableWrapper 的子模块，并会在 Rename
-模块根据结合指令提交的情况进行物理寄存器的释放。
+The `RenameTableWrapper` provides physical register release information based on
+writes to the architectural rename table during the commit phase. This
+information includes the integer physical register numbers to be released
+(`io_int_old_pdest_*`) and their corresponding valid signals
+(`io_int_need_free_*`), as well as the vector/floating-point physical register
+numbers to be released (`io_(fp/vec)_old_pdest_*`). These signals come directly
+from the submodules of `RenameTableWrapper` and are used by the Rename module to
+release physical registers based on instruction commit status.
 
-## 重新重命名阶段写推测重命名表
+## Writing to the Speculative Rename Table During Re-Rename Phase
 
-RenameTableWrapper 通过监听来自 RAB 的 commit 信息来进行重新重命名。如果某个周期的 io\_rabCommits\_isWalk
-信号为高电平，则说明该周期正在重新重命名。此时，若某个 io\_rabCommits\_walkValid\_\*
-信号为高电平，则说明该端口的重新重命名信号有效。此时，需要进一步考察
-io\_rabCommits\_info\_\*\_rfWen、io\_rabCommits\_info\_\*\_fpWen 和
-io\_rabCommits\_info\_\*\_vecWen。如果 io\_rabCommits\_info\_\*\_rfWen
-为高电平，则说明整数寄存器需要重新重命名；如果 io\_rabCommits\_info\_\*\_fpWen 为高电平，则说明浮点寄存器需要重新重命名；如果
-io\_rabCommits\_info\_\*\_vecWen
-为高电平，则说明向量寄存器需要重新重命名。在以上三种情况下，RenameTableWrapper 将会把整数、浮点或向量推测重命名表中地址为
-io\_rabCommits\_info\_\*\_ldest 的项修改为 io\_rabCommits\_info\_\*\_pdest。
+RenameTableWrapper listens to commit information from RAB to perform
+re-renaming. If the io\_rabCommits\_isWalk signal is high in a cycle, it
+indicates re-renaming is occurring. If a specific io\_rabCommits\_walkValid\_\*
+signal is high, it means the re-renaming signal for that port is valid. Further
+checks are required for io\_rabCommits\_info\_\*\_rfWen,
+io\_rabCommits\_info\_\*\_fpWen, and io\_rabCommits\_info\_\*\_vecWen. If
+io\_rabCommits\_info\_\*\_rfWen is high, it indicates integer registers need
+re-renaming; if io\_rabCommits\_info\_\*\_fpWen is high, it indicates
+floating-point registers need re-renaming; if io\_rabCommits\_info\_\*\_vecWen
+is high, it indicates vector registers need re-renaming. In these cases,
+RenameTableWrapper will modify the entry at io\_rabCommits\_info\_\*\_ldest in
+the integer, floating-point, or vector speculative rename tables to
+io\_rabCommits\_info\_\*\_pdest.
 
-## 重命名快照的维护
+## Maintenance of rename snapshots
 
-RenameTableWrapper 会将来自外部的重命名快照信号 io\_snpt\_\* 传给各个子模块，用于重命名快照的生成、释放、冲刷和使用。
+The RenameTableWrapper forwards external rename snapshot signals io\_snpt\_\* to
+each submodule for generating, releasing, flushing, and using rename snapshots.
 
-## 整体框图
+## Overall Block Diagram
 
-![RenameTableWrapper 整体框图](./figure/RenameTableWrapper.svg)
+![Overall block diagram of RenameTableWrapper](./figure/RenameTableWrapper.svg)
 
-## 接口时序
+## Interface timing
 
-### 整数读写接口时序示意图（浮点向量同理）
+### Timing Diagram for Integer Read/Write Interface (Floating-Point Vector Similar)
 
-![整数读写接口时序示意图](./figure/RAT-Wrapper-RW-IO.svg){#fig:rat-wrapper-rw-io}
+![Integer read/write interface timing
+diagram](./figure/RAT-Wrapper-RW-IO.svg){#fig:rat-wrapper-rw-io}
 
-[@fig:rat-wrapper-rw-io] 示意了整数读写的接口时序。
+[@fig:rat-wrapper-rw-io] illustrates the timing of integer read/write
+interfaces.
 
-在时刻 2，io\_intRenamePorts\_0 向地址为 14 处写入了 73。同时，io\_intReadPorts\_0\_0 也向地址为 14
-处发起了读请求，因此在时刻 3 读到了时刻 2 写入的 73。
+At time 2, io_intRenamePorts_0 writes 73 to address 14. Simultaneously,
+io_intReadPorts_0_0 issues a read request to address 14, thus reading the value
+73 written at time 2 during time 3.
 
-在时刻 4，io\_intRenamePorts\_0 向地址为 4 处写入了 74，io\_intRenamePorts\_1 也向地址为 4 处写入了
-75。从而，当 io\_intReadPorts\_0\_0 于时刻 5 向地址为 4 处发出读请求后，时刻 6 读到
-io\_intRenamePorts\_1 写入的 75。
+At time 4, io\_intRenamePorts\_0 writes 74 to address 4, and
+io\_intRenamePorts\_1 also writes 75 to address 4. Consequently, when
+io\_intReadPorts\_0\_0 issues a read request to address 4 at time 5, it reads
+the value 75 written by io\_intRenamePorts\_1 at time 6.
 
-在时刻 3 和时刻 7，io\_intReadPorts\_0\_0\_hold 为高电平，因此时刻 4 读出的值与时刻 3 读出的值相同，为
-73，而不是地址为 5 处的值；类似的，时刻 8 读出的值与时刻 7 读出的值相同，为 76，而非于时刻 7 新写入的值 77。
+At times 3 and 7, io_intReadPorts_0_0_hold is high, so the values read at times
+4 and 8 match those read at times 3 and 7 (73 and 76, respectively), rather than
+the values at address 5 or the newly written value 77 at time 7.
 
-### 重新重命名和提交接口时序示意图
+### Timing Diagram of Rename Recovery and Commit Interface
 
-![重新重命名和提交接口时序示意图](./figure/RAT-Wrapper-Re-Rename-IO.svg){#fig:rat-wrapper-re-rename-io}
+![Timing Diagram of Re-Rename and Commit
+Interfaces](./figure/RAT-Wrapper-Re-Rename-IO.svg){#fig:rat-wrapper-re-rename-io}
 
-[@fig:rat-wrapper-re-rename-io] 示意了两个重新重命名和提交接口的时序。
+[@fig:rat-wrapper-re-rename-io] illustrates the timing of two re-rename and
+commit interfaces.
 
-时刻 1 至时刻 4，io\_rabCommits\_isWalk 信号为高，io\_rabCommits\_ioCommit
-信号为低，此时处于重新重命名状态。在时刻 2，io\_rabCommits\_walkValid\_0
-为高，io\_rabCommits\_info\_0\_rfWen为低，io\_rabCommits\_info\_0\_fpWen为高，重新重命名接口 0
-于是将 37 写入浮点推测重命名表的地址 0 处。在时刻 3，两个重新重命名接口均向 12 号逻辑整数寄存器写入了值。此时，1 号接口比 0
-号接口优先级更高，于是 57 将被实际写入整数推测重命名表的地址 12 处。
+From time 1 to time 4, io_rabCommits_isWalk is high, and io_rabCommits_ioCommit
+is low, indicating a re-renaming state. At time 2, io_rabCommits_walkValid_0 is
+high, io_rabCommits_info_0_rfWen is low, and io_rabCommits_info_0_fpWen is high.
+Thus, re-rename interface 0 writes 37 to address 0 of the floating-point
+speculative rename table. At time 3, both re-rename interfaces write to logical
+integer register 12. Here, interface 1 has higher priority than interface 0, so
+57 is written to address 12 of the integer speculative rename table.
 
-时刻 5 至时刻 9，io\_rabCommits\_isWalk 信号为低，io\_rabCommits\_ioCommit
-信号为高，此时处于提交状态。在时刻 7，io\_rabCommits\_commitValid\_0
-为高，io\_rabCommits\_info\_0\_rfWen 为低，io\_rabCommits\_info\_0\_fpWen 为高，提交接口 0
-于是将 92 写入浮点体系结构重命名表的地址 18 处。
+From time 5 to time 9, io_rabCommits_isWalk is low and io_rabCommits_ioCommit is
+high, indicating the commit state. At time 7, io_rabCommits_commitValid_0 is
+high, io_rabCommits_info_0_rfWen is low, and io_rabCommits_info_0_fpWen is high,
+so commit interface 0 writes 92 to address 18 in the floating-point
+architectural rename table.
 
-# 支持 move 消除的 RenameTable {#sec:me-rat}
+# RenameTable supporting move elimination {#sec:me-rat}
 
-支持 move 消除的 RenameTable 被用于整数寄存器的重命名表，模块名为
-`RenameTable`，其中维护了逻辑整数寄存器与物理整数寄存器的映射关系。其有 12 个读推测重命名表端口、6
-个写推测重命名表端口和6个写体系结构重命名表端口，内部则由 32 个宽度为 8 的寄存器来实际维护映射关系。读端口和写端口的行为与
-RenameTableWrapper 中所描述的行为完全一致。需要注意的是，为了时序考虑，模块 `T0` 时刻的写推测重命名表请求会实际于 `T1`
-时刻处理，而 `T0` 时刻的写推测重命名表数据会被旁路到 `T1` 时刻的读推测重命名表结果。
+The `RenameTable` supporting move elimination is used for integer register
+renaming. The module, named ``RenameTable``, maintains the mapping between
+logical and physical integer registers. It has 12 speculative rename table read
+ports, 6 speculative rename table write ports, and 6 architectural rename table
+write ports. Internally, it uses 32 registers with a width of 8 to manage the
+mappings. The behavior of the read and write ports is identical to that
+described in `RenameTableWrapper`. Note that for timing considerations,
+speculative rename table write requests at ``T0`` are processed at ``T1``, and
+speculative rename table write data at ``T0`` is bypassed to speculative rename
+table read results at ``T1``.
 
-其次，模块内部还有 4 份推测重命名表快照用于重定向和重新重命名时的快速恢复。这些快照存储在子模块 SnapShotGenerator\_3 中，在
-RenameTable 的名字为
-\_snapshots\_snapshotGen\_io\_snapshots_0/1/2/3\_[0-31]。快照的生成、释放、使用和冲刷完全由外部信号
-io\_redirect 和 io\_snpt\_\* 进行控制。
+Additionally, the module internally maintains 4 speculative rename table
+snapshots for quick recovery during redirection and re-renaming. These snapshots
+are stored in the submodule SnapShotGenerator_3, named
+_snapshots_snapshotGen_io_snapshots_0/1/2/3_[0-31] in RenameTable. The
+generation, release, usage, and flushing of snapshots are entirely controlled by
+external signals io_redirect and io_snpt_*.
 
-外部传入的重定向信号 io\_redirect 和快照控制信号 io\_snpt\_\* 在打一拍后成为 t1\_redirect 和 t1\_snap\_\*
-信号。重定向信号 t1\_redirect 为高电平时，会检查 t1\_snpt\_useSnpt 信号是否为高电平。如果 t1\_snpt\_useSnpt
-信号为低电平，则会将推测重命名表置为体系结构重命名表；如果 t1\_snpt\_useSnpt 为高电平，则会将推测重命名表置为
-\_snapshots\_snapshotGen\_io_snapshots\_[t1\_snpt\_snptSelect]\_[0-31]。
+The externally provided redirect signal `io_redirect` and snapshot control
+signal `io_snpt_*` are delayed by one cycle to become `t1_redirect` and
+`t1_snap_*`. When `t1_redirect` is high, the `t1_snap_useSnpt` signal is
+checked. If `t1_snap_useSnpt` is low, the speculative rename table is set to the
+architectural rename table. If `t1_snap_useSnpt` is high, the speculative rename
+table is set to
+`_snapshots_snapshotGen_io_snapshots_[t1_snap_snptSelect]_[0-31]`.
 
-此外，模块还会根据写体系结构重命名表端口和内部的体系结构重命名表输出物理寄存器释放信号。如果一个写体系结构重命名表通道的写使能信号
-io\_archWritePorts\_n\_wen 为低电平，则下一拍的 io\_old\_pdest\_n 则为 0；如果写使能信号不为零，则下一拍的
-io\_old\_pdest\_n 为当拍的
-arch_table[io\_archWritePorts\_n\_addr]。需要额外注意的是，io\_old\_pdest\_n 是有旁路的。对于 n>0
-的情况，如果存在序号比 n 小的某个通道向体系结构重命名表的同一个逻辑寄存器写入了某个值，则下一拍的 io\_old\_pdest\_n 则应该置为这个值，而非
-arch\_table[io\_archWritePorts\_n\_addr]。举例来说，对于 0<j<n，如果
-io\_archWritePorts\_n\_wen 和 io\_archWritePorts\_j\_wen 都为高电平，且
-io\_archWritePorts\_n\_addr == io\_archWritePorts\_j\_addr，那么下一拍的
-io\_old\_pdest\_n 则应该置为 io\_archWritePorts\_j\_data，而非
-arch\_table[io\_archWritePorts\_n\_addr]。此外，对于 n>1 的情况，如果存在多个序号比 n
-小的某个通道向体系结构重命名表的同一个逻辑寄存器写入了某个值，则下一拍的 io\_old\_pdest\_n
-则应该置为这些通道中序号较大者对应的写入值。举例来说，对于 0<j<k<n，如果
-io\_archWritePorts\_n\_wen、io\_archWritePorts\_j\_wen 和
-io\_archWritePorts\_k\_wen 都为高电平，且 io\_archWritePorts\_n\_addr ==
-io\_archWritePorts\_j\_addr == io\_archWritePorts\_k\_addr，那么下一拍的
-io\_old\_pdest\_n 则应该置为 io\_archWritePorts\_k\_data，而非
-arch\_table[io\_archWritePorts\_n\_addr] 或 io\_archWritePorts\_j\_data。
+Additionally, the module generates physical register release signals based on
+the write ports to the architectural rename table and the internal architectural
+rename table outputs. If the write enable signal io_archWritePorts_n_wen for a
+write port is low, the next cycle's io_old_pdest_n will be 0. If the write
+enable signal is high, the next cycle's io_old_pdest_n will be the current
+cycle's arch_table[io_archWritePorts_n_addr]. Note that io_old_pdest_n is
+bypassed. For n > 0, if a lower-indexed channel (j < n) writes to the same
+logical register in the architectural rename table, the next cycle's
+io_old_pdest_n should reflect the value written by the lower-indexed channel
+(io_archWritePorts_j_data) instead of arch_table[io_archWritePorts_n_addr].
+Furthermore, for n > 1, if multiple lower-indexed channels write to the same
+logical register, the next cycle's io_old_pdest_n should reflect the value
+written by the highest-indexed channel among them (e.g.,
+io_archWritePorts_k_data for j < k < n).
 
-物理寄存器释放信号还包括 io\_need\_free\_\* 信号。如果当拍某个通道的 io\_old\_pdest\_n 信号和
-arch\_table\_\* 中的任何一项都不同，则将该通道下一拍的 io\_need\_free\_n 信号置高。需要额外注意的是，对于 n>0
-的情况，如果存在序号比 n 小的某个通道的 io\_old\_pdest\_j 信号和 io\_old\_pdest\_n 相同，那么下一拍
-io\_need\_free\_n 信号不会被置高。
+The physical register release signals also include io_need_free_*. If the
+current cycle's io_old_pdest_n signal does not match any entry in arch_table_*,
+the next cycle's io_need_free_n signal for that channel will be set high. Note
+that for n > 0, if a lower-indexed channel's io_old_pdest_j matches
+io_old_pdest_n, the next cycle's io_need_free_n signal will not be set high.
 
-## 整体框图
+## Overall Block Diagram
 
-![RenameTable 整体框图](./figure/RenameTable.svg)
+![Overall Block Diagram of RenameTable](./figure/RenameTable.svg)
 
-## 接口时序
+## Interface timing
 
-### 读写接口时序示意图
+### Timing diagram of read/write interfaces
 
-![支持 move 消除的 RenameTable 读写接口时序示意图](./figure/RAT-RW-IO.svg)
+![Timing diagram of RenameTable read/write interface supporting move
+elimination](./figure/RAT-RW-IO.svg)
 
-# 不支持 move 消除的 RenameTable
+# RenameTable without move elimination support
 
-不支持 move 消除的 RenameTable 和 [@sec:me-rat] 基本类似，但并不包括 io\_need\_free\_\*
-信号。浮点寄存器的重命名表 `RenameTable_1` 和向量寄存器的重命名表 `RenameTable_2` 使用了这种重命名表。
+The RenameTable without move elimination support is fundamentally similar to
+[@sec:me-rat] but excludes io_need_free_* signals. The floating-point rename
+table `RenameTable_1` and vector rename table `RenameTable_2` use this type.
 
-浮点寄存器的重命名表 `RenameTable_1` 维护了逻辑浮点寄存器与物理向量浮点寄存器的映射关系。其有 18 个读推测重命名表端口、6
-个写推测重命名表端口和 6 个写体系结构重命名表端口，内部则由 34 个宽度为 8 的寄存器来实际维护映射关系。
+The floating-point register rename table `RenameTable_1` maintains the mapping
+between logical floating-point registers and physical vector floating-point
+registers. It has 18 read speculative rename table ports, 6 write speculative
+rename table ports, and 6 write architectural rename table ports. Internally, it
+uses 34 registers with a width of 8 to maintain the mapping relationships.
 
-浮点寄存器的重命名表 `RenameTable_2` 维护了逻辑向量寄存器与物理向量浮点寄存器的映射关系。其有 30 个读推测重命名表端口、6
-个写推测重命名表端口和 6 个写体系结构重命名表端口，内部则由 48 个宽度为 8 的寄存器来实际维护映射关系。
+The floating-point register rename table ``RenameTable_2`` maintains the mapping
+between logical vector registers and physical vector/floating-point registers.
+It has 30 speculative rename table read ports, 6 speculative rename table write
+ports, and 6 architectural rename table write ports. Internally, it uses 48
+registers with a width of 8 to manage the mappings.
 
-## 接口时序
+## Interface timing
 
-### 读写接口时序示意图
+### Timing diagram of read/write interfaces
 
-![不支持 move 消除的 RenameTable 读写接口时序示意图](./figure/RAT-NO-ME-RW-IO.svg)
+![Timing diagram of RenameTable read/write interfaces without move elimination
+support](./figure/RAT-NO-ME-RW-IO.svg)
 
 # StdFreeList
 
-StdFreeList 在 Rename 模块中被例化为 fpFreeList 和 vecFreeList。正如 [@sec:alloc-fp-vec-prf]
-、[@sec:commit-fp-vec-inst] 和 [@sec:rename-re-rename] 中所提到的那样，fpFreelist
-在重命名时负责接收向量浮点物理寄存器的分配请求，返回分配的空闲向量浮点物理寄存器；在重新重命名时负责根据 RAB
-传来的重新重命名请求重新对向量浮点物理寄存器进行分配；在提交时负责释放已经不会再被使用的向量浮点物理寄存器和更新体系结构出队指针。
+Within the Rename module, StdFreeList is instantiated as fpFreeList and
+vecFreeList. As mentioned in [@sec:alloc-fp-vec-prf], [@sec:commit-fp-vec-inst],
+and [@sec:rename-re-rename], fpFreeList is responsible for receiving allocation
+requests for vector floating-point physical registers during rename, returning
+allocated free vector floating-point physical registers. During re-rename, it
+handles reallocation of vector floating-point physical registers based on
+re-rename requests from the RAB. During commit, it releases vector
+floating-point physical registers that are no longer in use and updates the
+architectural dequeue pointer.
 
-## 整体框图
+## Overall Block Diagram
 
-![StdFreeList 整体框图](./figure/StdFreeList.svg)
+![Overall block diagram of StdFreeList](./figure/StdFreeList.svg)
 
-## 接口时序
+## Interface timing
 
-### 空闲寄存器分配时序示意图
+### Timing diagram of free register allocation
 
-![StdFreeList
-空闲寄存器分配时序示意图](./figure/StdFreeList-Alloc-IO.svg){#fig:stdfreelist-alloc-io}
+![Timing Diagram of StdFreeList Physical Register
+Allocation](./figure/StdFreeList-Alloc-IO.svg){#fig:stdfreelist-alloc-io}
 
-[@fig:stdfreelist-alloc-io] 示意了空闲物理寄存器分配的时序。在时刻 3、时刻 5 和时刻 6，io\_redirect 和
-io\_walk 为低电平，io\_doAllocate 和 io\_canAllocate 为高电平，从而进行了空闲物理寄存器的分配。在时刻
-3，io\_allocateReq\_[2-4] 为高电平，StdFreeList 通过 io\_allocatePhyReg\_[2-4]
-分别返回了分配的空闲物理寄存器号 151、112 和 143；在时刻 5，io\_allocatePhyReg\_[0-2|5]
-分别返回了分配的空闲物理寄存器号 127、162、163 和 144；在时刻 6，则返回了 174、182 和 179。每成功分配 `n`
-个空闲物理寄存器，模块内部的 headPtr 便会加 `n`。
+[@fig:stdfreelist-alloc-io] illustrates the timing for free physical register
+allocation. At times 3, 5, and 6, io_redirect and io_walk are low, while
+io_doAllocate and io_canAllocate are high, enabling the allocation of free
+physical registers. At time 3, io_allocateReq_[2-4] is high, and StdFreeList
+returns the allocated free physical register numbers 151, 112, and 143 via
+io_allocatePhyReg_[2-4]. At time 5, io_allocatePhyReg_[0-2|5] returns the
+allocated free physical register numbers 127, 162, 163, and 144. At time 6, it
+returns 174, 182, and 179. For every successful allocation of `n` free physical
+registers, the internal headPtr increments by `n`.
 
-### 指令提交时序示意图
+### Instruction Commit Timing Diagram
 
-![StdFreeList
-指令提交时序示意图](./figure/StdFreeList-Commit-IO.svg){#fig:stdfreelist-commit-io}
+![Timing diagram of StdFreeList instruction
+commit](./figure/StdFreeList-Commit-IO.svg){#fig:stdfreelist-commit-io}
 
-[@fig:stdfreelist-commit-io] 示意了指令提交的时序，其中 io\_freeReq\_\* 表示某一路的 io\_freeReq
-信号，io\_freePhyReg\_\* 表示与 io\_freeReq\_\* 对应某路的 io\_freePhyReg 信号。当 io\_redirect
-和 io\_walk 均为低电平时，若 io\_freeReq 为高电平，则 StdFreeList 会将对应的 io\_freePhyReg 加入空闲队列。
+[@fig:stdfreelist-commit-io] illustrates the timing of instruction commit, where
+io_freeReq_* represents the io_freeReq signal for a specific path, and
+io_freePhyReg_* represents the io_freePhyReg signal corresponding to
+io_freeReq_* for a specific path. When both io_redirect and io_walk are low, if
+io_freeReq is high, StdFreeList will add the corresponding io_freePhyReg to the
+free queue.
 
-此外，在 io\_freeReq\_\* 的前一个周期，Rename 模块还会将 RAB 的提交信息传入，以更新体系结构出队指针 archHeadPtr。当
-io\_commit\_isCommit 和对应通道的 io\_commit\_commitValid\_\*
-信号处于高电平时，说明对应通道的更新信号有效。此时，若对应通道的 io\_commit\_info\_\*\_fpWen 或
-io\_commit\_info\_\*\_vecWen 为高电平，则表明该通道会让 archHeadPtr 加一。若有 `k` 个通道满足上述条件，则
-archHeadPtr 会加 `k`。
+Furthermore, one cycle before io\_freeReq\_\*, the Rename module also passes the
+RAB commit information to update the architectural dequeue pointer archHeadPtr.
+When io\_commit\_isCommit and the corresponding channel's
+io\_commit\_commitValid\_\* signal are high, it indicates that the update signal
+for that channel is valid. In this case, if the corresponding channel's
+io\_commit\_info\_\*\_fpWen or io\_commit\_info\_\*\_vecWen is high, it means
+the channel will increment archHeadPtr by one. If `k` channels meet the above
+conditions, archHeadPtr will be incremented by `k`.
 
-### 指令重新重命名时序示意图
+### Timing Diagram of Instruction Rename Recovery
 
-![StdFreeList
-指令重新重命名时序示意图](./figure/StdFreeList-Re-Rename-IO.svg){#fig:stdfreelist-re-rename-io}
+![Timing diagram of StdFreeList instruction
+re-rename](./figure/StdFreeList-Re-Rename-IO.svg){#fig:stdfreelist-re-rename-io}
 
-[@fig:stdfreelist-re-rename-io] 示意了指令重新重命名的时序。当 io\_redirect 在时刻 1
-拉高一个周期后，io\_walk 会被拉高数个周期，标志着模块进入重新重命名阶段。在时刻 1，由于 io\_snpt\_useSnpt 为低电平，因此
-headPtr 会被恢复为 archHeadPtr 的值。这一恢复不会立即进行，而是在时刻 2 加上 io\_walkReq\_\* 高电平的数量（2）后得到
-headPtrAllocate（5），并在时刻 3 写入 headPtr。此后，当 io\_walk 为高电平时，headPtrAllocate 置为
-headPtr+PopCount(io\_walkReq\_\*) 的值，并在下一个周期写入 headPtr。
+[@fig:stdfreelist-re-rename-io] illustrates the timing of instruction
+re-renaming. When `io_redirect` is asserted high for one cycle at time 1,
+`io_walk` will be held high for several cycles, indicating the module has
+entered the re-renaming phase. At time 1, since `io_snpt_useSnpt` is low,
+`headPtr` is restored to the value of `archHeadPtr`. This restoration is not
+immediate; instead, at time 2, the count of high `io_walkReq_*` signals (2) is
+added to obtain `headPtrAllocate` (5), which is written to `headPtr` at time 3.
+Subsequently, while `io_walk` is high, `headPtrAllocate` is set to `headPtr +
+PopCount(io_walkReq_*)` and written to `headPtr` in the next cycle.
 
-重新重命名过程旨在消除推测执行错误路径上的重命名状态。通过先将 headPtr 恢复到体系结构 archHeadPtr 状态（或当
-io\_snpt\_useSnpt为高电平时，恢复到快照状态），然后再重新重命名到进入错误路径之前，以达到这一目的。
+The rename recovery process aims to eliminate rename states on mispredicted
+execution paths. This is achieved by first restoring headPtr to the
+architectural state archHeadPtr (or to the snapshot state when io_snpt_useSnpt
+is high), then renaming back to the state before entering the incorrect path.
 
-## 关键电路：环形队列
+## Key circuit: Circular queue
 
-空闲物理寄存器由一个环形队列维护。这个环形队列由寄存器组 freeList（即代码中的 freeList\_\*，记其数量为 size），以及头指针
-headPtr（即代码中的 headPtr\_\*）和尾指针 tailPtr（即代码中的 tailPtr\_\*）组成。其中 headPtr
-为出队指针，tailPtr 为入队指针。
+Free physical registers are maintained by a circular queue. This queue consists
+of the register group freeList (i.e., freeList_* in the code, with a size of
+size), a head pointer headPtr (i.e., headPtr_* in the code), and a tail pointer
+tailPtr (i.e., tailPtr_* in the code). Here, headPtr is the dequeue pointer, and
+tailPtr is the enqueue pointer.
 
-为方便说明，先考虑一个普通的队列，此时 headPtr 和 tailPtr 都是指向 freeList 中某个元素的指针。正常工作时，tailPtr
-永远大于或等于 headPtr，队列中的元素为 {headPtr, headPtr + 1, ..., tailPtr -
-1}。当有元素希望入队时，则将元素放置于 freeList[tailPtr]，再将 tailPtr 加一；当有元素出队时，则取出
-freeList[headPtr]，再将 headPtr 加一。当 tailPtr 与 headPtr 相等时，说明队列为空；当 tailPtr 大于
-headPtr 时，说明队列非空。
+For clarity, consider a standard queue where both headPtr and tailPtr are
+pointers to elements in the freeList. During normal operation, tailPtr is always
+greater than or equal to headPtr, and the queue elements are {headPtr, headPtr +
+1, ..., tailPtr - 1}. When an element is enqueued, it is placed in
+freeList[tailPtr], and tailPtr is incremented by one. When an element is
+dequeued, freeList[headPtr] is retrieved, and headPtr is incremented by one. If
+tailPtr equals headPtr, the queue is empty; if tailPtr is greater than headPtr,
+the queue is non-empty.
 
-![普通队列](./figure/Queue-Normal.svg)
+![Regular queue](./figure/Queue-Normal.svg)
 
-但是，由于 freeList 不可能无限长，我们设计出了环形队列。环形队列可以认为是将有限长的普通队列首尾相接。此时，tailPtr 和 headPtr
-将不能仅仅只是指向 freeList 中某个元素的指针了：按原有设计，当 tailPtr 与 headPtr 相等时，环形队列可能是空的，也可能是满的。
+However, since freeList cannot be infinitely long, we designed a circular queue
+- essentially connecting a finite regular queue end-to-end. Here, tailPtr and
+headPtr can no longer simply point to freeList elements: under original design,
+when tailPtr equals headPtr, the circular queue could be either empty or full.
 
-为了解决这一问题，我们为 tailPtr 和 headPtr 新增了 flag 字段，该字段初始值为 false，且在每次由 freeList[size -
-1] 变为 freeList[0] 时，将 flag 取反。这样，在 value 相同的情况下，若 flag 相同，则说明环形队列为空；若 flag
-不同，则说明环形队列为满。
+To address this issue, we added a flag field to tailPtr and headPtr. This field
+is initially false and toggles each time the pointer wraps around from
+freeList[size - 1] to freeList[0]. Thus, when the value is the same, if the
+flags are identical, it indicates the circular queue is empty; if the flags
+differ, it indicates the queue is full.
 
-canAllocate 的更新时序：当拍会根据 headPtr， tailPtr， freeReq 以及 allocateReq 计算
-freeRegCnt，然后将其打一拍得到 freeRegCntReg（它就是实际上的 size）。 freeRegCntReg 大于译码宽度时
-canAllocate 置高，并当拍传出。
+Timing for updating canAllocate: In the current cycle, freeRegCnt is calculated
+based on headPtr, tailPtr, freeReq, and allocateReq. This value is then
+registered in the next cycle as freeRegCntReg (which represents the actual
+size). If freeRegCntReg exceeds the decode width, canAllocate is set high and
+propagated in the same cycle.
 
-![环形队列](./figure/Queue-Circle.svg)
+![Circular queue](./figure/Queue-Circle.svg)
 
 # MEFreeList
 
-MEFreeList 在 Rename 模块中被例化为 intFreeList。正如 [@sec:alloc-int-prf]
-、[@sec:commit-int-inst] 和 [@sec:rename-re-rename] 中所提到的那样，intFreelist
-在重命名时负责接收整数物理寄存器的分配请求，返回分配的空闲整数物理寄存器；在重新重命名时负责根据RAB传来的重新重命名请求重新对整数物理寄存器进行分配；在提交时负责释放已经不会再被使用的整数物理寄存器。与
-StdFreeList 不同的是，MEFreeList 支持 move 指令消除。如果一条指令是 move 指令，Rename 并不会将
-io\_allocateReq\_\*\_valid 置高，因此 MEFreeList 并不会为其分配空闲物理寄存器。
+MEFreeList is instantiated as intFreeList in the Rename module. As mentioned in
+[@sec:alloc-int-prf], [@sec:commit-int-inst], and [@sec:rename-re-rename],
+intFreeList handles allocation requests for integer physical registers during
+rename, returns allocated free integer physical registers, reallocates integer
+physical registers based on re-rename requests from RAB during re-rename, and
+releases unused integer physical registers during commit. Unlike StdFreeList,
+MEFreeList supports move instruction elimination. If an instruction is a move
+instruction, Rename does not assert io\_allocateReq\_\*\_valid, so MEFreeList
+does not allocate a free physical register for it.
 
-## 整体框图
+## Overall Block Diagram
 
-![MEFreeList 整体框图](./figure/MEFreeList.svg)
+![Overall block diagram of MEFreeList](./figure/MEFreeList.svg)
 
-## 接口时序
+## Interface timing
 
-### 空闲寄存器分配时序示意图
+### Timing diagram of free register allocation
 
-![MEFreeList
-空闲寄存器分配时序示意图](./figure/MEFreeList-Alloc-IO.svg){#fig:mefreelist-alloc-io}
+![Timing Diagram of MEFreeList Physical Register
+Allocation](./figure/MEFreeList-Alloc-IO.svg){#fig:mefreelist-alloc-io}
 
-[@fig:mefreelist-alloc-io] 示意了空闲物理寄存器分配的时序。在时刻 3、时刻 5 和时刻 6，io\_redirect 和
-io\_walk 为低电平，io\_doAllocate 和 io\_canAllocate 为高电平，从而进行了空闲物理寄存器的分配。在时刻
-3，io\_allocateReq\_[2-4] 为高电平，MEFreeList 通过 io\_allocatePhyReg\_[2-4]
-分别返回了分配的空闲物理寄存器号 151、112 和 143；在时刻 5，io\_allocatePhyReg\_[0-2|5]
-分别返回了分配的空闲物理寄存器号 127、162、163 和 144；在时刻 6，则返回了 174、182 和 179。
+[@fig:mefreelist-alloc-io] illustrates the timing of free physical register
+allocation. At times 3, 5, and 6, io\_redirect and io\_walk are low, while
+io\_doAllocate and io\_canAllocate are high, enabling free physical register
+allocation. At time 3, io\_allocateReq\_[2-4] is high, and MEFreeList returns
+allocated free physical register numbers 151, 112, and 143 via
+io\_allocatePhyReg\_[2-4]. At time 5, io\_allocatePhyReg\_[0-2|5] returns
+allocated free physical register numbers 127, 162, 163, and 144. At time 6, it
+returns 174, 182, and 179.
 
-### 指令提交时序示意图
+### Instruction Commit Timing Diagram
 
-![MEFreeList
-指令提交时序示意图](./figure/MEFreeList-Commit-IO.svg){#fig:mefreelist-commit-io}
+![MEFreeList instruction commit timing
+diagram](./figure/MEFreeList-Commit-IO.svg){#fig:mefreelist-commit-io}
 
-[@fig:mefreelist-commit-io] 示意了指令提交的时序，其中 io\_freeReq\_\* 表示某一路的 io\_freeReq
-信号，io\_freePhyReg\_\* 表示与 io\_freeReq\_\* 对应某路的 io\_freePhyReg 信号。当 io\_redirect
-和 io\_walk 均为低电平时，若 io\_freeReq 为高电平，则 StdFreeList 会将对应的 io\_freePhyReg 加入空闲队列。
+[@fig:mefreelist-commit-io] illustrates the timing of instruction commits. Here,
+`io_freeReq_*` represents the `io_freeReq` signal for a specific lane, and
+`io_freePhyReg_*` represents the `io_freePhyReg` signal corresponding to
+`io_freeReq_*` for that lane. When both `io_redirect` and `io_walk` are low, if
+`io_freeReq` is high, `StdFreeList` will add the corresponding `io_freePhyReg`
+to the free queue.
 
-此外，在 io\_freeReq\_\* 的前两个周期，Rename 模块还会将 RAB 的提交信息传入，以更新体系结构出队指针 archHeadPtr。当
-io\_commit\_isCommit 和对应通道的 io\_commit\_commitValid\_\*
-信号处于高电平时，说明对应通道的更新信号有效。此时，若对应通道的 io\_commit\_info\_\*\_rfWen
-为高电平、io\_commit\_info\_\*\_ldest 不为 0 且 io\_commit\_info\_\*\_isMove
-为低电平，则表明该通道会让 archHeadPtr 加一。若有 `k` 个通道满足上述条件，则 archHeadPtr 会加 `k`。
+Additionally, two cycles before io_freeReq_*, the Rename module passes commit
+information from the RAB to update the architectural dequeue pointer
+archHeadPtr. When io_commit_isCommit and the corresponding channel's
+io_commit_commitValid_* are high, the update signal for that channel is valid.
+If the channel's io_commit_info_*_rfWen is high, io_commit_info_*_ldest is
+non-zero, and io_commit_info_*_isMove is low, it indicates that the channel will
+increment archHeadPtr by one. If `k` channels meet these conditions, archHeadPtr
+will be incremented by `k`.
 
-当 io\_commit\_commitValid\_\* 在某个周期为高电平时，io\_freeReq\_\*
-信号不总会在两个周期后为高电平。造成这一现象的原因是 move 消除。此处的 io\_freeReq\_\* 来自于 RenameTable 的输出信号
-io\_need\_free。正如 RenameTable 模块中提到的那样，RenameTable 的 io\_need\_free 信号在
-arch\_table 中存在相同的物理寄存器时，可能不会被拉高，而正是因为 move 消除导致不同的逻辑寄存器共享了同一个物理寄存器，才导致在
-RenameTable 的不同项中存在相同的物理寄存器。
+When io\_commit\_commitValid\_\* is high in a cycle, the io\_freeReq\_\* signal
+may not always be high two cycles later. This phenomenon is caused by move
+elimination. The io\_freeReq\_\* signal here comes from the RenameTable's output
+signal io\_need\_free. As mentioned in the RenameTable module, RenameTable's
+io\_need\_free signal may not be asserted when the arch\_table contains the same
+physical register. This occurs because move elimination causes different logical
+registers to share the same physical register, resulting in identical physical
+registers across different entries in RenameTable.
 
-### 指令重新重命名时序示意图
+### Timing Diagram of Instruction Rename Recovery
 
-![MEFreeList
-指令重新重命名时序示意图](./figure/MEFreeList-Re-Rename-IO.svg){#fig:mefreelist-re-rename-io}
+![MEFreeList instruction re-rename timing
+diagram](./figure/MEFreeList-Re-Rename-IO.svg){#fig:mefreelist-re-rename-io}
 
-[@fig:mefreelist-re-rename-io] 示意了指令重新重命名的时序。当 io\_redirect 在时刻 1
-拉高一个周期后，io\_walk 会被拉高数个周期，标志着模块进入重新重命名阶段。在时刻 1，由于 io\_snpt\_useSnpt 为低电平，因此
-headPtr 会被恢复为 archHeadPtr 的值。这一恢复不会立即进行，而是在时刻 2 加上 io\_walkReq\_\* 高电平的数量（2）后得到
-headPtrAllocate（5），并在时刻 3 写入 headPtr。此后，当 io\_walk 为高电平时，headPtrAllocate 置为
-headPtr+PopCount(io\_walkReq\_\*) 的值，并在下一个周期写入 headPtr。
+[@fig:mefreelist-re-rename-io] illustrates the timing of instruction re-rename.
+When io_redirect is asserted high for one cycle at time 1, io_walk is
+subsequently asserted high for several cycles, indicating the module has entered
+the re-rename phase. At time 1, since io_snpt_useSnpt is low, headPtr is
+restored to the value of archHeadPtr. This restoration does not occur
+immediately but is calculated at time 2 by adding the count of high io_walkReq_*
+signals (2) to obtain headPtrAllocate (5), which is then written to headPtr at
+time 3. Thereafter, when io_walk is high, headPtrAllocate is set to headPtr +
+PopCount(io_walkReq_*) and written to headPtr in the next cycle.
 
-重新重命名过程旨在消除推测执行错误路径上的重命名状态。通过先将 headPtr 恢复到体系结构 archHeadPtr 状态（或当
-io\_snpt\_useSnpt 为高电平时，恢复到快照状态），然后再重新重命名到进入错误路径之前，以达到这一目的。
+The re-rename process aims to eliminate rename states on incorrectly speculated
+execution paths. This is achieved by first restoring the headPtr to the
+architectural archHeadPtr state (or to the snapshot state when io_snpt_useSnpt
+is high), then re-renaming to the state before entering the incorrect path.
 
 # CompressUnit
 
-CompressUnit 用于决定哪些指令可以共用同一个 ROB 项，即可以被压缩到同一个 ROB 项。该模块接受来自译码单元的输出，并根据译码输出的结果，得到
-ROB 压缩信息。
+The CompressUnit determines which instructions can share the same ROB entry,
+i.e., be compressed into a single ROB entry. This module receives outputs from
+the decode unit and generates ROB compression information based on the decode
+results.
 
-一个通道被标记为可被 ROB
-压缩（canCompress\_[0-5]），当且仅当这条通道传入的译码信息满足：该通道的译码信息有效（io\_in\_[0-5]\_valid），且该通道不存在指令融合（!io\_in\_[0-5]\_bits\_commitType[2]），且该通道不存在指令拆分或为指令拆分的最后一条微指令（io\_in\_[0-5]\_bits\_lastUop），且该通道不存在例外（io\_in\_[0-5]\_bits\_exceptionVec\_\*
-均为低电平），且该通道被标记为可被 ROB 压缩（io\_in\_[0-5]\_bits\_canRobCompress）。
+A channel is marked as compressible by the ROB (`canCompress_[0-5]`) if and only
+if the decoded information for that channel meets the following conditions: the
+channel's decoded information is valid (`io_in_[0-5]_valid`), the channel does
+not involve instruction fusion (`!io_in_[0-5]_bits_commitType[2]`), the channel
+does not involve instruction splitting or is the last micro-op of a split
+instruction (`io_in_[0-5]_bits_lastUop`), the channel has no exceptions
+(`io_in_[0-5]_bits_exceptionVec_*` are all low), and the channel is marked as
+compressible by the ROB (`io_in_[0-5]_bits_canRobCompress`).
 
-CompressUnit 会为每个通道输出是否需要分配 ROB 项的标志 io\_out\_needRobFlags\_[0-5]。当且仅当某个通道的
-canCompress\_[0-5] 为 0，或该通道为自己所在的连续为 1 的 canCompress\_[0-5] 组中编号最大的那一个通道时，该通道的
-io\_out\_needRobFlags\_[0-5] 会被置为高电平。
+The `CompressUnit` outputs a flag for each channel indicating whether a ROB
+entry needs to be allocated (`io_out_needRobFlags_[0-5]`). The
+`io_out_needRobFlags_[0-5]` signal for a channel is set high if and only if
+`canCompress_[0-5]` for that channel is 0, or if the channel is the one with the
+highest index in its contiguous group of `canCompress_[0-5]` set to 1.
 
-CompressUnit 会为每个通道输出该通道所在 ROB 项中的指令数量 io\_out\_instrSizes\_[0-5]。当某个通道的
-canCompress\_[0-5] 为 0 时，该通道的 io\_out\_instrSizes\_[0-5] 为 1；当某个通道的
-canCompress\_[0-5] 为 1 时，该通道的 io\_out\_instrSizes\_[0-5] 为自己所在的连续为 1
-的canCompress\_[0-5] 组中元素的个数。
+The `CompressUnit` outputs the number of instructions in the ROB entry for each
+channel via `io_out_instrSizes_[0-5]`. When `canCompress_[0-5]` for a channel is
+0, `io_out_instrSizes_[0-5]` for that channel is 1. When `canCompress_[0-5]` for
+a channel is 1, `io_out_instrSizes_[0-5]` for that channel is the count of
+elements in the contiguous group of `canCompress_[0-5]` where it belongs.
 
-CompressUnit 会为每个通道输出与该通道共用同一个 ROB 项的通道掩码 io\_out\_masks\_[0-5]。该信号位宽为
-6，与通道数相同。当某个通道的 canCompress\_n 为 0 时，该通道的 io\_out\_masks\_n[n] 为 1，除
-io\_out\_masks\_n[n] 以外的位为 0；当某个通道的 canCompress\_n 为 1 时，io\_out\_masks\_n 中为 1
-的那些位的索引为“自己所在的连续为 1 的 canCompress\_[0-5]组”中的通道的编号。
+CompressUnit outputs a channel mask io\_out\_masks\_[0-5] for each channel,
+indicating which channels share the same ROB entry. This signal is 6 bits wide,
+matching the number of channels. When canCompress\_n is 0 for a channel,
+io\_out\_masks\_n[n] is 1, and all other bits are 0. When canCompress\_n is 1,
+the bits set to 1 in io\_out\_masks\_n correspond to the indices of channels in
+the "continuous group of canCompress\_[0-5] set to 1" that includes the current
+channel.
 
-举例来说，如果 {canCompress\_5, canCompress\_4, canCompress\_3, canCompress\_2,
-canCompress\_1, canCompress\_0} == {1, 0, 0, 1, 1, 0}，那么
-{io\_out\_needRobFlags\_5, io\_out\_needRobFlags\_4, io\_out\_needRobFlags\_3,
-io\_out\_needRobFlags\_2, io\_out\_needRobFlags\_1, io\_out\_needRobFlags\_0} ==
-{1, 1, 1, 1, 0, 1}，{io\_out\_instrSizes\_5, io\_out\_instrSizes\_4,
-io\_out\_instrSizes\_3, io\_out\_instrSizes\_2, io\_out\_instrSizes\_1,
-io\_out\_instrSizes\_0} == {1, 1, 1, 2, 2, 1}，{io\_out\_masks\_5,
-io\_out\_masks\_4, io\_out\_masks\_3, io\_out\_masks\_2, io\_out\_masks\_1,
-io\_out\_masks\_0} == {{1, 0, 0, 0, 0, 0}, {0, 1, 0, 0, 0, 0}, {0, 0, 1, 0, 0,
-0}, {0, 0, 0, 1, 1, 0}, {0, 0, 0, 1, 1, 0}, {0, 0, 0, 0, 0, 1}}。
+For example, if {canCompress_5, canCompress_4, canCompress_3, canCompress_2,
+canCompress_1, canCompress_0} == {1, 0, 0, 1, 1, 0}, then
+{io_out_needRobFlags_5, io_out_needRobFlags_4, io_out_needRobFlags_3,
+io_out_needRobFlags_2, io_out_needRobFlags_1, io_out_needRobFlags_0} == {1, 1,
+1, 1, 0, 1}, {io_out_instrSizes_5, io_out_instrSizes_4, io_out_instrSizes_3,
+io_out_instrSizes_2, io_out_instrSizes_1, io_out_instrSizes_0} == {1, 1, 1, 2,
+2, 1}, {io_out_masks_5, io_out_masks_4, io_out_masks_3, io_out_masks_2,
+io_out_masks_1, io_out_masks_0} == {{1, 0, 0, 0, 0, 0}, {0, 1, 0, 0, 0, 0}, {0,
+0, 1, 0, 0, 0}, {0, 0, 0, 1, 1, 0}, {0, 0, 0, 1, 1, 0}, {0, 0, 0, 0, 0, 1}}.
 
-## 整体框图
+## Overall Block Diagram
 
-![CompressUnit 整体框图](./figure/CompressUnit.svg)
+![Overall block diagram of CompressUnit](./figure/CompressUnit.svg)
 
-## 接口时序
+## Interface timing
 
-该模块为纯组合逻辑，信号当拍进当拍出。
+This module is purely combinational logic with signals processed within the same
+cycle.
 
 # SnapshotGenerator
 
-正如在 [@sec:decide-snpt-gen]
-中提到的那样，重命名快照是分布式的，它会分布在各个当发生重定向后需要排除错误重命名路径影响的模块之中，以达到加快重新重命名的目的。对于和重命名相关的模块而言，RenameTable、RenameTable_1、RenameTable_2、StdFreeList
-和 MEFreeList 中都存在这一子模块。
+As mentioned in [@sec:decide-snpt-gen], rename snapshots are distributed across
+modules requiring error path elimination after redirection to accelerate
+re-renaming. For rename-related modules, this submodule exists in RenameTable,
+RenameTable_1, RenameTable_2, StdFreeList, and MEFreeList.
 
-不同的子模块中具体存储的快照数据 snapshots 各不相同。对于 RenameTable(\_\*) 而言，其中各存储了四份 spec\_table；对于
-StdFreeList 和 MEFreeList 而言，其中则存储了四份 headPtr。
+The snapshot data stored in different submodules varies. For RenameTable(\_\*),
+each stores four spec\_tables; for StdFreeList and MEFreeList, each stores four
+headPtrs.
 
-模块内部维护了一对环形指针 snptEnqPtr 和 snptDeqPtr。当 io\_redirect 为低电平时，如果快照存储没有满，且 io\_enq
-为高电平，那么模块会将 io\_enqData\_\* 传入的数据记录到快照存储 snapshots\_[snptEnqPtr\_value] 处，并将
-snptValids[snptEnqPtr\_value] 置一，然后 snptEnqPtr 加一。
+The module internally maintains a pair of circular pointers, `snptEnqPtr` and
+`snptDeqPtr`. When `io_redirect` is low, if the snapshot storage is not full and
+`io_enq` is high, the module records the data from `io_enqData_*` into
+`snapshots_[snptEnqPtr_value]`, sets `snptValids[snptEnqPtr_value]` to 1, and
+increments `snptEnqPtr`.
 
-与此相对的，当 io\_redirect 为低电平时，如果 io\_deq
-为高电平，说明此时快照模块需要出队一个快照。此时，snptValids\_[snptDeqPtr\_value] 会被置低，然后 snptDrqPtr 加一。
+Conversely, when io\_redirect is low, if io\_deq is high, it indicates that the
+snapshot module needs to dequeue a snapshot. At this point,
+snptValids\_[snptDeqPtr\_value] will be set low, and snptDrqPtr will be
+incremented by one.
 
-重定向发生时，快照模块根据 io\_flushVec\_\* 信号对内部快照进行冲刷。首先，如果 io\_flushVec\_\* 为高电平，那么对应通道的
-snptValids\_\* 会被置低；其次，snptEnqPtr 会被回退到被置低后的第一个 snptValids\_\* 为低的位置。
+During redirection, the snapshot module flushes internal snapshots based on
+io_flushVec_* signals. First, if io_flushVec_* is high, the corresponding
+channel's snptValids_* will be deasserted; second, snptEnqPtr rolls back to the
+first position where snptValids_* becomes low after deassertion.
 
-快照中存储的数据会通过 io\_snapshots\_[0-3]\_\*
-接口传输到模块外部，以供各模块在重定向时恢复使用。重定向时是否使用快照以及使用哪一快照由 CtrlBlock 统一生成信号，本模块仅仅提供快照数据。
+The data stored in snapshots is transmitted externally via the
+io\_snapshots\_[0-3]\_\* interface for recovery during redirection. Whether and
+which snapshot to use during redirection is determined by CtrlBlock, which
+generates the unified control signals. This module only provides the snapshot
+data.

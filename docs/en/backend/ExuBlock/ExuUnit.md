@@ -9,100 +9,122 @@
 
 Table: Glossary of Terms in FU
 
-| fu         | Descrption            |
-| ---------- | --------------------- |
-| alu        | Arithmetic Logic Unit |
-| mul        | 乘法单元                  |
-| bku        | B 扩展位运算和密码学单元         |
-| brh        | 条件跳转单元                |
-| jmp        | 直接跳转单元                |
-| i2f        | 整数转浮点单元               |
-| i2v        | 整数移动到向量单元             |
-| VSetRiWi   | 读整数写整数的 vset 单元       |
-| VSetRiWvf  | 读整数写向量的 vset 单元       |
-| csr        | 控制状态寄存器单元             |
-| fence      | 内存同步指令单元              |
-| div        | 除法单元                  |
-| falu       | 浮点算数逻辑单元              |
-| fcvt       | 浮点转换单元                |
-| f2v        | 浮点移动到向量单元             |
-| fmac       | 浮点融合乘加                |
-| fdiv       | 浮点除法单元                |
-| vfma       | 向量浮点融合乘加单元            |
-| vialu      | 向量整数算术逻辑单元            |
-| vimac      | 向量整数乘加单元              |
-| vppu       | 向量排列处理单元              |
-| vfalu      | 向量浮点算数逻辑单元            |
-| vfcvt      | 向量浮点转换单元              |
-| vipu       | 向量整数处理单元              |
-| VSetRvfWvf | 读向量写向量的 vset 单元       |
-| vfdiv      | 向量浮点除法单元              |
-| vidiv      | 向量整数除法单元              |
+| fu         | Descrption                                             |
+| ---------- | ------------------------------------------------------ |
+| alu        | Arithmetic Logic Unit                                  |
+| mul        | Multiplication unit                                    |
+| bku        | B-extension bit manipulation and cryptography unit     |
+| brh        | Conditional Branch Unit                                |
+| jmp        | Direct jump unit                                       |
+| i2f        | Integer to Floating-Point Conversion Unit              |
+| i2v        | Integer Move to Vector Unit                            |
+| VSetRiWi   | VSet unit for reading and writing integers             |
+| VSetRiWvf  | The vset unit for reading integers and writing vectors |
+| csr        | Control and Status Register Unit                       |
+| fence      | Memory Synchronization Instruction Unit                |
+| div        | Division unit                                          |
+| falu       | Floating-point arithmetic logic unit                   |
+| fcvt       | Floating-point conversion unit                         |
+| f2v        | Floating-point move to vector unit                     |
+| fmac       | Floating-point fused multiply-add                      |
+| fdiv       | Floating-Point Division Unit                           |
+| vfma       | Vector floating-point fused multiply-add unit          |
+| vialu      | Vector Integer Arithmetic Logic Unit                   |
+| vimac      | Vector integer multiply-add unit                       |
+| vppu       | Vector permutation processing unit                     |
+| vfalu      | Vector Floating-Point Arithmetic Logic Unit            |
+| vfcvt      | Vector floating-point conversion unit                  |
+| vipu       | Vector integer processing unit                         |
+| VSetRvfWvf | Read vector write vector vset unit                     |
+| vfdiv      | Vector floating-point division unit                    |
+| vidiv      | Vector integer division unit                           |
 
-## 输入输出
+## Input and Output
 
-`flush` 是一个带 valid 信号的 Redirect 输入
+`flush` is a Redirect input with a valid signal.
 
-`in` 是按具体 ExeUnit 参数配置生成的 ExuInput
+`in` is the ExuInput generated according to the specific ExeUnit parameter
+configuration
 
-`out` 是按具体 ExeUnit 参数配置生成的 ExuOutput
+`out` is the ExuOutput generated based on the specific ExeUnit parameter
+configuration
 
-`csrio` 、 `csrin` 和 `csrToDecode` 只有当该 ExeUnit 中存在 `CSR` 时才存在。
+`csrio`, `csrin`, and `csrToDecode` only exist when `CSR` is present in the
+ExeUnit.
 
-类似地， `fenceio` 只有当该 ExeUnit 中存在 `fence` 时才存在。`frm` 只有当该 ExeUnit 中需要 `frm` 作为 src
-时才存在。`vxrm` 只有当该 ExeUnit 中需要 `vxrm` 作为 src 时才存在。
+Similarly, `fenceio` only exists when `fence` is present in the ExeUnit. `frm`
+only exists when `frm` is required as a src in the ExeUnit. `vxrm` only exists
+when `vxrm` is required as a src in the ExeUnit.
 
-`vtype` 、 `vlIsZero` 和 `vlIsVlmax` 只有当该 ExeUnit 中需要写 Vconfig 时才存在。
+`vtype`, `vlIsZero`, and `vlIsVlmax` only exist when Vconfig needs to be written
+in this ExeUnit.
 
-另外，对于 ExeUnit 中存在 JmpFu 或者 BrhFu 的情况，还需要输入指令地址翻译类型 `instrAddrTransType`
+Additionally, for cases where JmpFu or BrhFu exists in the ExeUnit, the
+instruction address translation type `instrAddrTransType` must also be input
 
-## 功能
+## Function
 
-每个 ExuUnit 会根据其配置参数生成一系列对应的 FU 模块。
+Each ExuUnit generates a series of corresponding FU modules based on its
+configuration parameters.
 
-busy 用于表示当前 ExeUnit 是否处于繁忙状态。对于延迟确定的
-ExeUnit，功能单元永远不会被标记为繁忙，因为延迟是固定的，所有的任务都会按顺序完成。在这种情况下，busy 被直接设置为
-false，表示功能单元始终是空闲的。而对于非确定延迟的 ExeUnit，当有输入 fire 时将 busy 拉高，在输出 fire
-时拉低。另外，如果正在输入的 uop 或者正在计算的 uop 需要被 redirect flush，则也将 busy 拉低。
+busy is used to indicate whether the current ExeUnit is in a busy state. For
+ExeUnits with deterministic latency, the functional unit is never marked as busy
+because the latency is fixed, and all tasks will complete in order. In this
+case, busy is directly set to false, indicating the functional unit is always
+idle. For ExeUnits with non-deterministic latency, busy is set high when input
+fires and set low when output fires. Additionally, if the incoming uop or the
+uop being calculated needs to be redirect flushed, busy is also set low.
 
-另外，ExeUnit
-中会检查混合延迟类型，即检查是否存在同一端口的功能单元具有不同的延迟类型（确定和不确定的）。如果存在这种混合情况，对于不确定延迟的功能单元，确保其优先级是最大值。这种设计逻辑确保了在处理不同类型延迟的功能单元时。写回端口的优先级得到适当的配置，避免优先级的冲突或不一致。
+Additionally, the ExeUnit checks for mixed latency types, i.e., whether there
+are functional units on the same port with different latency types
+(deterministic and non-deterministic). If such mixed cases exist, for functional
+units with non-deterministic latency, their priority is ensured to be the
+maximum. This design logic guarantees that when handling functional units with
+different latency types, the write-back port priorities are appropriately
+configured to avoid conflicts or inconsistencies in priority.
 
-每个 ExuUnit 中除了拥有各个 FU 外，还有一个子模块 in1ToN，其是一个 Dispatcher，其作用是将输入到 ExuUnit 的一个
-ExuInput 进一步派遣到不同的 FU，这里需要保证同一个 ExuInput 必须进入 1 个 FU，且不能进入多于 1 个的 FU 中。
+In addition to containing various FUs, each ExuUnit also includes a submodule
+called in1ToN, which acts as a Dispatcher. Its role is to further dispatch an
+ExuInput entering the ExuUnit to different FUs. It must ensure that the same
+ExuInput enters exactly one FU and does not enter more than one FU.
 
-另外还有一组寄存器 inPipe，是大小为 latencyMax+ 1 的
-（valid，input）对，其记录了输入，以及输入处于什么哪一周期的计算。对于需要控制流水线的 FU，可以通过 inPipe 获得原始的数据。
+Additionally, there is a set of registers called inPipe, which consists of
+(valid, input) pairs with a size of latencyMax + 1. These record the inputs and
+the computation cycle in which the input resides. For FUs that require pipeline
+control, the original data can be obtained through inPipe.
 
-最后，还需要将不同 FU 的输出结果进行汇总，选出一个 FU 的输出结果作为 ExeUnit 的输出。
+Finally, the output results from different FUs need to be aggregated, and one
+FU's output result is selected as the ExeUnit's output.
 
-![ExuUnit 总览](./figure/ExuUnit-Overview.svg)
+![ExuUnit Overview](./figure/ExuUnit-Overview.svg)
 
-## 设计规格
+## Design specifications
 
-在 Backend 中一共有 3 个ExuBlock：intExuBlock，fpExuBlock 和
-vfExuBlock，分别是整数、浮点、向量的执行模块。每个 ExuBlock 中包含若干个 ExeUnit 单元。
+There are a total of 3 ExuBlocks in the Backend: intExuBlock, fpExuBlock, and
+vfExuBlock, which are the execution modules for integer, floating-point, and
+vector operations, respectively. Each ExuBlock contains several ExeUnit units.
 
-intExuBlock 中包含了 8 个 ExeUnit，每个 ExeUnit 对应的功能如下：
+The intExuBlock contains 8 ExeUnits, each with the following functions:
 
-Table: intExuBlock 中 各个ExeUnit 包含的 Fu
+Table: FUs included in each ExeUnit within intExuBlock
 
-| ExeUnit | 功能                                 |
-| ------- | ---------------------------------- |
-| exus0   | alu，mul，bku                        |
-| exus1   | brh，jmp                            |
-| exus2   | alu，mul，bku                        |
-| exus3   | brh，jmp                            |
-| exus4   | alu                                |
-| exus5   | brh，jmp，i2f，i2v，VSetRiWi，VSetRiWvf |
-| exus6   | alu                                |
-| exus7   | csr，fence，div                      |
+| ExeUnit | Function                                |
+| ------- | --------------------------------------- |
+| exus0   | alu，mul，bku                             |
+| exus1   | brh, jmp                                |
+| exus2   | alu，mul，bku                             |
+| exus3   | brh, jmp                                |
+| exus4   | alu                                     |
+| exus5   | brh, jmp, i2f, i2v, VSetRiWi, VSetRiWvf |
+| exus6   | alu                                     |
+| exus7   | csr, fence, div                         |
 
-fpExuBlock 中包含了 5 个 ExeUnit，每个 ExuUnit 对应的功能如下：
+The fpExuBlock contains 5 ExeUnits, with each ExuUnit corresponding to the
+following functions:
 
-Table: fpExuBlock 中 各个ExeUnit 包含的 Fu
+Table: FUs included in each ExeUnit in fpExuBlock
 
-| ExeUnit | 功能                 |
+| ExeUnit | Function           |
 | ------- | ------------------ |
 | exus0   | falu，fcvt，f2v，fmac |
 | exus1   | fdiv               |
@@ -110,28 +132,40 @@ Table: fpExuBlock 中 各个ExeUnit 包含的 Fu
 | exus3   | fdiv               |
 | exus4   | falu，fmac          |
 
-vfExuBlock 中包含了 5 个 ExeUnit，每个 ExuUnit 对应的功能如下：
+The vfExuBlock contains 5 ExeUnits, each corresponding to the following
+functions:
 
-Table: vfExuBlock 中 各个ExeUnit 包含的 Fu
+Table: FUs included in each ExeUnit in vfExuBlock
 
-| ExeUnit | 功能                          |
+| ExeUnit | Function                    |
 | ------- | --------------------------- |
 | exus0   | vfma，vialu，vimac，vppu       |
 | exus1   | vfalu，vfcvt，vipu，VSetRvfWvf |
 | exus2   | vfma，vialu                  |
 | exus3   | vfalu                       |
-| exus4   | vfdiv，vidiv                 |
+| exus4   | vfdiv, vidiv                |
 
-## 门控
+## Gating
 
-ExuUnit 还支持功能单元 FU 的时钟门控（Clock Gating）。通过控制每个功能单元 FU 的时钟使能信号 clk_en
-来降低功耗。只有在功能单元需要时，时钟才会被启用，并且根据功能单元的延迟设置和是否启用不确定延迟，动态计算时钟门控的使能信号，从而实现功耗优化。
+The ExuUnit also supports clock gating for functional units (FUs). Power
+consumption is reduced by controlling the clock enable signal clk_en of each FU.
+The clock is only enabled when the FU is needed, and the clock gating enable
+signal is dynamically calculated based on the FU's latency settings and whether
+uncertain latency is enabled, thereby optimizing power consumption.
 
-简单来说，对于固定延迟且延迟周期数大于 0 的 FU，使用两个 latReal + 1 长度的向量 fuVldVec 和 fuRdyVec，在 FU
-输入有效时， fuVldVec(0) 为 1，在每个周期将 1 向后移动。另外对于 fuRdyVec(i)，其值取决于 fuRdyVec(i+1) 和
-fuVldVec(i+1)。这样当 fuVldVec 中有 1 时就说明当前有有效的计算。
+In simple terms, for FUs with fixed latency and a latency cycle count greater
+than 0, two vectors of length latReal + 1, fuVldVec and fuRdyVec, are used. When
+the FU input is valid, fuVldVec(0) is set to 1, and this 1 is shifted backward
+each cycle. Additionally, the value of fuRdyVec(i) depends on fuRdyVec(i+1) and
+fuVldVec(i+1). Thus, when there is a 1 in fuVldVec, it indicates there is valid
+computation in progress.
 
-对于不确定延迟的 FU，使用 uncer_en_reg 在 FU 输入 fire 时记录，并在 FU 输出 fire 时清空。
+For FUs with uncertain latency, the uncer_en_reg is recorded when the FU input
+fires and cleared when the FU output fires.
 
-于是对于可以使用门控的 FU来说，其 clk_en 拉高的条件就是：零延迟的 FU 且 FU 输入 fire；多周期延迟的 FU 且输入 fire，或当前 FU
-中有有效计算；不确定延迟的 FU 且 FU 输入 fire，或当前 FU 中有有效的计算。通过这样的条件进行时钟门控。
+Thus, for FUs that can use gating, the clk_en signal is asserted under the
+following conditions: for zero-latency FUs when the FU input fires; for
+multi-cycle latency FUs when the input fires or there is valid computation in
+the current FU; for non-deterministic latency FUs when the FU input fires or
+there is valid computation in the current FU. Clock gating is performed based on
+these conditions.

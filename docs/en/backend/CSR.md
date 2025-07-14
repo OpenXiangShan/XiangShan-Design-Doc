@@ -7,237 +7,291 @@
 
 ## Glossary of Terms
 
-Table: 术语说明
+Table: Terminology Explanation
 
-| 缩写    | 全称                            | 描述                                                       |
-| ----- | ----------------------------- | -------------------------------------------------------- |
-| CSR   | Control and Status Register   | 控制和状态寄存器                                                 |
-| Trap  | Trap                          | 陷入，中断和异常的合称                                              |
-| ROB   | Reorder Buffer                | 重排序缓存                                                    |
-| PRVM  | Privilege Mode                | 特权级模式，包括M、S、U                                            |
-| VM/V  | Virtual Mode                  | 虚拟化模式，处于虚拟化模式具有VS和VU两个特权级                                |
-| EX_II | Illegal Instruction Exception | 非法指令异常                                                   |
-| EX_VI | Virtual Instruction Exception | 虚拟指令异常                                                   |
-| TVEC  | Trap Vector                   | Trap处理程序的入口配置寄存器，m/hs/vs三个模式独立                           |
-| IMSIC | Incoming MSI Controller       | 传入消息中断控制器，定义在 The RISC-V Advanced Interrupt Architecture |
+| Abbreviation | Full name                     | Description                                                                                        |
+| ------------ | ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| CSR          | Control and Status Register   | Control and status registers                                                                       |
+| Trap         | Trap                          | Collective term for traps, interrupts, and exceptions                                              |
+| ROB          | Reorder Buffer                | Reorder Buffer                                                                                     |
+| PRVM         | Privilege Mode                | Privilege levels, including M, S, U                                                                |
+| VM/V         | Virtual Mode                  | Virtualization mode, which includes VS and VU privilege levels when in virtualization mode         |
+| EX_II        | Illegal Instruction Exception | Illegal instruction exception                                                                      |
+| EX_VI        | Virtual Instruction Exception | Virtual instruction exception                                                                      |
+| TVEC         | Trap Vector                   | Trap handler entry configuration registers, independently configured for m/hs/vs modes             |
+| IMSIC        | Incoming MSI Controller       | Incoming Message-based Interrupt Controller, defined in The RISC-V Advanced Interrupt Architecture |
 
-## 设计规格
+## Design specifications
 
-支持执行CSR指令
+Support for executing CSR instructions
 
-支持执行CSR只读指令
+Supports execution of CSR read-only instructions
 
-支持 CSR 只读指令乱序
+Supports out-of-order execution of CSR read-only instructions
 
-支持执行mret、sret、ecall、ebreak、wfi等系统级指令
+Support execution of system-level instructions such as mret, sret, ecall,
+ebreak, wfi, etc.
 
-支持接收中断，取优先级最高的中断发送到ROB处理
+Supports receiving interrupts, selects the highest-priority interrupt, and sends
+it to the ROB for processing
 
-支持产生EX_II和EX_VI两类异常
+Supports generating EX_II and EX_VI exceptions
 
-支持接收来自ROB Trap（中断+异常）并处理Trap
+Supports receiving and handling traps from ROB Trap (interrupts + exceptions)
 
-支持符合 riscv-privileged-spec 规范的CSR实现
+Support for CSR implementation compliant with the riscv-privileged-spec
 
-支持中断和异常代理
+Supports interrupt and exception delegation
 
-支持Smaia和Ssaia扩展
+Supports Smaia and Ssaia extensions
 
-支持Sdtrig和Sdext扩展
+Supports Sdtrig and Sdext extensions
 
-支持H扩展
+Supports the H extension
 
-支持虚拟化中断
+Supports virtualization interrupts
 
-支持传入并处理外部中断
+Supports receiving and processing external interrupts
 
-## 功能
+## Function
 
-CSR 作为一个功能单元 FU，与 fence 和 div 位于 intExuBlock 中的同一个 ExeUnit。CSR 内主要包含四个子模块，分别是
-csrMod、trapInstMod、trapTvalMod 和 imsic。csrMod 是 CSR 的主要功能部件。
+As a functional unit (FU), CSR is located in the same ExeUnit as fence and div
+within the intExuBlock. The CSR primarily consists of four submodules: csrMod,
+trapInstMod, trapTvalMod, and imsic. csrMod serves as the main functional
+component of CSR.
 
-trapTvalMod 模块主要用于管理和更新与 trap 相关的目标值 tval。它根据输入信号 flush、targetPc 和 clear 等来更新或清除
-tval，并确保在 clear 时 tval 是有效的。模块还包含一些状态逻辑，以确保在特定条件下正确更新 tval。这个模块需要从来自 csrMod 发出的
-targetPc 以及来自于 flush 的 fullTarget 中选择来源，并且通过比较 robIdx 的先后来选择更新或是清除，最终输出 tval 信息。
+The trapTvalMod module is mainly responsible for managing and updating the
+trap-related target value tval. It updates or clears tval based on input signals
+such as flush, targetPc, and clear, ensuring tval is valid when cleared. The
+module also includes state logic to ensure tval is updated correctly under
+specific conditions. This module needs to select the source from targetPc issued
+by csrMod and fullTarget from flush, and decide whether to update or clear by
+comparing the order of robIdx, ultimately outputting the tval information.
 
-trapInstMod 模块主要用于管理和更新 trap 的指令编码信息。它根据输入信号（如 flush、faultCsrUop 和
-readClear）来更新或清除陷阱指令信息，并确保在特定条件下正确更新陷阱指令。模块还包含一些状态逻辑，以确保在特定条件下正确更新陷阱指令信息。这个模块需要从来自
-decode 的指令信息（包括指令编码、FtqPtr 和 FtqOffset），以及来自 CSR 本身组合拼接出的 CSR
-指令的指令信息中选择来源，并且通过比较 FtqPtr 和 FtqOffset 的先后来选择更新或是清除，以及更新的来源。在需要被 flush 或者
-readClear 时设为无效。最终输出 trap 相关的指令编码，以及对应的 FtqPtr 和 FtqOffset。
+The trapInstMod module is primarily responsible for managing and updating the
+instruction encoding information of traps. It updates or clears trap instruction
+information based on input signals (such as flush, faultCsrUop, and readClear),
+ensuring correct updates under specific conditions. The module also includes
+state logic to guarantee proper updates to trap instruction information when
+required. It selects the source from either instruction information provided by
+decode (including instruction encoding, FtqPtr, and FtqOffset) or CSR
+instruction information derived from CSR itself through combinatorial
+concatenation. By comparing the sequence of FtqPtr and FtqOffset, it determines
+whether to update or clear, as well as the update source. The module invalidates
+the information when a flush or readClear is needed. Ultimately, it outputs
+trap-related instruction encoding along with the corresponding FtqPtr and
+FtqOffset.
 
-imsic（Incoming MSI Controller） 模块主要用于 csrMod 在通过 indirect alias
-CSR（mireg/sireg/vsireg）访问 IMSIC 的内容时进行交互，输入imsic 其必要的信息，如访问的 CSR
-地址，所处于的特权级模式，写数据等，然后等到 imsic 的输出返回。如果 csrMod 本身的权限检查已经发现其应该产生异常，则不再向 imisc 发送请求。
+The imsic (Incoming MSI Controller) module primarily interacts with csrMod when
+accessing IMSIC content through indirect alias CSRs (mireg/sireg/vsireg),
+providing necessary information such as the accessed CSR address, privilege
+level mode, write data, etc., and then waits for imsic's output response. If
+csrMod's own permission check has already determined that an exception should be
+raised, it will not send a request to imsic.
 
-CSR 负责执行 CSR 类别的指令和 mret、sret、ecall、ebreak、wfi 等系统类别的指令，接收来自 Backend 的指令 uop
-和数据信息，在执行完成后将数据和跳转地址输出。若发生异常，则根据规则设置 EX_II 或 EX_VI。
+The CSR is responsible for executing CSR-type instructions and system-type
+instructions such as mret, sret, ecall, ebreak, and wfi. It receives instruction
+uops and data information from the Backend, and outputs data and jump addresses
+upon completion. If an exception occurs, it sets EX_II or EX_VI according to the
+rules.
 
-CSR 负责接收来自外部中断控制器 CLINT 和 IMSIC 的 MSIP、MTIP、MEIP、SEIP、VSTIP、VSEIP 等中断
-pending，根据当前特权级及其全局中断使能位决定是否响应，并对相应中断按优先级排序，选出优先级最高的中断交给 ROB 处理。
+The CSR is responsible for receiving interrupt pending signals such as MSIP,
+MTIP, MEIP, SEIP, VSTIP, and VSEIP from the external interrupt controllers CLINT
+and IMSIC. It determines whether to respond based on the current privilege level
+and its global interrupt enable bits, prioritizes the interrupts, and selects
+the highest-priority interrupt to be handled by the ROB.
 
-CSR 负责接收来自 ROB 的 Trap
-信息，根据代理情况（m[e|i]deleg和h[e|i]deleg）将特权级模式（PRVM）和虚拟化模式（V）设置为处理 Trap 的特权级，修改相关 CSR
-状态，并改变执行流为 TVEC 对应的 Trap Handler 的起始地址。
+The CSR is responsible for receiving Trap information from the ROB, setting the
+privilege level mode (PRVM) and virtualization mode (V) to the level handling
+the Trap based on delegation (m[e|i]deleg and h[e|i]deleg), modifying relevant
+CSR states, and redirecting execution flow to the starting address of the Trap
+Handler corresponding to TVEC.
 
-CSR
-负责保存控制浮点和向量执行的配置信息（Frm、Vstart、Vl、Vtype、Vxrm等），并存储浮点和向量指令执行产生的额外结果（Fflags、Vxsat等）。
+CSRs are responsible for storing configuration information controlling
+floating-point and vector execution (Frm, Vstart, Vl, Vtype, Vxrm, etc.), as
+well as additional results generated by floating-point and vector instruction
+execution (Fflags, Vxsat, etc.).
 
-CSR 负责和 IMSIC 通过自定义数据线交互，读写配置在 IMSIC 中的 mireg、sireg 和 vsireg 的**部分**寄存器（external
-interrupts部分）。
+The CSR is responsible for interacting with the IMSIC via custom data lines,
+reading and writing the ** and ** registers (external interrupts section)
+configured in the IMSIC's mireg, sireg, and vsireg.
 
-CSR 负责配置和更新 TLB 的相关信号，以确保 TLB 能够正确地进行虚拟地址到物理地址的转换。包括检测 ASID 和 VMID
-的变化，satp/vsatp/hgatp 等寄存器值的传递，mstatus/vsstatus 中的 mxr/sum，menvcfg/henvcfg 中的 pmm
-等权限和控制位的传递，虚拟内存模式的选择以及物理内存保护扩展的配置。通过这些配置，TLB 能够在不同的虚拟内存模式下正确地执行地址转换。
+The CSR is responsible for configuring and updating TLB-related signals to
+ensure the TLB correctly performs virtual-to-physical address translation. This
+includes detecting changes in ASID and VMID, passing values of registers like
+satp/vsatp/hgatp, transmitting permission and control bits such as mxr/sum from
+mstatus/vsstatus and pmm from menvcfg/henvcfg, selecting virtual memory modes,
+and configuring physical memory protection extensions. Through these
+configurations, the TLB can accurately execute address translations across
+different virtual memory modes.
 
-CSR 负责根据当前的特权模式和寄存器的状态，设置和传递与指令 decode
-相关的非法指令和虚拟指令的标志。这些标志用于指示某些指令在特定的特权模式下是否是非法的或虚拟的。通过这些标志，硬件可以在指令解码阶段正确地处理这些指令。
+The CSR is responsible for setting and passing flags related to illegal and
+virtual instruction decoding based on the current privilege mode and register
+state. These flags indicate whether certain instructions are illegal or virtual
+in specific privilege modes. Through these flags, the hardware can correctly
+handle such instructions during the decode stage.
 
-## 自定义 CSR
+## Custom CSR
 
-除去 RISC-V 手册定义的 CSR 外，我们还实现了 7 个自定义的
-CSR：sbpctl、spfctl、slvpredctl、smblockctl、srnctl、mcorepwr 和 mflushpwr。
+In addition to the CSRs defined in the RISC-V manual, we have implemented 7
+custom CSRs: sbpctl, spfctl, slvpredctl, smblockctl, srnctl, mcorepwr, and
+mflushpwr.
 
-其中，sbpctl、spfctl、slvpredctl、smblockctl 和 srnctl 这 5 个自定义 CSR 定义在 HS 模式，mcorepwr
-和 mflushpwr 这 2 个自定义 CSR 定义在 M 模式。
+Among these, the 5 custom CSRs—sbpctl, spfctl, slvpredctl, smblockctl, and
+srnctl—are defined in HS mode, while the 2 custom CSRs—mcorepwr and
+mflushpwr—are defined in M mode.
 
-对这些自定义 CSR 的访问除了遵循特权级（低特权不能访问高特权）的约束外，还受到 Smstateen/Ssstateen 扩展中 C
-字段对自定义内容访问的控制。
+Access to these custom CSRs is not only constrained by privilege levels (lower
+privileges cannot access higher ones) but also controlled by the C field in the
+Smstateen/Ssstateen extensions for custom content access.
 
-以下是各个自定义 CSR 的定义。
+Below are the definitions of each custom CSR.
 
 ### sbpctl
 
-sbpctl（Speculative Branch Prediction Control register） 的地址是 0x5C0，是一个定义在 HS
-模式的可读写寄存器。
+The sbpctl (Speculative Branch Prediction Control register) has an address of
+0x5C0 and is a readable/writable register defined in HS mode.
 
-Table: sbpctl 的定义
+Table: Definition of sbpctl
 
-| 字段名称        | 字段位置   | 初始值 | 描述                            |
-| ----------- | ------ | --- | ----------------------------- |
-| UBTB_ENABLE | 0      | 1   | UBTB_ENABLE 设 1 代表开启 uftb     |
-| BTB_ENABLE  | 1      | 1   | BTB_ENABLE 设 1 代表开启主 ftb      |
-| BIM_ENABLE  | 2      | 1   | BIM_ENABLE 设 1 代表开启 bim 预测器   |
-| TAGE_ENABLE | 3      | 1   | TAGE_ENABLE 设 1 代表开启 TAGE 预测器 |
-| SC_ENABLE   | 4      | 1   | SC_ENABLE 设 1 代表开启 SC 预测器     |
-| RAS_ENABLE  | 5      | 1   | RAS_ENABLE 设 1 代表开启 RAS 预测器   |
-| LOOP_ENABLE | 6      | 1   | LOOP_ENABLE 设 1 代表开启 loop 预测器 |
-|             | [63:7] | 0   | 保留                            |
+| Field name  | Field position | Initial value | Description                                          |
+| ----------- | -------------- | ------------- | ---------------------------------------------------- |
+| UBTB_ENABLE | 0              | 1             | UBTB_ENABLE set to 1 enables uftb.                   |
+| BTB_ENABLE  | 1              | 1             | Setting BTB_ENABLE to 1 enables the main ftb.        |
+| BIM_ENABLE  | 2              | 1             | Setting BIM_ENABLE to 1 enables the bim predictor.   |
+| TAGE_ENABLE | 3              | 1             | Setting TAGE_ENABLE to 1 enables the TAGE predictor. |
+| SC_ENABLE   | 4              | 1             | SC_ENABLE set to 1 enables the SC predictor.         |
+| RAS_ENABLE  | 5              | 1             | Setting RAS_ENABLE to 1 enables the RAS predictor    |
+| LOOP_ENABLE | 6              | 1             | Setting LOOP_ENABLE to 1 enables the loop predictor. |
+|             | [63:7]         | 0             | Reserved                                             |
 
 ### spfctl
 
-spfctl（Speculative Prefetch Control register）的地址是 0x5C1，是一个定义在 HS 模式的可读写寄存器。
+The address of spfctl (Speculative Prefetch Control register) is 0x5C1, a
+read-write register defined in HS mode.
 
-Table: spfctl的定义
+Table: Definition of spfctl
 
-| 字段名称                    | 字段位置    | 初始值 | 描述                                                            |
-| ----------------------- | ------- | --- | ------------------------------------------------------------- |
-| L1I_PF_ENABLE           | 0       | 1   | 控制 L1 指令预取器，设 1 代表开启预取                                        |
-| L2_PF_ENABLE            | 1       | 1   | 控制 L2 预取器，设 1 代表开启预取                                          |
-| L1D_PF_ENABLE           | 2       | 1   | 控制 SMS 预取器，设 1 代表开启预取                                         |
-| L1D_PF_TRAIN_ON_HIT     | 3       | 0   | 控制 SMS 预取器是否在 hit 时接受训 练，设 1 代表 hit 也会接受训练；设 0 代表只有 miss 才会训练 |
-| L1D_PF_ENABLE_AGT       | 4       | 1   | 控制 SMS 预取器的 agt 表，设 1 代表开启 agt 表                              |
-| L1D_PF_ENABLE_PHT       | 5       | 1   | 控制 SMS 预取器的 pht 表，设 1 代表开启 pht 表                              |
-| L1D_PF_ACTIVE_THRESHOLD | [9:6]   | 12  | 控制 SMS 预取器的 active page 阈值                                    |
-| L1D_PF_ACTIVE_STRIDE    | [15:10] | 30  | 控制 SMS 预取器的 active page 跨度                                    |
-| L1D_PF_ENABLE_STRIDE    | 16      | 1   | 控制 SMS 预取器是否启用跨步                                              |
-| L2_PF_STORE_ONLY        | 17      | 0   | 控制 L2 预取器是否只对 store 预取                                        |
-| L2_PF_RECV_ENABLE       | 18      | 1   | 控制 L2 预取器是否接收 SMS 的预取请求                                       |
-| L2_PF_PBOP_ENABLE       | 19      | 1   | 控制 L2 预取器 PBOP 的启用                                            |
-| L2_PF_VBOP_ENABLE       | 20      | 1   | 控制 L2 预取器 VBOP 的启用                                            |
-| L2_PF_TP_ENABLE         | 21      | 1   | 控制 L2 预取器 TP 的启用                                              |
-|                         | [63:22] | 0   | 保留                                                            |
+| Field name              | Field position | Initial value | Description                                                                                                                                                                   |
+| ----------------------- | -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1I_PF_ENABLE           | 0              | 1             | Controls the L1 instruction prefetcher, where setting 1 enables prefetching                                                                                                   |
+| L2_PF_ENABLE            | 1              | 1             | Control the L2 prefetcher, where 1 represents enabling prefetch                                                                                                               |
+| L1D_PF_ENABLE           | 2              | 1             | Controls the SMS prefetcher, setting 1 enables prefetching                                                                                                                    |
+| L1D_PF_TRAIN_ON_HIT     | 3              | 0             | Controls whether the SMS prefetcher accepts training on hits. Setting it to 1 means hits will also trigger training; setting it to 0 means only misses will trigger training. |
+| L1D_PF_ENABLE_AGT       | 4              | 1             | Controls the agt table of the SMS prefetcher. Setting to 1 enables the agt table.                                                                                             |
+| L1D_PF_ENABLE_PHT       | 5              | 1             | Controls the pht table of the SMS prefetcher, setting 1 enables the pht table                                                                                                 |
+| L1D_PF_ACTIVE_THRESHOLD | [9:6]          | 12            | Controls the active page threshold for the SMS prefetcher                                                                                                                     |
+| L1D_PF_ACTIVE_STRIDE    | [15:10]        | 30            | Controls the active page span of the SMS prefetcher                                                                                                                           |
+| L1D_PF_ENABLE_STRIDE    | 16             | 1             | Control whether the SMS prefetcher enables stride                                                                                                                             |
+| L2_PF_STORE_ONLY        | 17             | 0             | Control whether the L2 prefetcher only prefetches for stores                                                                                                                  |
+| L2_PF_RECV_ENABLE       | 18             | 1             | Control whether the L2 prefetcher accepts prefetch requests from SMS                                                                                                          |
+| L2_PF_PBOP_ENABLE       | 19             | 1             | Control the enabling of the L2 prefetcher PBOP                                                                                                                                |
+| L2_PF_VBOP_ENABLE       | 20             | 1             | Control the enablement of L2 prefetcher VBOP                                                                                                                                  |
+| L2_PF_TP_ENABLE         | 21             | 1             | Controls the enabling of the L2 prefetcher TP.                                                                                                                                |
+|                         | [63:22]        | 0             | Reserved                                                                                                                                                                      |
 
 ### slvpredctl
 
-slvpredctl（Speculative Load Violation Predictor Control register） 的地址是
-0x5C2，是一个定义在 HS 模式的可读写寄存器。
+The address of slvpredctl (Speculative Load Violation Predictor Control
+register) is 0x5C2, a read-write register defined in HS mode.
 
-Table: slvpredctl 的定义
+Table: Definition of slvpredctl
 
-| 字段名称                    | 字段位置   | 初始值 | 描述                                        |
-| ----------------------- | ------ | --- | ----------------------------------------- |
-| LVPRED_DISABLE          | 0      | 0   | 控制访存违例预测器是否禁用，设 1 代表禁用                    |
-| NO_SPEC_LOAD            | 1      | 0   | 控制访存违例预测器是否禁止 load 指令推测执行，设 1 代表禁止        |
-| STORESET_WAIT_STORE     | 2      | 0   | 控制访存违例预测器是否会阻塞 store 指令，设 1 代表会阻塞         |
-| STORESET_NO_FAST_WAKEUP | 3      | 0   | 控制访存违例预测器是否支持快速唤醒，设 1 代表不会快速唤醒            |
-| LVPRED_TIMEOUT          | [8:4]  | 3   | 访存违例预测器的 reset 间隔，设该位域的值为 x，则间隔为 2^(10+x) |
-|                         | [63:9] | 0   | 保留                                        |
+| Field name              | Field position | Initial value | Description                                                                                                                      |
+| ----------------------- | -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| LVPRED_DISABLE          | 0              | 0             | Controls whether the memory access violation predictor is disabled. Set to 1 to disable.                                         |
+| NO_SPEC_LOAD            | 1              | 0             | Controls whether the memory violation predictor prohibits speculative execution of load instructions. Setting to 1 prohibits it. |
+| STORESET_WAIT_STORE     | 2              | 0             | Controls whether the memory access violation predictor blocks store instructions, where 1 indicates blocking                     |
+| STORESET_NO_FAST_WAKEUP | 3              | 0             | Controls whether the memory violation predictor supports fast wake-up. Setting to 1 means no fast wake-up.                       |
+| LVPRED_TIMEOUT          | [8:4]          | 3             | Memory access violation predictor reset interval. If the value of this field is x, the interval is 2^(10+x)                      |
+|                         | [63:9]         | 0             | Reserved                                                                                                                         |
 
 ### smblockctl
 
-smblockctl（Speculative Memory Block Control register） 的地址是 0x5C3，是一个定义在 HS
-模式的可读写寄存器。
+The address of smblockctl (Speculative Memory Block Control register) is 0x5C3,
+which is a read-write register defined in HS-mode.
 
-Table: smblockctl 的定义
+Table: Definition of smblockctl
 
-| 字段名称                             | 字段位置    | 初始值 | 描述                                       |
-| -------------------------------- | ------- | --- | ---------------------------------------- |
-| SBUFFER_THRESHOLD                | [3:0]   | 7   | 控制 sbuffer 的 flush 阈值                    |
-| LDLD_VIO_CHECK_ENABLE            | 4       | 1   | 控制是否开启 ld-ld 违例检查，设 1 代表开启               |
-| SOFT_PREFETCH_ENABLE             | 5       | 1   | 控制是否开启 soft prefetch，设 1 代表开启            |
-| CACHE_ERROR_ENABLE               | 6       | 1   | 控制是否上报 cache 发生的 ecc 错误，设 1 代表开启         |
-| UNCACHE_WRITE_OUTSTANDING_ENABLE | 7       | 0   | 控制是否支持 uncache 的 outstanding 访问，设 1 代表开启 |
-| HD_MISALIGN_ST_ENABLE            | 8       | 1   | 控制是否启用硬件非对齐 store                        |
-| HD_MISALIGN_LD_ENABLE            | 9       | 1   | 控制是否启用硬件非对齐 load                         |
-|                                  | [63:10] | 0   | 保留                                       |
+| Field name                       | Field position | Initial value | Description                                                                                   |
+| -------------------------------- | -------------- | ------------- | --------------------------------------------------------------------------------------------- |
+| SBUFFER_THRESHOLD                | [3:0]          | 7             | Controls the flush threshold of the sbuffer                                                   |
+| LDLD_VIO_CHECK_ENABLE            | 4              | 1             | Controls whether to enable ld-ld violation checking, setting 1 means enabled                  |
+| SOFT_PREFETCH_ENABLE             | 5              | 1             | Controls whether soft prefetch is enabled. Setting to 1 enables it.                           |
+| CACHE_ERROR_ENABLE               | 6              | 1             | Controls whether to report ECC errors occurring in the cache. Setting to 1 enables reporting. |
+| UNCACHE_WRITE_OUTSTANDING_ENABLE | 7              | 0             | Controls whether uncache outstanding accesses are supported. Set to 1 to enable.              |
+| HD_MISALIGN_ST_ENABLE            | 8              | 1             | Controls whether hardware-unaligned store is enabled.                                         |
+| HD_MISALIGN_LD_ENABLE            | 9              | 1             | Control whether hardware-unaligned load is enabled                                            |
+|                                  | [63:10]        | 0             | Reserved                                                                                      |
 
 ### srnctl
 
-srnctl（Speculative Runtime Control register） 的地址是 0x5C4，是一个定义在 HS 模式的可读写寄存器。
+srnctl (Speculative Runtime Control register) has the address 0x5C4, a
+read-write register defined in HS-mode.
 
-Table: srnctl 的定义
+Table: Definition of srnctl
 
-| 字段名称          | 字段位置   | 初始值 | 描述                     |
-| ------------- | ------ | --- | ---------------------- |
-| FUSION_ENABLE | 0      | 1   | fusion decoder是否开启，1开启 |
-|               | 1      | 0   | 保留                     |
-| WFI_ENABLE    | 2      | 1   | wfi 指令是否开启，1开启         |
-|               | [63:3] | 0   | 保留                     |
+| Field name    | Field position | Initial value | Description                                           |
+| ------------- | -------------- | ------------- | ----------------------------------------------------- |
+| FUSION_ENABLE | 0              | 1             | Whether the fusion decoder is enabled, 1 for enabled  |
+|               | 1              | 0             | Reserved                                              |
+| WFI_ENABLE    | 2              | 1             | Whether the wfi instruction is enabled, 1 for enabled |
+|               | [63:3]         | 0             | Reserved                                              |
 
 ### mcorepwr
 
-mcorepwr（Core Power Down Status Enable） 的地址是 0xBC0，是一个定义在 M 模式的可读写寄存器。
+The address of mcorepwr (Core Power Down Status Enable) is 0xBC0, a read-write
+register defined in M-mode.
 
-Table: mcorepwr 的定义
+Table: Definition of mcorepwr
 
-| 字段名称              | 字段位置   | 初始值 | 描述                                 |
-| ----------------- | ------ | --- | ---------------------------------- |
-| POWER_DOWN_ENABLE | 0      | 0   | 1 表示当核心处于 WFI（等待中断）状态时，核心希望进入低功耗模式 |
-|                   | [63:1] | 0   | 保留                                 |
+| Field name        | Field position | Initial value | Description                                                                                            |
+| ----------------- | -------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| POWER_DOWN_ENABLE | 0              | 0             | 1 indicates that when the core is in WFI (Wait For Interrupt) state, it wishes to enter low-power mode |
+|                   | [63:1]         | 0             | Reserved                                                                                               |
 
 ### mflushpwr
 
-mflushpwr（Flush L2 Cache Enable） 的地址是 0xBC1，是一个定义在 M 模式的可读写寄存器。
+The address of mflushpwr (Flush L2 Cache Enable) is 0xBC1, which is a read-write
+register defined in M-mode.
 
-Table: mflushpwr 的定义
+Table: Definition of mflushpwr
 
-| 字段名称            | 字段位置   | 初始值 | 描述                         |
-| --------------- | ------ | --- | -------------------------- |
-| FLUSH_L2_ENABLE | 0      | 0   | 1 表示核心希望刷新 L2 缓存并退出一致性状态   |
-| L2_FLUSH_DONE   | 1      | 0   | 只读位，1 表示 L2 缓存刷新完成并退出一致性状态 |
-|                 | [63:2] | 0   | 保留                         |
+| Field name      | Field position | Initial value | Description                                                                    |
+| --------------- | -------------- | ------------- | ------------------------------------------------------------------------------ |
+| FLUSH_L2_ENABLE | 0              | 0             | 1 indicates the core wishes to flush the L2 cache and exit the coherence state |
+| L2_FLUSH_DONE   | 1              | 0             | Read-only bit, 1 indicates L2 cache flush completed and exited coherence state |
+|                 | [63:2]         | 0             | Reserved                                                                       |
 
-## CSR 异常检查
+## CSR exception checking
 
-当前 CSR 中的权限检查模块 permitMod
-将权限检查分为了多个子模块：xRetPermitMod、mLevelPermitMod、sLevelPermitMod、privilegePermitMod、virtualLevelPermitMod
-和 indirectCSRPermitMod。permitMod 会产生 EX_II 和 EX_VI 两种异常。另外，xRetPermitMod
-不同于其余子模块，其对应执行 xret 指令时产生的异常，而其余子模块则服务于 CSR 访问指令，这两个部分是互斥的，即不可能同时产生执行 xret
-指令的异常和执行 CSR 访问指令的异常。
+The current permission checking module permitMod in CSR divides permission
+checks into several submodules: xRetPermitMod, mLevelPermitMod, sLevelPermitMod,
+privilegePermitMod, virtualLevelPermitMod, and indirectCSRPermitMod. permitMod
+generates two types of exceptions: EX_II and EX_VI. Additionally, xRetPermitMod
+differs from the other submodules as it corresponds to exceptions generated
+during the execution of the xret instruction, while the other submodules serve
+CSR access instructions. These two parts are mutually exclusive, meaning it is
+impossible to simultaneously generate exceptions for executing the xret
+instruction and CSR access instructions.
 
-其中，xRetPermitMod 会生成执行 mnret/mret/sret/dret 指令时可能产生的异常：EX_II 和 EX_VI。
+Among them, xRetPermitMod generates exceptions that may occur when executing
+mnret/mret/sret/dret instructions: EX_II and EX_VI.
 
-mLevelPermitMod 中只会产生 EX_II，在其中会进行几种类型的权限检查：写只读 CSR；在 fs/vs 未开启时访问浮点/向量
-CSR；以及一系列由 M 模式 CSR（如 mstateen0 和 menvcfg） 控制的对其他低特权级 CSR 的访问。
+The mLevelPermitMod only generates EX_II, where several types of permission
+checks are performed: writing to read-only CSRs; accessing floating-point/vector
+CSRs when fs/vs is not enabled; and a series of accesses to lower-privilege CSRs
+controlled by M-mode CSRs (such as mstateen0 and menvcfg).
 
-sLevelPermitMod 中同样只会产生 EX_II，在其中会进行一系列由 HS 模式 CSR（如 sstateen0 和 scounteren）
-控制的对其他低特权级 CSR 的访问。
+In sLevelPermitMod, only EX_II will be generated, where a series of accesses to
+other lower-privilege CSRs controlled by HS-mode CSRs (such as sstateen0 and
+scounteren) will be performed.
 
-privilegePermitMod 中保证了低特权模式不能访问高特权模式的 CSR，并根据当前所处的特权级和访问的目标 CSR 特权级来产生 EX_II 和
-EX_VI 两种异常。
+privilegePermitMod ensures that lower privilege modes cannot access higher
+privilege mode CSRs and generates EX_II and EX_VI exceptions based on the
+current privilege level and the target CSR privilege level being accessed.
 
-Table: 不同特权级访问 CSR 权限检查
+Table: Privilege level access permission checks for CSR
 
 |         | M-Level CSR | H/VS-Level CSR | S-Level CSR | U-Level CSR |
 | ------- | ----------- | -------------- | ----------- | ----------- |
@@ -247,39 +301,63 @@ Table: 不同特权级访问 CSR 权限检查
 | MODE_HS | EX_II       | OK             | OK          | OK          |
 | MODE_HU | EX_II       | EX_II          | EX_II       | OK          |
 
-virtualLevelPermitMod 中会产生 EX_II 和 EX_VI 两种异常，在其中会进行一系列由 H 模式 CSR（如 hstateen0 和
-henvcfg） 控制的对其他 CSR 的访问。
+virtualLevelPermitMod can generate two types of exceptions, EX_II and EX_VI,
+during which a series of accesses to other CSRs controlled by H-mode CSRs (such
+as hstateen0 and henvcfg) will be performed.
 
-indirectCSRPermitMod 中同样会产生 EX_II 和 EX_VI 两种异常，在其中会进行一系列对 Alisa 的别名
-CSR（mireg、sireg 和 vsireg）访问的权限检查。
+The indirectCSRPermitMod also generates EX_II and EX_VI exceptions, performing a
+series of permission checks for accessing alias CSRs (mireg, sireg, and vsireg)
+of Alisa.
 
-另外，对于 CSR 访问时产生的异常，我们优先选取 mLevelPermitMod、sLevelPermitMod、privilegePermitMod 和
-virtualLevelPermitMod 的结果，即直接访问产生的异常结果，其次再考虑间接访问产生的异常结果 indirectCSRPermitMod。
+Additionally, for exceptions generated during CSR access, we prioritize the
+results from mLevelPermitMod, sLevelPermitMod, privilegePermitMod, and
+virtualLevelPermitMod—i.e., the exception results from direct access—before
+considering the exception results from indirect access via indirectCSRPermitMod.
 
-在直接访问产生的异常结果中，我们需要保证 mLevelPermitMod 的结果最优先，sLevelPermitMod 其次，然后是
-privilegePermitMod，最后是 virtualLevelPermitMod。这一限制同时还保证了 EX_II 会优先于 EX_VI。
+In the exception results generated by direct access, we need to ensure that
+mLevelPermitMod takes the highest priority, followed by sLevelPermitMod, then
+privilegePermitMod, and finally virtualLevelPermitMod. This restriction also
+ensures that EX_II takes precedence over EX_VI.
 
-## CSR 只读指令乱序
+## Out-of-order execution of CSR read-only instructions
 
-我们还支持 CSR 只读指令的乱序。我们注意到，对于绝大多数 CSR，CSRR 指令不需要等待前面的指令。对于所有 CSR，CSRR
-指令也不需要阻塞后面的指令。需要注意的是，isCsrr 不仅仅包含 CSRR 指令的情况，还包含其他不需要写入 CSR 的 CSR指令。
+We also support out-of-order execution for CSR read-only instructions. We note
+that for the vast majority of CSRs, CSRR instructions do not need to wait for
+preceding instructions. For all CSRs, CSRR instructions also do not block
+subsequent instructions. It is important to note that isCsrr includes not only
+CSRR instructions but also other CSR instructions that do not require writing to
+CSRs.
 
-当前对于以下 CSR 执行的 CSRR 指令要求等待前面的指令，顺序执行：fflags, fcsr, vxsat, vcsr, vstart, mstatus,
-sstatus, hstatus, vsstatus, mnstatus, dcsr。因为这些 CSR 可能会被用户级指令在不需要 fence
-的情况下就发生修改，如果乱序执行可能会导致错误的结果，所以对这些 CSR 执行 CSRR 指令要求顺序执行。
+Currently, CSRR instructions for the following CSRs require waiting for
+preceding instructions to complete, executing in order: fflags, fcsr, vxsat,
+vcsr, vstart, mstatus, sstatus, hstatus, vsstatus, mnstatus, dcsr. This is
+because these CSRs may be modified by user-level instructions without requiring
+a fence, and out-of-order execution could lead to incorrect results. Hence, CSRR
+instructions for these CSRs must be executed sequentially.
 
-另外，由于在读取任何 PMC CSR 之前必须执行 fence 指令，因此没有必要让对 PMC CSR 的指令顺序执行。
+Additionally, since a fence instruction must be executed before reading any PMC
+CSR, there is no need to enforce instruction ordering for PMC CSR accesses.
 
-CSR 指令过去是在没有流水的情况下执行的，因此 CSR 模块内部不需要一个状态机。在添加了允许对一些 CSR
-只读指令的流水加速优化后，就需要一个状态机了，因为整数寄存器堆的仲裁器必须允许 CSRR 指令成功执行之前写入请求。
+CSR instructions were previously executed without pipelining, so the CSR module
+did not require a state machine internally. After adding the optimization to
+pipeline-accelerate certain CSR read-only instructions, a state machine became
+necessary because the integer register file arbiter must allow write requests
+before CSRR instructions can successfully execute.
 
-这个有限状态机有三个状态：空闲（s_idle）、等待IMSIC（s_waitIMSIC）和完成（s_finish）。
+This finite state machine has three states: idle (s_idle), waiting for IMSIC
+(s_waitIMSIC), and completion (s_finish).
 
-在当前状态是 s_idle 时，如果有有效输入 valid 并且有 flush 信号时，则下一状态仍为 s_idle；如果有有效输入 valid
-并且需要异步访问 AIA 时，则下一状态变为 s_waitIMSIC；如果有有效输入 valid，则下一状态变为 s_finish；其他情况下保持
-s_idle。
+When the current state is s_idle, if there is a valid input with a flush signal,
+the next state remains s_idle; if there is a valid input requiring asynchronous
+AIA access, the next state transitions to s_waitIMSIC; if there is a valid
+input, the next state transitions to s_finish; otherwise, it stays in s_idle.
 
-在当前状态是 s_waitIMSIC 时，如果有 flush 信号，则下一状态恢复到 s_idle；如果收到从 AIA 回来的读有效信号，并且输出
-ready，则下一状态恢复至 s_idle，否则如果输出没有 ready，则下一状态变为 s_finish，等待输出；其他情况下保持为 s_waitIMSIC。
+When the current state is s_waitIMSIC, if a flush signal is received, the next
+state returns to s_idle; if a valid read signal from AIA is received and the
+output is ready, the next state reverts to s_idle. Otherwise, if the output is
+not ready, the next state transitions to s_finish to await output. In all other
+cases, the state remains s_waitIMSIC.
 
-在当前状态是 s_finish 时，如果有 flush 信号或者输出 ready 信号，则下一状态都将恢复至 s_idle；否则保持 s_finish。
+When the current state is s_finish, if there is a flush signal or an output
+ready signal, the next state will revert to s_idle; otherwise, it remains in
+s_finish.

@@ -1,134 +1,162 @@
-# 向量 Segment 访存指令处理单元 VSegmentUnit
+# Vector Segment Memory Access Instruction Processing Unit VSegmentUnit
 
-## 功能描述
+## Functional Description
 
-主体是一个 8 项的队列，每一项有一个 128-bits 的地址寄存器、128-bits 的数据寄存器、index/stride 寄存器和用于存储不同 uop
-的物理寄存器号、写使能、uopidx 等信息的寄存器。除此之外还有一个用于存储整条指令译码信息的寄存器。内部使用一个状态机控制实现按照 segment
-顺序进行拆分。
+The main structure is an 8-entry queue, where each entry has a 128-bit address
+register, a 128-bit data register, an index/stride register, and registers for
+storing the physical register numbers, write enables, uopidx, and other
+information of different uops. Additionally, there is a register for storing the
+decoding information of the entire instruction. Internally, a state machine
+controls the splitting process according to the segment order.
 
-在 VSegmentUnit.scala 中写有与代码结合的注释，可以结合注释与代码阅读下文，理解 SegmentUnit 的相关逻辑。
+In VSegmentUnit.scala, there are comments integrated with the code. You can read
+the following text in conjunction with these comments and the code to understand
+the relevant logic of the SegmentUnit.
 
-在 Segment 指令执行时，需要由流水线乱序后端保证：前面的指令都执行结束，后面的指令都不能进入流水线（与原子指令的等待机制类似），同时需要保证指令的
-uop 按照拆分顺序进入 SegmentUnit。此时 SegmentUnit 对 Segment 指令的顺序才能得到保证。
+During the execution of Segment instructions, the out-of-order backend of the
+pipeline must ensure that all preceding instructions have completed execution,
+and no subsequent instructions can enter the pipeline (similar to the waiting
+mechanism of atomic instructions). Additionally, it must guarantee that the uops
+of the instructions enter the SegmentUnit in the order they were split. Only
+then can the SegmentUnit ensure the sequence of Segment instructions.
 
-### 特性 1：进行 Segment 指令的拆分
+### Feature 1: Splitting Segment Instructions
 
 ![alt text](./figure/VSegment-split.png)
 
-- segmentIdx： segment的序号，segmentIdx <= vl。用于表示当前发送到哪个segment，也用于选择数据、合并数据。
-- fieldIdx：field的序号，用于标识当前segment是否发送结束。 fieldIdx<nfields。
-- fieldOffset：同一个segment下各个元素的相对偏移，实现为一个为1的累加器。
-- segmentOffset：
-  用于记录不同Segment之间的偏移，对于stride指令来说是以stride为粒度的累加器；对于unit-stride来说是以nfield*eew为粒度的累加器；对于index来说是segmentIdx对应的索引寄存器元素。
+- segmentIdx: The sequence number of the segment, where segmentIdx <= vl. It
+  indicates the current segment being processed and is also used for data
+  selection and merging.
+- fieldIdx: Index of the field, used to identify whether the current segment
+  transmission has ended. fieldIdx < nfields.
+- fieldOffset: The relative offset of elements within the same segment,
+  implemented as an accumulator with a step of 1.
+- segmentOffset: Used to record the offset between different Segments. For
+  stride instructions, it is an accumulator with stride granularity; for
+  unit-stride, it is an accumulator with nfield*eew granularity; for index, it
+  is the index register element corresponding to segmentIdx.
 - vaddr = baseaddr + (fieldIdx << eew) + segmentOffset
 
-上图为队列指针跳转示例，展示了当lmul=1， nf=2，vl=16
-配置下的示例，segmentIdx指向当前拆分的segment，SplitPtr指向拆分的field寄存器。
-上图中segmentIdx为0，splitPtr为0，将第一个uop的第一个元素拆分并且访存之后，SplitPtr +
-nf，进行segment0的field1元素的访存。
-当进行了field2的访存之后，当前segment的元素访问结束，segmentIdx+1，同时SplitPtr跳转到下一个segment的field0所在的寄存器。
-当segmentIdx递增到8时，对应于field0的寄存器组来说是下一个uop的第一个元素（对应上图中每个field寄存器的第二个）。
-当segmentIdx=16，并且进行完field2元素的访存之后，指令执行结束。 对于segment
-Index来说，还有一个指针用于选择索引寄存器，实现方式与上述选择同一field的不同寄存器类似。
+The above diagram shows an example of queue pointer jumps under the
+configuration of lmul=1, nf=2, vl=16. segmentIdx points to the current split
+segment, while SplitPtr points to the split field register. In the diagram,
+segmentIdx is 0 and splitPtr is 0. After splitting and accessing the first
+element of the first uop, SplitPtr increments by nf to access the field1 element
+of segment0. After accessing field2, the current segment's element access is
+complete, segmentIdx increments by 1, and SplitPtr jumps to the field0 register
+of the next segment. When segmentIdx reaches 8, it corresponds to the first
+element of the next uop in the field0 register group (the second element in each
+field register in the diagram). When segmentIdx=16 and the field2 element access
+is completed, the instruction execution ends. For segment Index, there is
+another pointer used to select the index register, implemented similarly to
+selecting different registers of the same field as described above.
 
-### 特性 2：fault only first 修改 VL 寄存器的 uop 单独写回
+### Feature 2: fault only first modifies the VL register's uop to be written back separately
 
-对于 fault only first 指令，VSegmentUnit 不使用 VfofBuffer 进行写回额外的 uop。 而是自己转进到
-s_fof_fix_vl 写回修改 VL 寄存器的uop。
+For fault-only-first instructions, VSegmentUnit does not use VfofBuffer to write
+back additional uops. Instead, it transitions to s_fof_fix_vl to write back uops
+modifying the VL register.
 
-### 特性 3：支持 Segment 的非对齐访存
+### Feature 3: Supporting Segment's Misaligned Memory Access
 
-VSegmentUnit 指令自己单独执行非对齐访存，无需借助 MisalignBuffer。 由 VSegmentUnit
-自身进行非对齐指令的拆分与数据的合并。
+The VSegmentUnit instruction independently executes unaligned memory accesses
+without relying on MisalignBuffer. The VSegmentUnit itself handles the splitting
+of unaligned instructions and the merging of data.
 
-## 状态转换图
+## State transition diagram
 
 ![alt text](./figure/VSegmentUnit-FSM.svg)
 
-**状态介绍**
+**Status Introduction**
 
-|                        状态 | 说明                                              |
-| ------------------------: | ----------------------------------------------- |
-|                    s_idle | 等待 SegmentUnit uop 进入                           |
-|       s_flush_sbuffer_req | flush sbuffer                                   |
-| s_wait_flush_sbuffer_resp | 等待 Sbuffer 和 StoreQueue 为空                      |
-|                 s_tlb_req | 查询 DTLB                                         |
-|           s_wait_tlb_resp | 等待 DTLB 响应                                      |
-|                      s_pm | 检查执行权限                                          |
-|               s_cache_req | 请求读取 DCache                                     |
-|              s_cache_resp | DCache 响应                                       |
-|     s_misalign_merge_data | 合并非对齐的 Load Data                                |
-|    s_latch_and_merge_data | 将每个元素的 Data 合并成完整的 uop 粒度的 Data                 |
-|               s_send_data | 发送数据至 Sbuffer                                   |
-|         s_wait_to_sbuffer | 等待发送至 Sbuffer 的流水级清空，即真正的发送到 Sbuffer            |
-|                  s_finish | 该指令执行完成，开始以 uop 为粒度写回至后端                        |
-|              s_fof_fix_vl | fault only first 指令数据 uop 已经写回，写回修改 VL 寄存器的 uop |
+|                    Status | Description                                                                                       |
+| ------------------------: | ------------------------------------------------------------------------------------------------- |
+|                    s_idle | Waiting for SegmentUnit uop to enter                                                              |
+|       s_flush_sbuffer_req | flush sbuffer                                                                                     |
+| s_wait_flush_sbuffer_resp | Wait for Sbuffer and StoreQueue to be empty.                                                      |
+|                 s_tlb_req | Query DTLB                                                                                        |
+|           s_wait_tlb_resp | Wait for DTLB response.                                                                           |
+|                      s_pm | Check execution permissions.                                                                      |
+|               s_cache_req | Request to read DCache                                                                            |
+|              s_cache_resp | DCache response                                                                                   |
+|     s_misalign_merge_data | Merge unaligned Load Data.                                                                        |
+|    s_latch_and_merge_data | Merge the Data of each element into complete uop-granularity Data                                 |
+|               s_send_data | Send Data to Sbuffer                                                                              |
+|         s_wait_to_sbuffer | Wait for the pipeline stage sending to Sbuffer to clear, i.e., actually sent to Sbuffer           |
+|                  s_finish | The instruction execution is completed, and starts writing back to the backend in uop granularity |
+|              s_fof_fix_vl | Fault-only-first instruction data uop has been written back, write-back uop modifying VL register |
 
-## 译码实例
+## Decoding Instance
 
 ### Segment Unit-Stride/Stride
 
-unit-stride 按照 stride = eew * nf 的 stride 指令处理。 这一类指令用到的偏移量寄存器是标量寄存器，uop 数量取决于
-data 寄存器的数量，所以 uop 拆分数量 = emul * nf 比如，emul = 2，nf = 4，则 uop 编号如下： uopIdx =
-0，基地址 rs1，步长 rs2，目的寄存器 vd uopIdx = 1，基地址 rs1，步长 rs2，目的寄存器 vd+1 uopIdx = 2，基地址
-rs1，步长 rs2，目的寄存器 vd+2 ...... uopIdx = 7，基地址 rs1，步长 rs2，目的寄存器 vd+7
+Unit-stride instructions are processed with a stride of eew * nf. The offset
+registers used in this type of instruction are scalar registers, and the number
+of uops depends on the number of data registers. Therefore, the number of uop
+splits = emul * nf. For example, if emul = 2 and nf = 4, the uop numbering is as
+follows: uopIdx = 0, base address rs1, stride rs2, destination register vd;
+uopIdx = 1, base address rs1, stride rs2, destination register vd+1; uopIdx = 2,
+base address rs1, stride rs2, destination register vd+2; ...... uopIdx = 7, base
+address rs1, stride rs2, destination register vd+7.
 
 ### Segment Index
 
-- 拆分数量为： Max（lmul*nf， emul），需要保证从第一个field的寄存器组按序开始拆分。
+- The split count is: Max(lmul*nf, emul), ensuring sequential splitting starts
+  from the first field's register group.
 
-- 例如：emul=4， lmul=2， nf=2，uop拆分如下：
-    - uopidx=0， 基地址src， 偏移量vs2， 目的寄存器vd
-    - uopidx=1， 基地址（dontCare）， 偏移量vs2+1， 目的寄存器vd+1
-    - uopidx=2， 基地址（dontCare）， 偏移量vs2+2， 目的寄存器vd+2
-    - uopidx=3， 基地址（dontCare）， 偏移量vs2+3， 目的寄存器vd+3
+- For example: emul=4, lmul=2, nf=2, uop splitting is as follows:
+    - uopidx=0, base address src, offset vs2, destination register vd
+    - uopidx=1, base address (dontCare), offset vs2+1, destination register vd+1
+    - uopidx=2, base address (dontCare), offset vs2+2, destination register vd+2
+    - uopidx=3, base address (dontCare), offset vs2+3, destination register vd+3
 
-- 再例如：emul=2， luml=1， nf=3，uop拆分如下：
-    - uopidx=0， 基地址src， 偏移量vs2， 目的寄存器vd
-    - uopidx=1， 基地址（dontCare）， 偏移量vs2+1， 目的寄存器vd+1
-    - uopidx=2， 基地址（dontCare）， 偏移量（dontCare）， 目的寄存器vd+2
+- Another example: emul=2, lmul=1, nf=3, uop splitting is as follows:
+    - uopidx=0, base address src, offset vs2, destination register vd
+    - uopidx=1, base address (dontCare), offset vs2+1, destination register vd+1
+    - uopidx=2, base address (dontCare), offset (dontCare), destination register
+      vd+2
 
-- 再例如：emul=8， lmul=1， nf=8， uop拆分如下：
-    - uopidx=0， 基地址src， 偏移量vs2， 目的寄存器vd
-    - uopidx=1， 基地址（dontCare）， 偏移量vs2+1， 目的寄存器vd+1
-    - uopidx=2， 基地址（dontCare）， 偏移量vs2+2， 目的寄存器vd+2
-    - uopidx=3， 基地址（dontCare）， 偏移量vs2+3， 目的寄存器vd+3
-    - uopidx=4， 基地址（dontCare）， 偏移量vs2+4， 目的寄存器vd+4
-    - uopidx=5， 基地址（dontCare）， 偏移量vs2+5， 目的寄存器vd+5
-    - uopidx=6， 基地址（dontCare）， 偏移量vs2+6， 目的寄存器vd+6
-    - uopidx=7， 基地址（dontCare）， 偏移量vs2+7， 目的寄存器vd+7
+- For example: emul=8, lmul=1, nf=8, uop splitting is as follows:
+    - uopidx=0, base address src, offset vs2, destination register vd
+    - uopidx=1, base address (dontCare), offset vs2+1, destination register vd+1
+    - uopidx=2, base address (dontCare), offset vs2+2, destination register vd+2
+    - uopidx=3, base address (dontCare), offset vs2+3, destination register vd+3
+    - uopidx=4, base address (dontCare), offset vs2+4, destination register vd+4
+    - uopidx=5, base address (dontCare), offset vs2+5, destination register vd+5
+    - uopidx=6, base address (dontCare), offset vs2+6, destination register vd+6
+    - uopidx=7, base address (dontCare), offset vs2+7, destination register vd+7
 
-## 主要端口
+## Main ports
 
-|                 | 方向     | 说明                                     |
-| --------------: | ------ | -------------------------------------- |
-|              in | In     | 接收来自 Issue Queue 的 uop 发射              |
-|    uopwriteback | In     | 将执行结束的 uop 写回后端                        |
-|         rdcache | In/Out | DCache 请求/响应                           |
-|         sbuffer | Out    | 写 Sbuffer 请求                           |
-| vecDifftestInfo | Out    | sbuffer 中 DifftestStoreEvent 所需信息      |
-|            dtlb | In/out | 读写 DTLB 请求/响应                          |
-|         pmpResp | In     | 接收来自 PMP 的访问权限信息                       |
-|   flush_sbuffer | Out    | 冲刷 sbuffer 请求                          |
-|        feedback | Out    | 反馈至 Issue Queue 模块                     |
-|        redirect | In     | 重定向端口                                  |
-|   exceptionInfo | Out    | 输出 Exception 信息，参与 MemBlock 中写回异常信息的仲裁 |
-|  fromCsrTrigger | In     | 接收来自 CSR 的 Trigger 相关数据                |
+|                 | Direction | Description                                                                                                      |
+| --------------: | --------- | ---------------------------------------------------------------------------------------------------------------- |
+|              in | In        | Receive uop dispatch from the Issue Queue.                                                                       |
+|    uopwriteback | In        | Write back the completed uop to the backend.                                                                     |
+|         rdcache | In/Out    | DCache Request/Response                                                                                          |
+|         sbuffer | Out       | Write Sbuffer request.                                                                                           |
+| vecDifftestInfo | Out       | Information required for DifftestStoreEvent in sbuffer                                                           |
+|            dtlb | In/out    | Read/Write DTLB Request/Response                                                                                 |
+|         pmpResp | In        | Receive access permission information from PMP.                                                                  |
+|   flush_sbuffer | Out       | Flush sbuffer request                                                                                            |
+|        feedback | Out       | Feedback to the Issue Queue module                                                                               |
+|        redirect | In        | Redirect port                                                                                                    |
+|   exceptionInfo | Out       | Output Exception information, participating in the arbitration of writing back exception information in MemBlock |
+|  fromCsrTrigger | In        | Receives Trigger-related data from CSR                                                                           |
 
-## 接口时序
+## Interface timing
 
-接口时序较简单，只提供文字描述。
-|                 | 说明                                   |
-| --------------: | ------------------------------------ |
-|              in | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|    uopwriteback | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|         rdcache | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|         sbuffer | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-| vecDifftestInfo | 与 sbuffer 端口同时有效                     |
-|            dtlb | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|         pmpResp | 具备 Valid、Ready。数据同 有效                |
-|   flush_sbuffer | 具备 Valid。数据同 Valid 有效                |
-|        feedback | 具备 Valid。数据同 Valid 有效                |
-|        redirect | 具备 Valid。数据同 Valid 有效                |
-|   exceptionInfo | 具备 Valid。数据同 Valid 有效                |
-|  fromCsrTrigger | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
+The interface timing is relatively simple, described only in text.
+|                 | Description                                                                                                                   |
+| --------------: | ----------------------------------------------------------------------------------------------------------------------------- |
+|              in | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|    uopwriteback | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|         rdcache | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|         sbuffer | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+| vecDifftestInfo | Valid simultaneously with the sbuffer port                                                                                    |
+|            dtlb | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|         pmpResp | Has Valid and Ready. Data is valid when ready.                                                                                |
+|   flush_sbuffer | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|        feedback | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|        redirect | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|   exceptionInfo | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|  fromCsrTrigger | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |

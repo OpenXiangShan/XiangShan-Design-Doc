@@ -1,110 +1,131 @@
-# Store 非对齐访存单元 StoreMisalignBuffer
+# Store Misalign Memory Access Unit StoreMisalignBuffer
 
-## 功能描述
+## Functional Description
 
-StoreMisalignBuffer 中存储 1 条非对齐且跨越 16Byte 边界的 Store 指令。 执行逻辑为具有 7 个状态的状态机， 当一条指令在
-StoreUnit 中检测到非对齐且跨越 16Byte 时，则会申请进入 StoreMisalignBuffer。 StoreMisalignBuffer
-会锁存住这条 Store，并将其分别拆分成两条 Store 访存(flow)重新进入 StoreUnit。
+The StoreMisalignBuffer stores 1 misaligned Store instruction that crosses a
+16-byte boundary. The execution logic is a state machine with 7 states. When an
+instruction in the StoreUnit is detected as misaligned and crossing a 16-byte
+boundary, it requests entry into the StoreMisalignBuffer. The
+StoreMisalignBuffer latches this Store and splits it into two Store memory
+flows, which are then re-entered into the StoreUnit.
 
-StoreMisalignBuffer 会收集由自身发出的 Store 访存，等两条 Store 访存都执行完成之后，如果是非跨页的非对齐，则写回。
-标量非对齐写回后端需在 StoreUnit 1 未使能标量写回时进行。如不满足，则阻塞 StoreMisalignBuffer 写回后端。 向量非对齐写回
-VSMergeBuffer 需在 StoreUnit 1 未使能向量标量写回时进行。如不满足，则阻塞 StoreMisalignBuffer 写回
-VSMergeBuffer。
+StoreMisalignBuffer collects Store accesses initiated by itself. After both
+Store accesses complete, if it is a non-page-crossing misalignment, it writes
+back. Scalar misaligned writeback to the backend must occur when StoreUnit 1
+does not enable scalar writeback. If not satisfied, StoreMisalignBuffer
+writeback to the backend is blocked. Vector misaligned writeback to
+VSMergeBuffer must occur when StoreUnit 1 does not enable vector scalar
+writeback. If not satisfied, StoreMisalignBuffer writeback to VSMergeBuffer is
+blocked.
 
-对于跨 4K 页的 Store，我们要求当该指令到达 Rob 队头时才能进行执行。如果这期间能老的 Store 进入
-StoreMisalignBuffer，则会踢掉当前的跨 4K 页的 Store，并将 needFlushPipe 标记设为 true。 当最终某条 Store
-写回时，我们会产生一次 redirect。
+For Stores that cross 4K pages, we require that the instruction can only execute
+when it reaches the head of the Rob. If an older Store enters the
+StoreMisalignBuffer during this time, it will evict the current cross-4K-page
+Store and set the needFlushPipe flag to true. When a Store finally writes back,
+we generate a redirect.
 
-对于向量，当存在某条向量的 Store flow 被踢出时，会通知 VSMergeBuffer 将该 flow 对于的项置为 needRsReplay，从而让该
-uop 被重发。
+For vectors, when a vector Store flow is evicted, it notifies VSMergeBuffer to
+mark the corresponding entry as needRsReplay, causing the uop to be resent.
 
-### 特性 1：支持跨越 16Byte 边界的非对齐 Store 进行拆分访存
+### Feature 1: Supports split memory access for unaligned Stores crossing 16Byte boundaries
 
-根据已经执行完的 flow 进行不同的变化。转态机会再第一条 flow 写回后再进入 s_req 状态，发送第二条 flow。 如果第一次 flow
-携带异常写回至 StoreMisalignBuffer，则直接携带异常信息写回给后端，无需进行第二条 flow 的执行。 任意一条 flow
-写回时都有可能产生任意原因的 replay，StoreMisalignBuffer 选择重新发送该 flow 至 StoreUnit，无论是什么原因的
-replay。
+Different transitions occur based on the executed flow. The state machine will
+enter the s_req state after the first flow is written back, then send the second
+flow. If the first flow carries an exception written back to
+StoreMisalignBuffer, it directly sends the exception information to the backend
+without executing the second flow. Any flow writeback may trigger a replay for
+any reason, and StoreMisalignBuffer will resend that flow to StoreUnit
+regardless of the replay cause.
 
-- sb 指令永远不可能产生非对齐。
+- The sb instruction can never cause misalignment.
 
-- sh 拆成两个对应的 sb 操作：
+- An sh operation is split into two corresponding sb operations:
 
 ![alt text](./figure/StoreMisalign-sh.png)
 
-- sw 根据地址拆分方式不同：
+- sw varies based on address splitting methods:
 
 ![alt text](./figure/StoreMisalign-sw.png)
 
-- sd 根据地址拆分方式不同：
+- sd varies based on address splitting methods:
 
 ![alt text](./figure/StoreMisalign-sd.png)
 
-### 特性 2：支持向量非对齐
+### Feature 2: Supports vector unaligned operations
 
-向量非对齐的 flow 与标量非对齐处理方式一致，区别在向量写回至 VSMergeBuffer，而标量直接写回至后端。
+The vector misaligned flow is handled similarly to the scalar misaligned flow,
+with the difference being that the vector writes back to the VSMergeBuffer,
+while the scalar writes back directly to the backend.
 
 
-### 特性 3：不支持非 Memory 空间的非对齐 Store
+### Feature 3: Does not support unaligned Store to non-Memory space
 
-不支持非 Memory 空间的非对齐 Store，当非 Memory 空间的 Store 产生非对齐时，会产生 StoreAddrMisalign 异常。
+Misaligned Stores in non-Memory spaces are not supported. A StoreAddrMisalign
+exception is raised if a Store in a non-Memory space is misaligned.
 
-### 特性 4：支持跨页 Store
+### Feature 4: Supports Cross-Page Store
 
-Store 因为需要写入 Sbuffer，在跨页的情况下，会产生两个物理地址。低页的物理地址可以存在 StoreQueue
-中，而高页的物理地址需要找一个地方单独存储。我们选择存在 StoreMisalignBuffer 中，这样的话，对于跨页的 Store 来说，我们要等这条指令从
-Store Queue 中提交到 Sbuffer 之后才可以在 StoreMisalignBuffer 中清除这一项。 因此，我们会为 StoreQueue
-提供当前 StoreMisalignBuffer 中锁存的元数据与地址，以供 Store Queue 写回使用。 具体的，我们会通过 rob 与
-StoreQueue 传来的相关信号来判断是否需要锁存保持住目前的 Store 元数据。
+Since Store operations need to write to the Sbuffer, in cases of cross-page
+access, two physical addresses are generated. The physical address of the lower
+page can reside in the StoreQueue, while the physical address of the higher page
+requires separate storage. We opt to store it in the StoreMisalignBuffer.
+Consequently, for cross-page Store operations, we must wait until the
+instruction is committed from the Store Queue to the Sbuffer before clearing the
+corresponding entry in the StoreMisalignBuffer. Therefore, we provide the
+StoreQueue with the metadata and address currently latched in the
+StoreMisalignBuffer for write-back purposes. Specifically, we determine whether
+to latch and retain the current Store metadata based on signals received from
+the rob and StoreQueue.
 
-## 整体框图
+## Overall Block Diagram
 
 ![alt text](./figure/StoreMisalign-FSM.svg)
 
 
-**状态介绍**
+**Status Introduction**
 
-|      状态 | 说明                                      |
-| ------: | --------------------------------------- |
-|  s_idle | 等待非对齐的 Store uop 进入                     |
-| s_split | 拆分非对齐 Store                             |
-|   s_req | 发射拆分后的非对齐 Store 操作至 StoreUnit           |
-|  s_resp | StoreUnit 写回                            |
-|    s_wb | 写回后端或 VSMergeBuffer                     |
-| s_block | 阻塞这条指令出队，直到 Store Queue 中将该项写入到 Sbuffer |
+|  Status | Description                                                                                 |
+| ------: | ------------------------------------------------------------------------------------------- |
+|  s_idle | Waiting for unaligned Store uop to enter                                                    |
+| s_split | Split unaligned Store                                                                       |
+|   s_req | Dispatch the split misaligned Store operations to the StoreUnit.                            |
+|  s_resp | StoreUnit Writeback                                                                         |
+|    s_wb | Write back to backend or VSMergeBuffer                                                      |
+| s_block | Block the instruction from dequeuing until the Store Queue writes the entry to the Sbuffer. |
 
-## 主要端口
+## Main ports
 
-|                       | 方向     | 说明                                               |
-| --------------------: | ------ | ------------------------------------------------ |
-|              redirect | In     | 重定向端口                                            |
-|                   req | In     | 接收来自 StoreUnit 的入队请求                             |
-|                   rob | In     | 接收 Rob 中相关元数据信息                                  |
-|         splitStoreReq | Out    | 发送至 StoreUnit 的拆分后的 flow 的访存请求                   |
-|        splitStoreResp | In     | 接收 StoreUnit 写回的拆分后的 flow 的访存响应                  |
-|             writeBack | out    | 标量非对齐写回至后端                                       |
-|          vecWriteBack | Out    | 向量非对齐写回至 VSMergeBuffer                           |
-|         StoreOutValid | In     | Store Unit 存在 Store 指令将要写回至后端                    |
-|      StoreVecOutValid | In     | Store Unit 存在 Vector Store 指令将要写回至 VSMergeBuffer |
-|       overwriteExpBuf | Out    | 悬空                                               |
-|             sqControl | In/Out | 与 Store Queue 的交互接口                              |
-| toVecStoreMergeBuffer | Out    | 将 flush 相关信息发送至 VSMergeBuffer                    |
+|                       | Direction | Description                                                                          |
+| --------------------: | --------- | ------------------------------------------------------------------------------------ |
+|              redirect | In        | Redirect port                                                                        |
+|                   req | In        | Receives enqueue requests from StoreUnit                                             |
+|                   rob | In        | Receive relevant metadata information from Rob                                       |
+|         splitStoreReq | Out       | Memory access requests of split flows sent to StoreUnit                              |
+|        splitStoreResp | In        | Receives the memory response of the split flows written back by the StoreUnit.       |
+|             writeBack | out       | Scalar misaligned write-back to the backend.                                         |
+|          vecWriteBack | Out       | Vector misaligned writeback to VSMergeBuffer                                         |
+|         StoreOutValid | In        | The Store Unit has a Store instruction that is about to write back to the backend.   |
+|      StoreVecOutValid | In        | The Store Unit has Vector Store instructions pending write-back to the VSMergeBuffer |
+|       overwriteExpBuf | Out       | Dangling                                                                             |
+|             sqControl | In/Out    | Interface for interaction with Store Queue                                           |
+| toVecStoreMergeBuffer | Out       | Send flush-related information to VSMergeBuffer                                      |
 
 
-## 接口时序
+## Interface timing
 
-接口时序较简单，只提供文字描述。
+The interface timing is relatively simple, described only in text.
 
-|                       | 说明                                   |
-| --------------------: | ------------------------------------ |
-|              redirect | 具备 Valid。数据同 Valid 有效                |
-|                   req | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|                   rob | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
-|         splitStoreReq | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|        splitStoreResp | 具备 Valid。数据同 Valid 有效                |
-|             writeBack | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|          vecWriteBack | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|         StoreOutValid | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
-|      StoreVecOutValid | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
-|       overwriteExpBuf | 悬空                                   |
-|             sqControl | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
-| toVecStoreMergeBuffer | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
+|                       | Description                                                                                                                   |
+| --------------------: | ----------------------------------------------------------------------------------------------------------------------------- |
+|              redirect | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|                   req | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|                   rob | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |
+|         splitStoreReq | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|        splitStoreResp | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|             writeBack | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|          vecWriteBack | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|         StoreOutValid | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |
+|      StoreVecOutValid | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |
+|       overwriteExpBuf | Dangling                                                                                                                      |
+|             sqControl | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |
+| toVecStoreMergeBuffer | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |

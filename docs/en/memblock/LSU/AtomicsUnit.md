@@ -1,139 +1,218 @@
-# 原子指令执行单元 AtomicsUnit
+# Atomics Execution Unit: AtomicsUnit
 
-## 功能描述
+## Functional Description
 
-AtomicsUnit 用于执行原子指令，包括 A 扩展（LR/SC 和 AMO 指令）和 Zacas 扩展（AMOCAS.W，AMOCAS.D 和
-AMOCAS.Q）。PMA 默认 DDR 地址空间均支持全部 AMO 和 AMOCAS 指令。
+The AtomicsUnit is used to execute atomic instructions, including the
+A-extension (LR/SC and AMO instructions) and the Zacas extension (AMOCAS.W,
+AMOCAS.D, and AMOCAS.Q). By default, the PMA supports all AMO and AMOCAS
+instructions in the DDR address space.
 
-原子指令基本执行流程如下：
+The basic execution flow of atomic instructions is as follows:
 
-1. **sta 发射**：AtomicsUnit 与 StoreUnit 共用发射端口，侦听来自保留站的 sta uop
-2. **std 发射**：原子指令与 store 指令共用 StdExeUnit 执行单元，StdExeUnit 的执行结果会发往
-   AtomicsUnit，AtomicsUnit 负责收集原子指令执行所需的全部数据
-3. **地址翻译**：AtomicsUnit 与 LoadUnit_0 共用 DTLB 端口进行地址翻译，同时需要做 PMA / PMP 等物理地址检查
-4. **清空 SBuffer**：目前原子指令的执行一律按照 aq/rl 置位处理，因此执行前需要清空 SBuffer
-5. **访问 DCache**：向 DCache 发送原子操作请求，DCache 完成后向 AtomicsUnit 返回结果
-6. **写回**：AtomicsUnit 将执行结果写回寄存器堆
+1. **sta dispatch**: The AtomicsUnit shares the dispatch port with the
+   StoreUnit, listening for sta uops from the reservation station.
+2. **std dispatch**: Atomic instructions share the StdExeUnit execution unit
+   with store instructions. The execution results of StdExeUnit are sent to the
+   AtomicsUnit, which is responsible for collecting all the data required for
+   the execution of atomic instructions.
+3. **Address Translation**: The AtomicsUnit shares the DTLB port with LoadUnit_0
+   for address translation, while also performing physical address checks such
+   as PMA/PMP.
+4. **Clear SBuffer**: Currently, atomic instructions are executed with aq/rl
+   flags set, so the SBuffer must be cleared before execution.
+5. **Access DCache**: Sends an atomic operation request to the DCache. After
+   completion, the DCache returns the result to the AtomicsUnit.
+6. **Writeback**: The AtomicsUnit writes the execution result back to the
+   register file.
 
-## 整体框图
+## Overall Block Diagram
 
-AtomicsUnit 的有限状态机如图所示：
+The finite state machine of the AtomicsUnit is shown in the figure.
 
-![AtomicsUnit 状态机示意图](./figure/atomicsUnitFSM.svg)
+![AtomicsUnit State Machine Diagram](./figure/atomicsUnitFSM.svg)
 
-- **s_invalid**：AtomicsUnit 空闲，收到保留站发射的 sta uop 后进入 s_tlb_and_flush_sb_req 状态
+- **s_invalid**: The AtomicsUnit is idle. Upon receiving a sta uop dispatched
+  from the reservation station, it enters the s_tlb_and_flush_sb_req state.
 
-- **s_tlb_and_flush_sb_req**：访问 TLB 进行地址翻译，如果 TLB 缺失，则持续访问 TLB 直到命中；同时请求 SBuffer
-  清空。TLB 命中后，如果触发 debug trigger，或者有地址非对齐异常，则直接进入 s_finish 状态写回后端，否则进入 s_pm
-  状态做物理地址权限检查和进一步的异常检查。其中在访问 TLB 时：
-  - 如果是 LR 指令，需要读权限
-  - 如果是 SC 指令或其他 AMO 指令，需要写权限
+- **s_tlb_and_flush_sb_req**: Accesses the TLB for address translation. If the
+  TLB misses, it continues accessing the TLB until a hit occurs. Simultaneously,
+  it requests the SBuffer to clear. After the TLB hits, if a debug trigger is
+  activated or an address misalignment exception occurs, it directly transitions
+  to the s_finish state to write back to the backend. Otherwise, it transitions
+  to the s_pm state for physical address permission checks and further exception
+  handling. During TLB access:
+  - For LR instructions, read permission is required.
+  - For SC instructions or other AMO instructions, write permission is required.
 
-- **s_pm**：物理地址权限检查和异常处理，如果发生下面任何一种异常，则进入 s_finish 状态写回后端：
-  - 如果 LR 指令访问 TLB 返回异常，报相应的 LoadPageFault / LoadAccessFault /
-    LoadGuestPageFault 异常
-  - 如果除 LR 指令以外的其他原子指令访问 TLB 返回异常，报相应的 StorePageFault / StoreAccessFault /
-    StoreGuestPageFault 异常
-  - 如果 PBMT 属性为 PMA，且 PMA 属性为 MMIO，根据是否是 LR 指令报相应的 LoadAccessFault /
-    StoreAccessFault
-  - 如果 PBMT 属性为 IO 或 NC，根据是否是 LR 指令报相应的 LoadAccessFault / StoreAccessFault
-  - 如果 PMP 属性为 MMIO，或者返回读 / 写权限检查异常，根据是否是 LR 指令报相应的 LoadAccessFault /
-    StoreAccessFault
+- **s_pm**: Physical address permission checks and exception handling. If any of
+  the following exceptions occur, transition to the s_finish state to write back
+  to the backend:
+  - If an LR instruction accesses the TLB and returns an exception, report the
+    corresponding LoadPageFault/LoadAccessFault/LoadGuestPageFault exception.
+  - If atomic instructions other than LR encounter a TLB exception, raise the
+    corresponding StorePageFault / StoreAccessFault / StoreGuestPageFault
+    exception.
+  - If the PBMT attribute is PMA and the PMA attribute is MMIO, report the
+    corresponding LoadAccessFault / StoreAccessFault based on whether it is an
+    LR instruction.
+  - If the PBMT attribute is IO or NC, raise the corresponding LoadAccessFault /
+    StoreAccessFault based on whether it is an LR instruction.
+  - If the PMP attribute is MMIO, or if a read/write permission check exception
+    is returned, report the corresponding LoadAccessFault/StoreAccessFault based
+    on whether it is an LR instruction.
 
-  如果上述异常都没有发生，则开始清空 SBuffer：
-  - 如果 SBuffer 不空，进入 s_wait_flush_sbuffer_resp 状态等待 SBuffer 清空
-  - 如果 SBuffer 已经清空，进入 s_cache_req 状态访问 DCache
+  If none of the above exceptions occur, begin clearing the SBuffer:
+  - If the SBuffer is not empty, transition to the s_wait_flush_sbuffer_resp
+    state to wait for the SBuffer to clear.
+  - If the SBuffer is already cleared, transition to the s_cache_req state to
+    access the DCache.
 
-- **s_wait_flush_sbuffer_resp**：等待 SBuffer 清空后，清空后进入 s_cache_req 状态访问 DCache
+- **s_wait_flush_sbuffer_resp**: Waits for the SBuffer to be cleared, then
+  enters the s_cache_req state to access the DCache.
 
-- **s_cache_req**：在收集全部 std uop 后向 DCache 发送访问请求，成功握手后进入 s_cache_resp 状态等待
-  DCache 处理完成的响应
-  - 需要注意的是，AMOCAS 指令需要从后端接收多个 std uop，AtomicsUnit 在 s_cache_req 状态下需要等到全部 std
-    uop 均接收后才可以开始向 DCache 发请求
+- **s_cache_req**: After collecting all std uops, sends an access request to the
+  DCache. Upon successful handshake, enters the s_cache_resp state to wait for
+  the DCache to complete processing and respond.
+  - Note that the AMOCAS instruction requires receiving multiple std uops from
+    the backend. The AtomicsUnit must wait until all std uops are received in
+    the s_cache_req state before sending a request to the DCache.
 
-- **s_cache_resp**：等待 DCache 处理原子操作并返回结果
-  - 如果 DCache 暂时无法处理该请求，需要 AtomicsUnit 重发，则回到 s_cache_req 状态重新发送请求
-  - 否则不需要重发，进入 s_cache_resp_latch 状态
+- **s_cache_resp**: Waits for the DCache to process the atomic operation and
+  return the result.
+  - If the DCache cannot process the request temporarily and requires the
+    AtomicsUnit to resend, it returns to the s_cache_req state to resend the
+    request.
+  - Otherwise, no resend is needed, and it enters the s_cache_resp_latch state.
 
-- **s_cache_resp_latch**：对 DCache 返回的数据进行移位和有符号 / 无符号扩展，由于时序原因所以加了一拍。下一拍进入
-  s_finish 状态
-  - 如果 DCache 返回了 error，需要记录相应的 LoadAccessFault / StoreAccessFault
+- **s_cache_resp_latch**: Shifts and performs signed/unsigned extension on the
+  data returned by the DCache, with an additional cycle added due to timing
+  reasons. The next cycle transitions to the s_finish state.
+  - If the DCache returns an error, the corresponding LoadAccessFault /
+    StoreAccessFault must be recorded.
 
-- **s_finish**：将原子指令执行结果写回
-  - 如果是 LR 指令或 AMO 指令，写回内存中读到的旧值
-  - 如果是 SC 指令，写回 SC 指令有无成功执行，成功则写回 0，失败则写回 1
+- **s_finish**: Write back the execution result of the atomic instruction.
+  - For LR instructions or AMO instructions, the old value read from memory is
+    written back.
+  - For SC instructions, write back whether the SC instruction executed
+    successfully: 0 for success, 1 for failure.
 
-  写回成功握手后：
-  - 如果是 AMOCAS.Q 指令，总共需要写回 16B 的数据，前面提到 AMOCAS.Q 指令需要接收 2 个 sta uop，同理也需要分 2
-    拍写回，且 2 次写回的 pdest 需要和 2 次发射的 uop 的 pdest 分别对应。AMOCAS.Q 指令的 2 个 sta uop
-    是没有固定的发射顺序的，但是写回需要按照顺序写回，所以在 s_finish 状态下做第 1 次写回时，需要保证第 1 个 sta uop
-    已经收到（这样才能保证写回的 pdest 是正确的）。第 1 次写回成功后进入 s_finish2 状态做第 2 次写回
-  - 如果不是 AMOCAS.Q 指令，写回握手成功后进入 s_invalid 状态，状态机结束
+  After a successful write-back handshake:
+  - For the AMOCAS.Q instruction, a total of 16B of data needs to be written
+    back. As mentioned earlier, the AMOCAS.Q instruction requires receiving 2
+    sta uops and thus requires 2 cycles for writeback, with the pdest of each
+    writeback corresponding to the pdest of the respective uop. The 2 sta uops
+    of the AMOCAS.Q instruction do not have a fixed dispatch order, but the
+    writeback must occur sequentially. Therefore, during the first writeback in
+    the s_finish state, it must be ensured that the first sta uop has been
+    received (to guarantee the correctness of the writeback pdest). After the
+    first writeback succeeds, transition to the s_finish2 state for the second
+    writeback.
+  - If it is not an AMOCAS.Q instruction, after a successful write-back
+    handshake, it enters the s_invalid state, and the state machine ends.
 
-- **s_finish2**：对于 AMOCAS.Q 指令，AtomicsUnit 需要做第 2 次写回来写回 16B 中的高 8B
-  数据。写回的条件是需要确保已收到第 2 个 sta uop。写回握手成功后进入 s_invalid 状态，状态机结束
+- **s_finish2**: For the AMOCAS.Q instruction, the AtomicsUnit needs to perform
+  a second write-back to write the upper 8B of the 16B data. The condition for
+  write-back is to ensure that the second sta uop has been received. After a
+  successful write-back handshake, it enters the s_invalid state, and the state
+  machine ends.
 
-## Zacas 扩展
+## Zacas extension
 
-1. AMOCAS.W 指令从内存中加载 rs1 所指向的 4B 数据，并和 rd 的低 4B 数据作比较，如果相等则将 rs2 的低 4B 写入 rs1
-   所指向的内存；最终内存加载的旧值写回 rd 寄存器
-2. AMOCAS.D 指令从内存中加载 rs1 所指向的 8B 数据，并和 rd 作比较，如果相等则将 rs2 写入 rs1
-   所指向的内存；最终内存加载的旧值写回 rd 寄存器
-3. AMOCAS.Q 指令从内存中加载 rs1 所指向的 16B 数据，并和 rd 和 rd+1 拼接的数据作比较，如果相等则将 rs2 和 rs2+1
-   拼接的 16B 数据写入 rs1 所指向的内存；最终内存加载的旧值低 8B 写回 rd 寄存器，高 8B 写回 rd+1 寄存器
-  - 需要注意的是，关于 rs2 和 rd 的寄存器对，如果源操作数是 x0 寄存器，那么寄存器对的读结果为全 0；如果目的寄存器是 x0
-    寄存器，那么寄存器对的每一个寄存器都不会被写
+1. The AMOCAS.W instruction loads 4B of data from the memory address pointed to
+   by rs1 and compares it with the lower 4B of the rd register. If they are
+   equal, it writes the lower 4B of rs2 to the memory address pointed to by rs1.
+   Finally, the old value loaded from memory is written back to the rd register.
+2. The AMOCAS.D instruction loads 8B of data from the memory address pointed to
+   by rs1, compares it with rd, and if equal, writes rs2 to the memory address
+   pointed to by rs1; the old value loaded from memory is finally written back
+   to the rd register.
+3. The AMOCAS.Q instruction loads 16B of data from the memory address pointed to
+   by rs1 and compares it with the concatenated data of rd and rd+1. If they are
+   equal, it writes the concatenated 16B data of rs2 and rs2+1 to the memory
+   address pointed to by rs1. Finally, the lower 8B of the old value loaded from
+   memory is written back to the rd register, and the upper 8B is written back
+   to the rd+1 register.
+  - It should be noted that regarding the register pairs for rs2 and rd, if the
+    source operand is the x0 register, the read result of the register pair will
+    be all zeros; if the destination register is the x0 register, none of the
+    registers in the register pair will be written.
 
-## 原子指令的 Uop 拆分
+## Uop splitting for atomic instructions.
 
-A 扩展中每条指令会拆分成一个 sta uop 和一个 std uop，做一次写回（写回次数和 sta uop 数量相同，std uop 不需要写回）。
+Each instruction in the A extension is split into one sta uop and one std uop,
+performing one writeback (the number of writebacks matches the number of sta
+uops; std uops do not require writeback).
 
-AMOCAS 在指令 uop 拆分、发射和写回上和其他 A 扩展的指令有所不同。AMOCAS
-指令在发射时除了需要提供写入内存的数据还需要用于比较的数据，所以一条 AMOCAS 指令会被拆分成多个 std uop，甚至多个 sta uop。
+AMOCAS differs from other A-extension instructions in terms of uop splitting,
+issuing, and write-back. When issuing an AMOCAS instruction, in addition to
+providing the data to be written to memory, comparison data is also required.
+Therefore, an AMOCAS instruction is split into multiple std uops, or even
+multiple sta uops.
 
-AMOCAS 指令复用 fuOpType 来区分多个 std uop 或多个 sta uop。fuOpType 共 9 bits，原子指令只用到了 6
-bits，因此高 3 bits 用于标记 uopIdx。
+The AMOCAS instruction reuses fuOpType to distinguish between multiple std uops
+or multiple sta uops. fuOpType has a total of 9 bits, with atomic instructions
+using only 6 bits, so the upper 3 bits are used to mark uopIdx.
 
-具体的 uop 拆分规则如下：
+The specific uop splitting rules are as follows:
 
-1. **A 扩展指令（包括 LR / SC 和普通 AMO 指令）**：sta 和 std 的 uopIdx 均为 0，分别携带 rs1 和 rs2
-   的数据，存入 AtomicsUnit 中的 rs1 和 rs2_l 寄存器；AtomicsUnit 做一次写回操作，写回的 uopIdx 为 0，写回的
-   pdest 等于 sta uop 的 pdest
+1. **A-extension instructions (including LR/SC and regular AMO instructions)**:
+   Both sta and std uopIdx are 0, carrying rs1 and rs2 data respectively, and
+   stored in the rs1 and rs2_l registers in the AtomicsUnit. The AtomicsUnit
+   performs one write-back operation with uopIdx 0, and the write-back pdest
+   equals the pdest of the sta uop.
 
-![A 扩展原子指令的 Uop 拆分示意图](./figure/atomicsUnitAMOUop.svg)
+![Schematic diagram of Uop splitting for A-extension atomic
+instructions](./figure/atomicsUnitAMOUop.svg)
 
-2. **AMOCAS.W 和 AMOCAS.D 指令**：后端发射 1 个 sta uop 和 2 个 std uop：
+2. **AMOCAS.W and AMOCAS.D instructions**: The backend dispatches 1 sta uop and
+   2 std uops:
 
-  - 1 个 sta uop 的 uopIdx 为 0
-  - 2 个 std uop 的 uopIdx 分别为 0 和 1，分别保存 rd（用于比较的数据）和 rs2（如果比较成功需要存储的数据），写入
-    AtomicsUnit 中的 rd_l 和 rs2_l 寄存器
-  - 最终做 1 次写回，写回的 uopIdx 为 0，写回的 pdest 等于 sta uop 的 pdest
+  - The uopIdx for a single sta uop is 0.
+  - The uopIdx of the two std uops are 0 and 1, storing rd (data for comparison)
+    and rs2 (data to be stored if the comparison succeeds) respectively, and
+    writing them into the rd_l and rs2_l registers in the AtomicsUnit.
+  - Finally, perform one writeback with uopIdx 0, where the pdest for writeback
+    equals the pdest of the sta uop.
 
-![AMOCAS.W 和 AMOCAS.D 指令的 Uop 拆分示意图](./figure/atomicsUnitAMOCASWUop.svg)
+![Schematic diagram of Uop splitting for AMOCAS.W and AMOCAS.D
+instructions](./figure/atomicsUnitAMOCASWUop.svg)
 
-3. **AMOCAS.Q 指令**：后端发射 2 个 sta uop 和 4 个 std uop：
+3. **AMOCAS.Q instruction**: The backend dispatches 2 sta uops and 4 std uops:
 
-  - 2 个 sta uop 的 uopIdx 分别为 0 和 2，两个 uop 的 pdest 记为 pdest1 和 pdest2
-  - 4 个 std uop 的 uopIdx 为 0-3，其中 0 号和 2 号 uop 分别保存 rd 的低位和高位，写入 rd_l 和 rd_h
-    寄存器；1 号和 3 号 uop 分别保存 rs2 的低位和高位，写入 rs2_l 和 rs2_h 寄存器
-  - 最终做 2 次写回，写回的 uopIdx 分别为 0 和 2，pdest 分别为 pdest1 和
-    pdest2，写回数据分别为内存加载的旧值的低位和高位
+  - The uopIdx for the two sta uops are 0 and 2, with their pdest recorded as
+    pdest1 and pdest2.
+  - The four std uops have uopIdx 0-3, where uops 0 and 2 store the lower and
+    upper bits of rd, writing to the rd_l and rd_h registers, respectively; uops
+    1 and 3 store the lower and upper bits of rs2, writing to the rs2_l and
+    rs2_h registers, respectively.
+  - Finally, perform two write-backs. The write-back uopIdx values are 0 and 2,
+    with pdest being pdest1 and pdest2 respectively, and the write-back data
+    being the lower and higher bits of the old value loaded from memory.
 
-![AMOCAS.Q 指令的 Uop 拆分示意图](./figure/atomicsUnitAMOCASQUop.svg)
+![Schematic diagram of Uop splitting for AMOCAS.Q
+instruction](./figure/atomicsUnitAMOCASQUop.svg)
 
-## 异常汇总
+## Exception summary.
 
-原子指令可能发生的异常包括：
+Possible exceptions for atomic instructions include:
 
-- **地址非对齐异常**：原子操作的地址必须根据操作类型（字/双字/四字）对齐（4B / 8B / 16B），否则报地址非对齐异常
-- **非法指令异常**（后端译码级完成检查，与访存无关）：AMOCAS.Q 指令要求寄存器对 rs2 和 rd
-  的寄存器号必须是偶数，如果是奇数需要报非法指令异常
-- **断点异常**：如果 trigger 比较命中，需要报断点异常
-- **地址翻译与权限检查有关的异常**
-  - 如果 TLB 地址翻译返回异常，根据是否是 LR 指令报相应的 Load 或 Store 的 PageFault / AccessFault /
-    GuestPageFault 异常
-  - 如果 PMP 属性为 MMIO，或者 PMP 没有相应读 / 写权限，报 LoadAccessFault / StoreAccessFault
-  - 如果 PMA + PBMT 属性为 IO 或 NC（包括下面 3 种情况），报 LoadAccessFault / StoreAccessFault
+- **Address misalignment exception**: The address for atomic operations must be
+  aligned according to the operation type (word/doubleword/quadword) (4B / 8B /
+  16B), otherwise an address misalignment exception is raised.
+- **Illegal instruction exception** (checked at the backend decode stage,
+  unrelated to memory access): The AMOCAS.Q instruction requires the register
+  numbers for rs2 and rd to be even; if odd, an illegal instruction exception
+  must be raised.
+- **Breakpoint exception**: If the trigger comparison hits, a breakpoint
+  exception must be reported.
+- **Exceptions related to address translation and permission checks**
+  - If the TLB address translation returns an exception, report the
+    corresponding Load or Store PageFault/AccessFault/GuestPageFault exception
+    based on whether it is an LR instruction.
+  - If the PMP attribute is MMIO, or if the PMP lacks the corresponding
+    read/write permissions, report LoadAccessFault/StoreAccessFault.
+  - If the PMA + PBMT attributes are IO or NC (including the following 3 cases),
+    a LoadAccessFault/StoreAccessFault is reported.
     - PBMT = IO
     - PBMT = NC
-    - PBMT = PMA 且 PMA = MMIO
+    - PBMT = PMA and PMA = MMIO.

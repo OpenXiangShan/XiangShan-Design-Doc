@@ -1,80 +1,118 @@
-# BPU 子模块 Composer
+# BPU Submodule: Composer
 
-## 功能概述
+## Functional Overview
 
-Composer 是一个用于组合多个预测器的模块。在南湖中，其组合了 uFTB、FTB、TAGE-SC、ITTAGE 和 RAS 五个预测器，并对外抽象成了一个
-三级流水覆盖预测器。Composer 中的各个预测器可以通过写自定义寄存器 sbpctl
-来实现开关，可以按需使用预测器。在检测到来自外部的重定向后，Composer
-会把重定向请求发送给各预测器，以用于恢复推测更新的元素。在预测块所有指令提交后，Composer 中的各预测器会进行训练。最终，Composer
-将三级预测结果输出至 Predictor。
+Composer is a module designed to combine multiple predictors. In Nanhu, it
+integrates five predictors—uFTB, FTB, TAGE-SC, ITTAGE, and RAS—and abstracts
+them into a three-stage pipelined coverage predictor. Each predictor within
+Composer can be enabled or disabled by writing to the custom register sbpctl,
+allowing for on-demand usage. Upon detecting an external redirect, Composer
+forwards the redirect request to each predictor to recover speculatively updated
+elements. After all instructions in the prediction block are committed, the
+predictors within Composer undergo training. Finally, Composer outputs the
+three-stage prediction results to the Predictor.
 
-三级 BPU 流水级内部重定向的时候如果有预测错误只会恢复那些推测更新的状态，比如说分支历史和 RAS，其它的预测器更新都是在提交后做。
+During internal redirects in the three-stage BPU pipeline, only speculatively
+updated states—such as branch history and RAS—are restored in case of prediction
+errors. Other predictor updates are performed post-commit.
 
-此时如果不刷新预测器，只是刷新流水线，那下次这个地方不是还会预测错误？刷新流水线的同时是从纠正过的正确路径开始预测，如果接下来的路径又经过了同一个地方，是可能再次预测同一个结果的，但是也有可能因为分支历史不同，从而在
-TAGE 等预测器里索引不同的表项。
+If the predictor is not flushed and only the pipeline is refreshed, wouldn't the
+same location predict incorrectly again? Refreshing the pipeline starts
+prediction from the corrected path. If the subsequent path revisits the same
+location, it might predict the same result again. However, due to differing
+branch histories, the predictors like TAGE could index different entries.
 
-如果在执行时发现目标地址错误，不会发起重定向，而是统一等到指令提交时再重定向。这样设计的一个原因是本身误预测的重定向就是在错误路径上的，它的执行结果可能也是错误的，这种情况下去训练，可能对预测器造成污染。
+If a target address error is detected during execution, no redirect is initiated
+immediately. Instead, the redirect is uniformly deferred until instruction
+commit. One reason for this design is that misprediction redirects occur on
+incorrect paths, where execution results may also be erroneous. Training under
+such conditions could potentially corrupt the predictors.
 
-### 起始 PC 的配置
+### Configuration of the starting PC
 
-Composer 的 IO 接口 io_reset_vector 可以实现起始 PC 的配置。只需要将期望的起始 PC 传递给该 IO 即可。
+Composer's IO interface io_reset_vector enables configuration of the starting
+PC. The desired starting PC only needs to be passed to this IO.
 
-### 与预测器的连接
+### Connection with Predictors
 
-Composer 将 uFTB、FTB、TAGE-SC、ITTAGE 和 RAS 五个预测器连接起来。因为共有三个分支预测器的流水级，且每个预测器是固定延迟的，
-到那个流水级就一定完成预测，所以 Composer 只需要在对应流水级输出对应预测器的预测结果即可。
+Composer connects the five predictors—uFTB, FTB, TAGE-SC, ITTAGE, and RAS. Since
+there are three branch predictor pipeline stages, and each predictor has a fixed
+latency (completing prediction by its designated stage), Composer simply outputs
+the corresponding predictor's result at the appropriate pipeline stage.
 
-meta 是预测器预测的时候的数据，update 的时候拿回来更新用。都叫 meta 是因为 composer 将所有预测器整合起来，用共同的接口 meta
-和外界交互。
+Meta refers to the data used by predictors during prediction, which is retrieved
+during updates for training. They are all called meta because the Composer
+integrates all predictors and interacts with the outside world through a common
+meta interface.
 
-### 预测器的开关
+### Predictor enable/disable
 
-通过 Zicsr 指令，我们可以读写 sbpctl 这一自定义 CSR 来控制 Composer 中的各预测器的使能。sbpctl[6:0]代表了{LOOP,
-RAS, SC, TAGE, BIM, BTB, uFTB}这七个预测器的使能。其中，高电平代表使能，低电平代表未使能。具体地，spbctl 这一 CSR
-的值通过 Composer 的 IO 接口 io_ctrl_*传入各个预测器，并由各预测器负责使能的实现。
+Through Zicsr instructions, we can read and write the custom CSR sbpctl to
+control the enablement of various predictors in the Composer. sbpctl[6:0]
+represents the enablement of seven predictors: {LOOP, RAS, SC, TAGE, BIM, BTB,
+uFTB}. A high level indicates enablement, while a low level indicates
+disablement. Specifically, the value of the spbctl CSR is passed to each
+predictor through the Composer's IO interface io_ctrl_*, with each predictor
+responsible for implementing the enablement.
 
-### 重定向的恢复
+### Redirection recovery
 
-Composer 通过 io_s2_redirect、io_s3_redirect 和 io_redirect_*等 IO
-端口接收重定向请求。这些请求被发送给其各个预测器，用于恢复推测更新的元素，如 RAS 栈顶项等。
+The Composer receives redirection requests through IO ports such as
+io_s2_redirect, io_s3_redirect, and io_redirect_*. These requests are sent to
+its predictors to recover speculatively updated elements, such as the top item
+of the RAS stack.
 
-### 预测器训练
+### Predictor training
 
-Composer 通过 IO 端口
-io_update_*将训练信号发送给其各个预测器。总的来说，为防止错误执行路径对预测器内容的污染，各部分预测器在预测块的所有指令提交后进行训练。它们的训练内容来自自身的预测信息和预测块中指令的译码结果和执行结果，它们会被从
-FTQ 中 读出，并送回 BPU。其中，自身的预测信息会在预测后打包传进 FTQ 中存储；指令的译码结果来自 IFU 的预译码模块，在取到指令后写回
-FTQ；而执行结果来自各个执行单元。
+The Composer sends training signals to its predictors through the IO port
+io_update_*. In general, to prevent contamination of predictor contents by
+incorrect execution paths, each predictor is trained after all instructions in
+the prediction block are committed. Their training content comes from their own
+prediction information and the decoding and execution results of instructions in
+the prediction block, which are read from the FTQ and sent back to the BPU. The
+prediction information is packed and stored in the FTQ after prediction; the
+decoding results of instructions come from the IFU's pre-decoding module and are
+written back to the FTQ after fetching the instructions; and the execution
+results come from various execution units.
 
-## 整体框图
+## Overall Block Diagram
 
-![Composer 模块整体框图](../figure/BPU/Composer/structure.png)
+![Composer Module Overall Block Diagram](../figure/BPU/Composer/structure.png)
 
-## 接口时序
+## Interface timing
 
-### 控制信号 Ctrl 接口时序
+### Control signal Ctrl interface timing
 
-![控制信号 Ctrl 接口时序](../figure/BPU/Composer/port1.png)
+![Control Signal Ctrl Interface Timing](../figure/BPU/Composer/port1.png)
 
-上图示意了 Composer 模块控制信号 Ctrl 接口的时序示例，io_ctrl 信号在传入 Composer 模块后，被 delay 一拍传给内部
-components 子模块 。
+The above diagram illustrates a timing example of the Composer module's control
+signal Ctrl interface. The io_ctrl signal is delayed by one cycle after entering
+the Composer module before being passed to the internal components submodule.
 
-### 重定向接口时序
+### Redirection interface timing
 
-![重定向接口时序](../figure/BPU/Composer/port2.png)
+![Redirection interface timing](../figure/BPU/Composer/port2.png)
 
-上图展示了 Composer 模块重定向请求的接口，在 BPU 接收到来自后端的重定向请求后，会延迟一拍发往 Composer，因此 Composer 内预测器
-会晚一拍收到相应请求。
+The above diagram shows the redirection request interface of the Composer
+module. After the BPU receives a redirection request from the backend, it is
+delayed by one cycle before being sent to the Composer, so the predictors inside
+the Composer receive the corresponding request one cycle later.
 
-### 分支预测块训练接口时序
+### Branch prediction block training interface timing
 
-![分支预测块训练接口时序](../figure/BPU/Composer/port3.png)
+![Branch Prediction Block Training Interface
+Timing](../figure/BPU/Composer/port3.png)
 
-类似重定向，为优化时序，分支预测块训练的 update 接口同样在 BPU 内部被延迟一拍发往 Composer 及其内部各预测器。
+Similar to redirection, to optimize timing, the update interface for branch
+prediction block training is also delayed by one cycle within the BPU before
+being sent to the Composer and its internal predictors.
 
-## 关键电路
+## Key circuits
 
-下图分别展示了 Composer meta 拼接和重定向/分支历史更新来源仲裁逻辑
+The following diagrams illustrate the Composer meta concatenation and the
+arbitration logic for redirection/branch history update sources.
 
-![Composer meta 拼接](../figure/BPU/Composer/key_structure1.png)
+![Composer meta concatenation](../figure/BPU/Composer/key_structure1.png)
 
-![重定向/分支历史更新来源仲裁逻辑](../figure/BPU/Composer/key_structure2.png)
+![Redirect/Branch History Update Source Arbitration
+Logic](../figure/BPU/Composer/key_structure2.png)

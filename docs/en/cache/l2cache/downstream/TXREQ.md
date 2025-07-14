@@ -1,26 +1,40 @@
 # TXREQ
 
-## 功能描述
-TXREQ 模块接收来自 MainPipe 和 MSHR 两个模块发往 REQ 通道的请求，在两者之间进行仲裁，并用队列进行缓冲，最终发送到 CHI 的
-TXREQ 总线通道上。来自 MainPipe 出口的请求会被无条件接收，来自 MSHR 的请求有可能会被阻塞。因此 TXREQ 模块需要对 MSHR
-进行反压，同时对 MainPipe 入口进行流控，以保证 MainPipe 上的请求能够不被阻塞地进入 TXREQ。
+## Functional Description
+The TXREQ module receives requests from both the MainPipe and MSHR modules
+directed to the REQ channel, arbitrates between them, buffers them in a queue,
+and finally sends them to the CHI TXREQ bus channel. Requests from the MainPipe
+exit are unconditionally accepted, while requests from the MSHR may be blocked.
+Therefore, the TXREQ module needs to apply backpressure to the MSHR and
+implement flow control at the MainPipe entry to ensure that requests on the
+MainPipe can enter TXREQ without being blocked.
 
-## 功能描述
-### 特性1: 对MainPipe入口的流控
-为了保证 MainPipe上的请求能够非阻塞地在 s3/s4/s5 进入TXREQ，当 inflight=
-MainPipe上s1/s2/s3/s4/s5有可能需要进入TXREQ 的请求数 + 队列中的有效项数 ≥ 队列总项数(size=16)时，TXREQ
-模块需要对 MainPipe 入口即 s0 级进行反压（由于只有 MSHR 才会往下游 TXREQ 发送请求，MSHR task 是从 s0
-进入流水线的，所以只需要对 s0 的 MSHR
-请求做反压）。由于s1的时序比较紧，对于MainPipe上s1的可能用到TXREQ的处理是：先认为s1都会用到TXREQ, s2发现没有用到就把
-inflight数-1.
+## Functional Description
+### Feature 1: Flow Control at MainPipe Entry
+To ensure that requests on the MainPipe can enter TXREQ non-blockingly at stages
+s3/s4/s5, when inflight = the number of potential requests from MainPipe stages
+s1/s2/s3/s4/s5 that may need to enter TXREQ + the number of valid entries in the
+queue ≥ the total queue size (size=16), the TXREQ module must apply backpressure
+to the MainPipe entry at stage s0 (since only MSHR sends requests downstream to
+TXREQ, and MSHR tasks enter the pipeline at stage s0, backpressure is only
+needed for MSHR requests at s0). Due to tight timing at s1, the handling of
+potential TXREQ usage for MainPipe requests at s1 is as follows: initially
+assume all s1 requests will use TXREQ, and if s2 finds no usage, the inflight
+count is decremented by 1.
 
-姑且将阻塞条件记为noSpace
+For now, the blocking condition is denoted as noSpace.
 
-### 特性2：对MSHR的反压逻辑
-1. MainPipe 的仲裁优先级大于 MSHR，所以 MainPipe 出口的请求有效时，需要给 MainPipe 反压。
-2. 当 noSpace 的时候需要给 MainPipe 反压，原因如下： MSHR 发出请求的当拍 MainPipe 可能没有请求和 MSHR 竞争，但是
-   MainPipe 中有请求还在 s1/s2 级，MSHR 请求有可能抢占了队列中本属于 MainPipe 的空闲项，导致 MainPipe 中的请求到达
-   s3/s4/s5 级时队列项数不够。所以这种情况也需要阻塞住 MainPipe 的请求。
+### Feature 2: Backpressure Logic for MSHR
+1. The arbitration priority of MainPipe is higher than that of MSHR, so when a
+   request from the MainPipe exit is valid, backpressure must be applied to the
+   MainPipe.
+2. Backpressure must be applied to the MainPipe when noSpace is true for the
+   following reason: in the same cycle that MSHR sends a request, the MainPipe
+   may have no requests competing with MSHR, but there could be requests in the
+   MainPipe at stages s1/s2. The MSHR request might occupy queue slots that
+   would otherwise be available for MainPipe requests, causing insufficient
+   queue slots when MainPipe requests reach stages s3/s4/s5. Therefore, MainPipe
+   requests must also be blocked in this scenario.
 
-## 整体框图
+## Overall Block Diagram
 ![TXREQ](./figure/TXREQ.svg)

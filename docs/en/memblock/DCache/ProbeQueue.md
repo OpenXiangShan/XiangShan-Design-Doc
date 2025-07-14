@@ -1,57 +1,82 @@
-# Probe 队列 ProbeQueue
+# Probe Queue: ProbeQueue
 
-## 功能描述
-负责接收并处理来自L2的一致性请求，包含8项ProbeEntry，每一项负责一个Probe请求, 将Probe请求转成内部信号后发送到MainPipe,
-由MainPipe修改被Probe块的权限，等MainPipe返回应答后释放ProbeEntry。
+## Functional Description
+Responsible for receiving and processing coherence requests from L2, comprising
+8 ProbeEntries, each handling one Probe request. It converts Probe requests into
+internal signals and sends them to the MainPipe, which modifies the permissions
+of the probed block. The ProbeEntry is released once the MainPipe returns a
+response.
 
-ProbeQueue只和L2通过B通道交互，以及与MainPipe互连。内部由8项ProbeEntry组成，每一项通过一组状态寄存器控制请求信号的接收、转换以及发送。
+The ProbeQueue only interacts with L2 through Channel B and connects with the
+MainPipe. Internally, it consists of 8 ProbeEntry items, each controlled by a
+set of status registers for receiving, converting, and sending request signals.
 
-### 特征 1： 别名问题
+### Feature 1: Aliasing Issue
 
-Kunminghu架构采用了64KB的VIPT cache，从而引入了cache别名问题。为解决别名问题，L2
-Cache的目录会维护在DCache中保存的每一个物理块对应的别名位。当DCache在某个物理地址上想要获取另一别名位的块时，L2
-Cache会发起Probe请求，将DCache中原有的别名块probe下来，并且在TileLink
-B通道中记录其别名位。ProbeQueue收到请求后会将别名位和页偏移部分进行拼接，转成内部信号发送到MainPipe, 由
-MainPipe访问DCache存储模块读取数据。
+The Kunminghu architecture employs a 64KB VIPT cache, introducing cache aliasing
+issues. To address aliasing, the L2 Cache directory maintains alias bits for
+each physical block stored in the DCache. When the DCache attempts to access a
+block with a different alias bit at a physical address, the L2 Cache initiates a
+Probe request to evict the original aliased block from the DCache, recording its
+alias bit in the TileLink B channel. Upon receiving the request, the ProbeQueue
+concatenates the alias bit with the page offset, converts it into an internal
+signal, and sends it to the MainPipe, which then accesses the DCache storage
+module to read the data.
 
-### 特征 2：由原子指令引发的阻塞
+### Feature 2: Blocking Caused by Atomic Instructions
 
-由于原子操作 (包括 lr-sc)
-在DCache中完成，执行LR指令时会保证目标地址已经在DCache中，此时为了简化设计，LR在MainPipe中会注册一个reservation
-set，记录LR的地址, 并阻塞对该地址的Probe。为了避免带来死锁, MainPipe会在等待SC一定时间后不再阻塞Probe(由参数 LRSCCycles
-和 LRSCBackOff 决定), 此时再收到SC指令则均被视为SC fail. 因此, 在LR注册reservation
-set后等待SC配对的时间里需要阻塞Probe请求对DCache进行操作。
+Since atomic operations (including lr-sc) are completed in the DCache, when
+executing an LR instruction, it ensures the target address is already in the
+DCache. To simplify the design, the LR instruction registers a reservation set
+in the MainPipe, recording the LR address and blocking Probes to that address.
+To avoid deadlocks, the MainPipe will stop blocking Probes after waiting for the
+SC instruction for a certain period (determined by parameters LRSCCycles and
+LRSCBackOff). At this point, any received SC instruction is considered an SC
+fail. Therefore, during the time between registering the reservation set by LR
+and waiting for the matching SC, Probe requests must be blocked from operating
+on the DCache.
 
-## 整体框图
+## Overall Block Diagram
 
-ProbeQueue整体架构如[@fig:DCache-ProbeSnoop]所示。
+The overall architecture of the ProbeQueue is shown in [@fig:DCache-ProbeSnoop].
 
-![ProbeSnoop流程图](./figure/DCache-ProbeSnoop.svg){#fig:DCache-ProbeSnoop}
+![ProbeSnoop Flowchart](./figure/DCache-ProbeSnoop.svg){#fig:DCache-ProbeSnoop}
 
 
 
-## 接口时序
-### 请求接口时序实例
+## Interface timing
+### Request Interface Timing Example
 
-[@fig:DCache-ProbeSnoop-Timing]展示了Probe Queue处理一个probe请求的接口时序，Probe
-Queue首先收到来自L2的probe请求，转换成内部请求并为其分配一项空的ProbeEntry；经过一拍的状态转换可以向MainPipe 发送probe请求,
-但由于时序考虑该请求会再被延迟一拍（ProbeQueue里选择一项有一个arbiter，
-MainPipe入口也有一个arbiter选择各来源的请求，两次仲裁在一拍完成比较困难，因此在这里先锁存一拍），因此两拍后pipe_req_valid拉高；后续等接收到MainPipe的resp后，释放ProbeEntry。
+[@fig:DCache-ProbeSnoop-Timing] illustrates the interface timing for the Probe
+Queue processing a probe request. The Probe Queue first receives the probe
+request from L2, converts it into an internal request, and allocates an empty
+ProbeEntry. After a one-cycle state transition, it can send the probe request to
+the MainPipe. However, due to timing considerations, this request is delayed by
+another cycle (as selecting an entry in the ProbeQueue involves an arbiter, and
+the MainPipe entry also has an arbiter to choose requests from various
+sources—completing both arbitrations in one cycle is challenging, hence the
+additional cycle of latching). Thus, pipe_req_valid is asserted two cycles
+later. Subsequently, upon receiving the MainPipe's response, the ProbeEntry is
+released.
 
-![ProbeSnoop时序](./figure/DCache-ProbeSnoop-Timing.png){#fig:DCache-ProbeSnoop-Timing}
+![ProbeSnoop
+Timing](./figure/DCache-ProbeSnoop-Timing.png){#fig:DCache-ProbeSnoop-Timing}
 
-## ProbeEntry模块
+## ProbeEntry module
 
-Probe
-Entry由一系列状态寄存器进行控制，由一个状态机进行Probe事务的执行。[@tbl:ProbeEntry-state]展示了每个Entry中包含的三个状态寄存器的含义，状态机设计如[@fig:DCache-ProbeEntry]所示：
+The Probe Entry is controlled by a series of status registers, with a state
+machine executing Probe transactions. [@tbl:ProbeEntry-state] illustrates the
+meaning of the three status registers contained in each Entry, and the state
+machine design is shown in [@fig:DCache-ProbeEntry].
 
-Table: ProbeEntry状态寄存器含义 {#tbl:ProbeEntry-state}
+Table: ProbeEntry Status Register Descriptions {#tbl:ProbeEntry-state}
 
-| 状态          | Descrption                       |
-| ----------- | -------------------------------- |
-| s_invalid   | 复位状态，该Probe Entry为空项             |
-| s_pipe_req  | 已分配Probe请求，正在发送Main Pipe请求       |
-| s_wait_resp | 已完成Main Pipe请求的发送，等待Main Pipe的应答 |
+| Status      | Descrption                                                             |
+| ----------- | ---------------------------------------------------------------------- |
+| s_invalid   | Reset state: This Probe Entry is empty.                                |
+| s_pipe_req  | Probe request allocated, sending Main Pipe request                     |
+| s_wait_resp | Main Pipe request transmission completed, awaiting Main Pipe response. |
 
-![ProbeEntry状态机](./figure/DCache-ProbeEntry.svg){#fig:DCache-ProbeEntry}
+![ProbeEntry State
+Machine](./figure/DCache-ProbeEntry.svg){#fig:DCache-ProbeEntry}
 

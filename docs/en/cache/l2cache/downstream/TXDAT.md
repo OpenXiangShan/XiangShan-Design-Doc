@@ -1,16 +1,23 @@
 # TXDAT
 
-## 功能描述
-TXDAT 模块无条件接收来自 MainPipe 发往 WDAT 通道的请求，并用队列进行缓冲，最终发送到 CHI 的 TXDAT 总线通道上。 TXDAT
-模块需要对 MainPipe 入口进行流控，以保证 MainPipe 上的请求能够不被阻塞地进入 TXDAT。
+## Functional Description
+The TXDAT module unconditionally accepts requests from the MainPipe destined for
+the WDAT channel, buffers them in a queue, and ultimately sends them to the CHI
+TXDAT bus channel. The TXDAT module must control the flow at the MainPipe entry
+to ensure that requests on the MainPipe can enter TXDAT without being blocked.
 
-## 功能描述
-### 特性1：对MainPipe的反压
-为了保证 MainPipe 上的请求能够非阻塞地在 s3/s4/s5 进入 TXDAT，当【MainPipe 上有可能需要进入 TXDAT 的请求数 +
-队列中的有效项数 ≥ 队列总项数】时， TXDAT 模块需要对 MainPipe 入口即 s0/s1 级进行反压。
-1. 对 s1 级反压是因为 RXSNP 收到的 snoop 可能会直接在 MainPipe 上完成处理，然后进入 TXDAT 通道，所以需要对 s1 的
-   sinkB 请求做反压
-2. 对 s0 级反压是因为一部分 MSHR task 需要进入 TXDAT 通道，MSHR task 是在 s0 进入流水线的，所以需要对 s0 的
-   mshrTask 做反压
+## Functional Description
+### Feature 1: Backpressure on the MainPipe
+To ensure that requests on the MainPipe can non-blockingly enter TXDAT at stages
+s3/s4/s5, when [the number of requests on the MainPipe that may need to enter
+TXDAT + the number of valid entries in the queue ≥ the total queue capacity],
+the TXDAT module must apply backpressure to the MainPipe entry stages, i.e.,
+s0/s1.
+1. Backpressure is applied at stage s1 because snoops received by RXSNP may be
+   directly processed on the MainPipe and then enter the TXDAT channel, so
+   backpressure must be applied to the sinkB requests at s1.
+2. Backpressure is applied at stage s0 because some MSHR tasks need to enter the
+   TXDAT channel. Since MSHR tasks enter the pipeline at s0, backpressure must
+   be applied to the mshrTask at s0.
 
 ![TXDAT](./figure/TXDAT.svg)

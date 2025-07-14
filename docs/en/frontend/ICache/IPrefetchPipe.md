@@ -1,47 +1,78 @@
-# IPrefetchPipe 子模块文档
+# IPrefetchPipe submodule documentation
 
-IPrefetchPipe 为预取的流水线，为两级流水设计，负责预取请求的过滤。
+The IPrefetchPipe is a prefetch pipeline designed as a two-stage pipeline,
+responsible for filtering prefetch requests.
 
-![IPrefetchPipe 结构](../figure/ICache/IPrefetchPipe/iprefetchpipe_structure.png)
+![IPrefetchPipe
+structure](../figure/ICache/IPrefetchPipe/iprefetchpipe_structure.png)
 
-## S0 流水级
+## S0 pipeline stage
 
-在 S0 流水级，接收来自 FTQ/后端的预取请求，向 MetaArray 和 ITLB 发送读请求。
+In the S0 pipeline stage, it receives prefetch requests from the FTQ/backend and
+sends read requests to the MetaArray and ITLB.
 
-## S1 流水级
+## S1 pipeline stage
 
-首先接收 ITLB 的响应得到 paddr，然后与 MetaArray 返回的 tag 进行比较得到命中信息，将元数据（命中信息`waymask`、ITLB
-信息`paddr`/`af`/`pf`）写入 WayLookup。同时进行 PMP 检查，将结果寄存到下一级流水。
+First, it receives the response from the ITLB to obtain the paddr, then compares
+it with the tag returned by the MetaArray to determine the hit information. The
+metadata (hit information `waymask`, ITLB information `paddr`/`af`/`pf`) is
+written into WayLookup. Simultaneously, a PMP check is performed, and the result
+is registered for the next pipeline stage.
 
-由状态机进行控制：
+Controlled by the state machine:
 
-- 初始状态为 `idle`，当 S1 流水级进入新的请求时，首先判断 ITLB 是否缺失，如果缺失，就进入 `itlbResend`；如果 ITLB
-  命中但命中信息未入队 WayLookup，就进入 `enqWay`；如果 ITLB 命中且 WayLookup 入队但 S2 请求未处理完，就进入
-  `enterS2`
-- 在 `itlbResend` 状态，重新向 ITLB 发送读请求，此时占用 ITLB 端口（即新的进入 S0
-  流水级的预取请求被阻塞），直至请求回填完成，在回填完成的当拍向 MetaArray 再次发送读请求，回填期间可能发生新的写入，如果 MetaArray
-  繁忙（正在被 MSHR 写入），就进入 `metaResend`，否则进入 `enqWay`
-- 在 `metaResend` 状态，重新向 MetaArray 发送读请求，发送成功后进入 `enqWay`
-- 在 `enqWay` 状态，尝试将元数据入队 WayLookup，如果 WayLookup 队列已满，就阻塞至 WayLookup 入队成功，另外在
-  MSHR 发生新的写入时禁止入队，主要是为了防止写入的信息与命中信息所冲突，需要对命中信息进行更新。当成功入队 WayLookup 时，如果 S2
-  空闲，就直接回到 `idle`，否则进入 `enterS2`
-  - 若当前请求是软件预取，不会尝试入队 WayLookup，因为该请求不需要进入 MainPipe/IFU 乃至被执行
-- 在 `enterS2` 状态，尝试将请求流入下一流水级，流入后回到 `idle`
+- The initial state is `idle`. When a new request enters the S1 pipeline stage,
+  it first checks whether the ITLB is missing. If it is missing, it enters
+  `itlbResend`; if the ITLB hits but the hit information has not been enqueued
+  into WayLookup, it enters `enqWay`; if the ITLB hits and WayLookup is enqueued
+  but the S2 request has not been fully processed, it enters `enterS2`.
+- In the `itlbResend` state, resend a read request to the ITLB, occupying the
+  ITLB port (thus blocking new prefetch requests entering the S0 pipeline stage)
+  until the request is refilled. On the cycle when refill completes, send
+  another read request to the MetaArray. During refill, new writes may occur. If
+  the MetaArray is busy (being written by MSHR), transition to `metaResend`;
+  otherwise, proceed to `enqWay`.
+- In the `metaResend` state, it resends a read request to the MetaArray. Upon
+  successful sending, it enters `enqWay`.
+- In the `enqWay` state, it attempts to enqueue the metadata into WayLookup. If
+  the WayLookup queue is full, it blocks until enqueuing succeeds. Additionally,
+  enqueuing is prohibited when a new write occurs in the MSHR, primarily to
+  prevent conflicts between the written information and the hit information,
+  requiring an update to the hit information. When successfully enqueued into
+  WayLookup, if S2 is idle, it directly returns to `idle`; otherwise, it enters
+  `enterS2`.
+  - If the current request is a software prefetch, it will not attempt to
+    enqueue into WayLookup because this request does not need to enter the
+    MainPipe/IFU or be executed.
+- In the `enterS2` state, it attempts to flow the request to the next pipeline
+  stage. After flowing, it returns to `idle`.
 
-![IPrefetchPipe S1 状态机](../figure/ICache/IPrefetchPipe/iprefetchpipe_s1_fsm.png)
+![IPrefetchPipe S1 state
+machine](../figure/ICache/IPrefetchPipe/iprefetchpipe_s1_fsm.png)
 
-## S2 流水级
+## S2 pipeline stage
 
-综合该请求的命中结果、ITLB 异常、PMP 异常，判断是否需要预取，只有不存在异常时才进行预取，因为同一个预测块可能对应两个 cacheline，所以通过
-Arbiter 依次将请求发送至 MissUnit。
+It synthesizes the hit result of the request, ITLB exceptions, and PMP
+exceptions to determine whether prefetching is needed. Prefetching is only
+performed when no exceptions exist. Since the same prediction block may
+correspond to two cachelines, the requests are sequentially sent to the MissUnit
+via the Arbiter.
 
-## 命中信息的更新 {#sec:IPrefetchPipe-hit-update}
+## Hit information update {#sec:IPrefetchPipe-hit-update}
 
-在 S1 流水级中得到命中信息后，距离命中信息真正在 MainPipe 中被使用要经过两个阶段，分别是在 IPrefetchPipe 中等待入队
-WayLookup 阶段和在 WayLookup 中等待出队阶段，在等待期间可能会发生 MSHR 对 Meta/DataArray 的更新，因此需要对 MSHR
-的响应进行监听，分为两种情况：
+After obtaining the hit information in the S1 pipeline stage, it takes two
+stages before the hit information is actually used in the MainPipe: the stage
+waiting to be enqueued into WayLookup in the IPrefetchPipe and the stage waiting
+to be dequeued in WayLookup. During this waiting period, updates to the
+Meta/DataArray by the MSHR may occur, so the MSHR responses need to be
+monitored, divided into two scenarios:
 
-1. 请求在 MetaArray 中未命中，监听到 MSHR 将该请求对应的 cacheline 写入了 SRAM，需要将命中信息更新为命中状态。
-2. 请求在 MetaArray 中已经命中，监听到同样的位置发生了其它 cacheline 的写入，原有数据被覆盖，需要将命中信息更新为缺失状态。
+1. Miss in MetaArray, monitored that MSHR wrote the corresponding cacheline into
+   SRAM, need to update the hit status to hit.
+2. The request has already hit in the MetaArray, but it detects that another
+   cacheline write has occurred at the same location, overwriting the original
+   data. The hit information needs to be updated to a miss state.
 
-为了防止更新逻辑的延迟引入到 DataArray 的访问路径上，在 MSHR 发生新的写入时禁止入队 WayLookup，在下一拍入队。
+To prevent the delay of update logic from being introduced into the access path
+of the DataArray, enqueuing into WayLookup is prohibited when a new write occurs
+in the MSHR, and it is enqueued in the next cycle.

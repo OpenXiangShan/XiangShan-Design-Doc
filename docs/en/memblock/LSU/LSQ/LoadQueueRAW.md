@@ -1,63 +1,100 @@
 \newpage
-# 写后读违例检查 LoadQueueRAW
+# Write-After-Read Violation Check LoadQueueRAW
 
-## 功能描述
+## Functional Description
 
-LoadQueueRAW是用于处理store-load违例的。由于load和store在流水线中都是乱序执行，会经常出现load越过了更老的相同地址的store，即这条load本应该前递store的数据，但是由于store地址或者数据没有准备好，导致这条load没有前递到store的数据就已经提交，后续使用这条load结果的指令也都发生了错误，于是产生store
-to load forwarding违例。
+LoadQueueRAW is designed to handle store-load violations. Since loads and stores
+execute out-of-order in the pipeline, it is common for a load to bypass an older
+store to the same address. This load should have forwarded data from the store,
+but if the store's address or data is not ready, the load may commit without
+forwarding the store's data. Subsequent instructions using the load's results
+will then be incorrect, resulting in a store-to-load forwarding violation.
 
-当store
-address通过STA保留站发射出来进入store流水线时，会去查询LQRAW中在这条store后面的所有已经完成访存的相同地址的load，以及load流水线中正在进行的在该条store之后的相同地址的load，一旦发现有，就发生了store
-to load
-forwarding违例，可能有多个load发生了违例，需要找到离store最近的load，也就是最老的违例的load，然后给RedirectGenerator部件发送重定向请求，冲刷最老的违例的load及之后的所有指令。
+When the store address is issued from the STA reservation station and enters the
+store pipeline, it queries the LQRAW for all completed loads with the same
+address that are after this store, as well as the loads in the load pipeline
+that are currently being executed and are after this store with the same
+address. If any are found, a store-to-load forwarding violation occurs. There
+may be multiple violating loads, and the oldest violating load (i.e., the one
+closest to the store) must be identified. A redirect request is then sent to the
+RedirectGenerator component to flush the oldest violating load and all
+subsequent instructions.
 
-当store流水线执行cbo zero指令时，也需要进行store-load违例检查。
+When the store pipeline executes a cbo zero instruction, a store-load violation
+check is also required.
 
-### 特性 1：load query入队
+### Feature 1: Load query enqueue
 
-当query到达load流水线的s2时，判断是否满足入队条件，如果在当前load指令之前有地址未准备好的store指令，且当前指令没有被flush时，当前load可以入队。
+When the query reaches the S2 stage of the load pipeline, it is determined
+whether the enqueue condition is met. If there are store instructions with
+unready addresses before the current load instruction and the current
+instruction is not flushed, the current load can be enqueued.
 
-在freelist中得到可以分配的entry以及index。
+Obtain the allocatable entry and its index from the freelist.
 
-将入队query的物理地址压缩为24-bit保存到PaddrModule中对应的entry。
+The physical address of the enqueued query is compressed to 24 bits and stored
+in the corresponding entry of the PaddrModule.
 
-将入队query的mask保存到maskModule中对应的entry。
+The mask of the enqueued query is stored in the corresponding entry of the
+maskModule.
 
-### 特性 2：store-load违例检查
+### Feature 2: Store-Load Violation Check
 
-store指令到达store流水线的 s1 时会进行store-load检查，此时store需要与LoadQueueRAW中已经完成访存的 load，以及
-load 流水线中s1和 s2 阶段正在访存的 load 作比较，这些 load 可能没有 forward 到 store 的数据。如果检查时发现 load 和
-store 访问的物理地址有重叠的地方，且load比store年轻，就发生了违例，需要找到最老的 load，重发这条 load
-以及之后的所有指令（重新取指执行），在store流水线的s4阶段得到store-load违例检查的结果。
+When a store instruction reaches stage s1 of the store pipeline, a store-load
+check is performed. The store is compared against loads in LoadQueueRAW that
+have completed memory access, as well as loads in stages s1 and s2 of the load
+pipeline that are currently accessing memory. These loads may not have forwarded
+data from the store. If the check reveals overlapping physical addresses between
+the load and store, and the load is younger than the store, a violation occurs.
+The oldest load must be identified, and this load, along with all subsequent
+instructions, must be reissued (fetched and executed again). The result of the
+store-load violation check is obtained in stage s4 of the store pipeline.
 
-一共分四拍:
+The process is divided into four cycles:
 
-* 第一拍进行物理地址匹配，条件匹配，得到 mask，匹配的是那些在这条 store 之后的新的 load，如果它们已经拿到了数据（datavalid）或者
-  dcache miss 了，正在等待 refill（miss），就一定没有 forward 到这个 store 的数据。
-* 第二拍store流水线中的store根据mask在LoadQueueRAW里面找到所有匹配的load，LoadQueueRAW一共有32项，将这32项平分为八组，从每组的4项里面各选出一个oldest，最多可能得到4个oldest。
-* 第三拍从4个oldest里面选出一个最老的oldest。
-* 第四拍如果两条store流水线中的store都发生了store-to-load违例，从两条store流水线各自在loadQueue匹配的oldest
-  load中选出一个更老的oldest，产生回滚请求发给redirect。
+* In the first cycle, physical address matching and condition matching are
+  performed to generate a mask. This matches newer loads that occur after the
+  store. If these loads have already obtained data (datavalid) or are
+  experiencing a dcache miss and waiting for a refill (miss), they definitely
+  did not forward data from this store.
+* In the second cycle of the store pipeline, the store operation identifies all
+  matching loads in LoadQueueRAW based on the mask. LoadQueueRAW has a total of
+  32 entries, divided into eight groups of four entries each. From each group,
+  the oldest entry is selected, potentially yielding up to four oldest entries.
+* In the third cycle, the oldest entry is selected from the four oldest
+  candidates.
+* In the fourth cycle, if both stores in the store pipelines trigger
+  store-to-load violations, the older of the two oldest loads matched in the
+  loadQueue from each pipeline is selected, and a rollback request is sent to
+  redirect.
 
-## 整体框图
+## Overall Block Diagram
 <!-- 请使用 svg -->
-![LoadQueueRAW整体框图](./figure/LoadQueueRAW.svg){#fig:LoadQueueRAW width=80%}
+![LoadQueueRAW Overall Block
+Diagram](./figure/LoadQueueRAW.svg){#fig:LoadQueueRAW width=80%}
 
-## 接口时序
+## Interface timing
 
-### LoadQueueRAW请求入队时序实例
+### Example of LoadQueueRAW Enqueue Request Timing
 
-![LoadQueueRAW请求入队时序](./figure/LoadQueueRAW-enqueue.svg){#fig:RAW-enqueue
+![LoadQueueRAW Enqueue Request
+Timing](./figure/LoadQueueRAW-enqueue.svg){#fig:RAW-enqueue width=70%}
+
+When both io_query_*_req_valid and io_query_*_req_ready are high, it indicates a
+successful handshake. When both needEnqueue and io_canAllocate_* are high,
+io_doAllocate_* is set to high, indicating that the query needs to be enqueued
+and the FreeList can allocate. io_allocateSlot_* represents the entry receiving
+the enqueued query. In the next cycle, the corresponding entry's allocate signal
+is raised, and sqIdx is written into the entry. In the subsequent cycle, the
+mask is written into the corresponding entry of the LqMaskModule, and the
+compressed physical address is written into the corresponding entry of the
+LqPAddrModule.
+
+### Store-load violation timing example
+
+![Store-Load Violation Check
+Timing](./figure/LoadQueueRAW-store-to-load.svg){#fig:RAW-store-to-load
 width=70%}
 
-当io_query_* _req_valid和io_query_*
-_req_ready都为高时，表示握手成功，needEnqueue和io_canAllocate_* 都为高时，将io_doAllocate_*
-置为高，表示query需要入队且FreeList可以分配，io_allocateSlot_*
-为接收query入队的entry，下一拍对应entry的allocate拉高，sqIdx写入entry。再下一拍后mask写入LqMaskModule对应的entry，压缩后的物理地址写入到LqPAddrModule对应的entry。
-
-### store-load违例时序实例
-
-![store-load违例检查时序](./figure/LoadQueueRAW-store-to-load.svg){#fig:RAW-store-to-load
-width=70%}
-
-当io_rollback_valid为高时，表示发生了store-load违例，违例的信息为io_rollback_bits_*。
+When io_rollback_valid is high, it indicates a store-load violation has
+occurred, with the violation details provided by io_rollback_bits_*.

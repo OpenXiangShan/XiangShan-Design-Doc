@@ -2,375 +2,554 @@
 
 - Version: V2R2
 - Status: OK
-- 日期：2025/01/15
+- Date: 2025/01/15
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
 ## Glossary of Terms
 
-Table: 术语说明
+Table: Terminology Explanation
 
-| 缩写    | 全称                         | 描述     |
-| ----- | -------------------------- | ------ |
-| -     | Decode Unit                | 译码单元   |
-| -     | Fusion Decoder             | 指令融合   |
-| ROB   | Reorder Buffer             | 重排序缓存  |
-| RAT   | Register Alias Table       | 重命名映射表 |
-| -     | Rename                     | 重命名    |
-| LSQ   | Load Store Queue           | 访存指令队列 |
-| -     | Dispatch                   | 派遣     |
-| IntDq | Int Dispatch Queue         | 定点派遣队列 |
-| fpDq  | Float Point Dispatch Queue | 浮点派遣队列 |
-| lsDq  | Load Store Dispatch Queue  | 访存派遣队列 |
-| -     | Redirect                   | 指令重定向  |
-| pcMem | PC MEM                     | 指令地址缓存 |
+| Abbreviation | Full name                  | Description                   |
+| ------------ | -------------------------- | ----------------------------- |
+| -            | Decode Unit                | Decode unit                   |
+| -            | Fusion Decoder             | Instruction fusion            |
+| ROB          | Reorder Buffer             | Reorder Buffer                |
+| RAT          | Register Alias Table       | Rename Mapping Table          |
+| -            | Rename                     | Rename                        |
+| LSQ          | Load Store Queue           | Memory instruction queue      |
+| -            | Dispatch                   | Dispatch                      |
+| IntDq        | Int Dispatch Queue         | Fixed-point dispatch queue    |
+| fpDq         | Float Point Dispatch Queue | Floating-point dispatch queue |
+| lsDq         | Load Store Dispatch Queue  | Memory dispatch queue         |
+| -            | Redirect                   | Instruction Redirection       |
+| pcMem        | PC MEM                     | Instruction address cache     |
 
-## 子模块列表
+## Submodule List
 
-Table: 子模块列表
+Table: Submodule List
 
-| 子模块           | 描述          |
-| ------------- | ----------- |
-| dispatch      | 指令派遣模块      |
-| decode        | 指令译码模块      |
-| fusionDecoder | 指令融合模块      |
-| rat           | 重命名表        |
-| rename        | 重命名模块       |
-| redirectGen   | 重定向生成模块     |
-| pcMem         | 指令地址缓存      |
-| rob           | 重排序缓冲       |
-| trace         | 指令 trace 模块 |
-| snpt          | 快照模块        |
+| Submodule     | Description                 |
+| ------------- | --------------------------- |
+| dispatch      | Instruction dispatch module |
+| decode        | Instruction decoding module |
+| fusionDecoder | Instruction fusion module   |
+| rat           | Rename table                |
+| rename        | Rename module               |
+| redirectGen   | Redirect generation module  |
+| pcMem         | Instruction address cache   |
+| rob           | Reorder Buffer              |
+| trace         | Instruction trace module    |
+| snpt          | Snapshot Module             |
 
-## 设计规格
+## Design specifications
 
-译码宽度：6
+Decode width: 6
 
-重命名宽度：6
+Rename width: 6
 
-分派宽度：6
+Dispatch width: 6
 
-rob 提交宽度：8
+ROB commit width: 8
 
-rab 提交宽度：6
+ROB commit width: 6
 
-rob 大小：160
+ROB size: 160
 
-快照大小：4 项
+Snapshot Size: 4 entries
 
-整型物理寄存器数：224
+Number of integer physical registers: 224
 
-浮点物理寄存器数：192
+Floating-point physical register count: 192
 
-向量物理寄存器数：128
+Number of vector physical registers: 128
 
-向量 v0 物理寄存器数：22
+Vector v0 Physical Register Count: 22
 
-向量 vl 物理寄存器数：32
+Vector VL physical register count: 32
 
-支持重命名快照
+Supports rename snapshots
 
-支持 trace 扩展
+Supports trace extension
 
-## 功能
+## Function
 
-CtrlBlock
-模块包含指令译码（Decode）、指令融合（FusionDecoder）、寄存器重命名（Rename，RenameTable）、指令分派（Dispatch）、提交部件（ROB）、重定向处理（RedirectGenerator）和快照重命名恢复（SnapshotGenerator）。
+The CtrlBlock module includes instruction decoding (Decode), instruction fusion
+(FusionDecoder), register renaming (Rename, RenameTable), instruction dispatch
+(Dispatch), commit components (ROB), redirect handling (RedirectGenerator), and
+snapshot renaming recovery (SnapshotGenerator).
 
-译码功能部件在每个时钟周期会从指令队列头部取出 6
-条指令进行译码。译码过程是将指令码翻译为方便功能部件处理的内部码，标识出指令类型、所需要操作的寄存器号以及指令码中可能包含的立即数，用于接下来的寄存器重命名阶段。对于复杂指令，选出后通过复杂译码器
-DecodeCompunit 一次一条进行指令拆分，对于 vset 指令存储到 Vtype 中指导指令拆分。最后以复杂指令在前，简单指令在后每周期选出 6 个
-uop 传递到重命名阶段。译码阶段还包括发出读 RenameTable 请求。
+The decoding functional unit fetches 6 instructions from the head of the
+instruction queue for decoding each clock cycle. The decoding process translates
+the instruction code into an internal code that is easier for the functional
+unit to process, identifying the instruction type, the register numbers to be
+operated on, and any immediate values contained in the instruction code, which
+are used in the subsequent register renaming stage. For complex instructions,
+they are selected and then split one by one through the complex decoder
+DecodeCompunit. For vset instructions, they are stored in Vtype to guide
+instruction splitting. Finally, 6 uops are selected each cycle, with complex
+instructions first and simple instructions last, and passed to the renaming
+stage. The decoding stage also includes issuing RenameTable read requests.
 
-指令融合会对指令译码得到的 6 个 uop 凑成（uop0, uop1）, (uop1, uop2), (uop2, uop3), (uop3, uop4）,
-(uop4, uop5) 的至多 5
-对待融合指令对。然后判断每一对指令是否能够进行指令融合。当前我们支持两种类型的指令融合，分别是融合成为一个带有新的控制信号的指令，以及将第一条指令的操作编码替换为另一个的形式。在判断可以进行指令融合后，我们会对
-uop 的操作数，如逻辑寄存器号重新赋值，选择新的操作数。另外，HINT 类指令不支持被指令融合，例如 fence 指令不能够被融合。
+Instruction fusion pairs up to 5 potential fusion instruction pairs from the 6
+uops obtained during decoding: (uop0, uop1), (uop1, uop2), (uop2, uop3), (uop3,
+uop4), (uop4, uop5). Each pair is then evaluated for fusion compatibility.
+Currently, we support two types of instruction fusion: merging into a new
+instruction with additional control signals and replacing the operation encoding
+of the first instruction with another form. Upon determining fusion is possible,
+operands such as logical register numbers are reassigned, and new operands are
+selected. However, HINT-type instructions, like fence, are not supported for
+fusion.
 
-重命名阶段负责管理和维护寄存器与物理寄存器之间的映射，通过对逻辑寄存器的重命名，实现指令间依赖的消除，完成指令的乱序调度。重命名模块主要包含
-Rename、RenameTable 两个模块，分别负责 Rename 流水级的控制、(体系结构/推测)重命名表的维护，Rename 中包括 FreeList
-以及 CompressUnit 两个模块，负责空闲寄存器的维护以及 Rob 压缩。
+The rename stage is responsible for managing and maintaining the mapping between
+registers and physical registers. By renaming logical registers, it eliminates
+dependencies between instructions and enables out-of-order scheduling. The
+rename module mainly consists of the Rename and RenameTable modules, which are
+responsible for controlling the Rename pipeline stage and maintaining the
+(architectural/speculative) rename table, respectively. The Rename module
+includes the FreeList and CompressUnit modules, which handle the maintenance of
+free registers and Rob compression.
 
-派遣阶段将重命名后的指令根据指令类型分发到 4 个调度器中，分别对应于整型，浮点，向量和访存。每个调度器中根据不同的运算操作类型又分为若干的发射队列（issue
-queue），每个发射队列的入口大小为 2。
+In the dispatch phase, renamed instructions are distributed to four schedulers
+based on instruction type: integer, floating-point, vector, and memory. Each
+scheduler is further divided into several issue queues based on different
+operation types, with each issue queue having an entry size of 2.
 
-指令流在 CtrlBlock 的传递过程为：CtrlBlock 读取 Frontend 传入的 6 条指令对应 ctrlflow，经过 decode
-增加译码逻辑寄存器、运算操作符等信息，复杂指令经过 DecodeComp 添加指令拆分信息，每周期选出六条 uop 输出，并发出读 RAT
-请求。对于可以进行指令融合的 uop，在进入 rename 时进行融合以及清除。之后经过 rename 增加物理寄存器信息以及 rob 压缩信息后传入
-dispatch，最后通过 dispatch 进到 rob / rab / vtype 申请 entry，根据指令类型输出到 issue
-queue。这些模块中只有 issue queue 顺序进，乱序出，其他模块都是顺序进，顺序出。
+The instruction flow in CtrlBlock proceeds as follows: CtrlBlock reads the
+ctrlflow corresponding to the 6 instructions from the Frontend. After decoding,
+it adds decoded logical registers and operation codes. Complex instructions are
+supplemented with instruction splitting information via DecodeComp. Each cycle,
+up to six uops are output, and RAT read requests are issued. For uops that can
+undergo instruction fusion, fusion and clearing occur during renaming. After
+renaming, physical register information and ROB compression details are added
+before being passed to dispatch. Finally, through dispatch, entries are
+allocated in ROB/RAB/VTYPE, and instructions are output to the issue queue based
+on their type. Among these modules, only the issue queue operates in-order for
+input and out-of-order for output; all other modules are in-order for both input
+and output.
 
-![CtrlBlock 总览](./figure/CtrlBlock-Overview.svg)
+![CtrlBlock Overview](./figure/CtrlBlock-Overview.svg)
 
-# 译码
+# Decode
 
-标量指令的译码过程同南湖。
+The decoding process for scalar instructions is the same as in Nanhu.
 
-对于向量指令，先使用和标量指令相同结构的译码表进行译码，译码的同时拿到指令拆分类型，接下来会根据指令拆分类型进行拆分，拆分的过程相当于重新修改源寄存器号、源寄存器类型、目标寄存器号、目标寄存器类型、更新
-uop 数量，用于控制 rob 写回时一条指令需要写回的数量。直到拆分出的所有 uop 完成 rename 过程后，译码 ready 信号才能够置为 1。
+For vector instructions, first decode using the same structure as scalar
+instructions' decode table, simultaneously obtaining the instruction split type.
+Subsequently, the instruction is split based on this type, which involves
+modifying source register numbers, source register types, destination register
+numbers, destination register types, and updating the uop count to control the
+number of writebacks required by the ROB. The decode ready signal can only be
+set to 1 after all split uops complete the rename process.
 
-由于除了 i2f 的标量浮点指令现在使用向量浮点模块运行，因此 fpdecoder 中的译码信号只使用其中用到的 4
-种（typeTagOut、wflags、typ、rm），用法与南湖相同。使用向量浮点模块运行的浮点指令，需要在向量译码单元中获得使用的 futype 以及
-fuoptype，并使用 1bit isFpToVecInst 信号区分，该浮点指令是浮点指令还是向量浮点指令，从而在共用向量运算单元时能进行区分。
+Since scalar floating-point instructions, except i2f, now utilize the vector
+floating-point module, only 4 decode signals from fpdecoder are used
+(typeTagOut, wflags, typ, rm), with usage identical to Nanhu. Floating-point
+instructions running on the vector module require obtaining futype and fuoptype
+from the vector decode unit, distinguished by a 1-bit isFpToVecInst signal to
+differentiate between floating-point and vector floating-point instructions when
+sharing the vector arithmetic unit.
 
-## 译码阶段输入
+## Decode stage input
 
-译码阶段除了接受来自前端的指令流，还需要接受来自 rob 的 Vtype 相关：walk，commit，vsetvl 信息，指导向量复杂指令译码。
+In the decode stage, in addition to receiving the instruction stream from the
+frontend, it also needs to accept Vtype-related information from the rob: walk,
+commit, and vsetvl, to guide the decoding of complex vector instructions.
 
-## 译码输出
+## Decode output
 
-与 fusionDecode：输出指令流以及控制指令融合是否开启。
+With fusionDecode: Outputs the instruction stream and controls whether
+instruction fusion is enabled.
 
-与 rename：流水输出 6 个 uop；如果出现 redirect 阻塞直到 Ctrlblock 中 redirect 发往前端后，前端发出正确指令流。
+Regarding rename: the pipeline outputs 6 uops; if a redirect occurs, it blocks
+until the redirect in CtrlBlock is sent to the frontend, and the frontend issues
+the correct instruction stream.
 
-与 RAT：译码发出读推测重命名请求。
+With RAT: Decode issues speculative rename read requests.
 
 # FusionDecoder
 
-指令融合模块负责找出译码模块译码后的 uop 是否存在一定的联系，从而可以将多个 uop （当前仅支持两条指令的融合）需要做的事情融合为一条 uop
-能够完成的事情。
+The instruction fusion module identifies whether there are certain relationships
+among the uops decoded by the decode module, allowing multiple uops (currently
+supporting fusion of only two instructions) to be combined into a single uop
+capable of completing the required tasks.
 
-指令融合会对指令译码得到的 6 个 uop 凑成（uop0, uop1）, (uop1, uop2), (uop2, uop3), (uop3, uop4）,
-(uop4, uop5) 形式的至多 5
-对待融合指令对。然后判断每一对指令是否能够进行指令融合。当前我们支持两种类型的指令融合，分别是融合成为一个带有新的控制信号的指令，以及将第一条指令的操作编码替换为另一个的形式。在判断可以进行指令融合后，我们会对
-uop 的操作数，如逻辑寄存器号重新赋值，选择新的操作数。另外，HINT 类指令不支持被指令融合，例如 fence 指令不能够被融合。
+Instruction fusion combines the six uops obtained from instruction decoding into
+up to five candidate instruction pairs in the form of (uop0, uop1), (uop1,
+uop2), (uop2, uop3), (uop3, uop4), (uop4, uop5). Each pair is then evaluated for
+fusion feasibility. Currently, we support two types of instruction fusion:
+merging into a single instruction with new control signals and replacing the
+operation encoding of the first instruction with another form. After determining
+fusion feasibility, we reassign uop operands, such as logical register numbers,
+to select new operands. Additionally, HINT-type instructions, such as fence
+instructions, cannot be fused.
 
-例如，slli r1, r0, 32 和 srli r1, r1, 32 将 r0 中的数左移 32 位后存入 r1，然后再次右移 32 位。其等价于
-add.uw r1, r0, zero （伪指令 zext.w r1, r0），即将 r0 中的数扩展后移动到 r1 中。
+For example, "slli r1, r0, 32" followed by "srli r1, r1, 32" shifts the value in
+r0 left by 32 bits, stores it in r1, then shifts it right by 32 bits. This is
+equivalent to "add.uw r1, r0, zero" (pseudo-instruction "zext.w r1, r0"), which
+extends and moves the value in r0 to r1.
 
-输入为译码后的至多 6 条 uop 以及他们的原始指令编码，以及相应的 valid 信号，这里输入 inready 只有 5
-位（即译码宽度减一），因为我们需要将 uop 错位两两配对为至多 5 对待融合指令。inReady[i] 表示已经准备好可以接受 in(i+1)。
+The input consists of up to 6 decoded uops along with their original instruction
+encodings and corresponding valid signals. Here, the inready input has only 5
+bits (i.e., the decode width minus one) because we need to pair the uops in
+pairs for up to 5 fusion candidates. inReady[i] indicates that it is ready to
+accept in(i+1).
 
-输出宽度为译码宽度减一，包括指令融合替换，需要替换
-fuType，fuOpType，lsrc2（第二个操作数的逻辑寄存器号，如有），src2Type（第二个操作数的类型），selImm（立即数类型）。以及指令融合信息，如
-rs2 来自于 rs1/rs2/zero。同时还需要输出一组译码宽度的布尔向量 clear，表征该 uop
-是否被指令融合需要被清除掉，当前设想每条指令融合后会将第二条指令清除掉。第 0 个 uop 的 clear 是不会为 true
-的，因为我们默认将后面的指令融合到前面的指令上，因此无论是否融合，uop 0 始终不会因为指令融合而消失。
+The output width is one less than the decode width, including instruction fusion
+replacements. This requires updating fuType, fuOpType, lsrc2 (logical register
+number of the second operand, if applicable), src2Type (type of the second
+operand), and selImm (immediate type). Additionally, instruction fusion
+information, such as whether rs2 is derived from rs1/rs2/zero, must be output. A
+Boolean vector clear of decode width is also needed to indicate whether each uop
+should be cleared due to instruction fusion. Currently, it is envisioned that
+the second uop in a fused pair will be cleared. The clear flag for uop 0 will
+never be true, as we default to fusing subsequent instructions into the
+preceding one, ensuring uop 0 is never eliminated by fusion.
 
-输出有效要求：指令对有效（从译码模块传来的 uop 对有效），不能被指令融合清除掉，有可行的指令融合结果，以及不能是 Hint 类指令。同时将
-fuType，src2Type，rs2FromZero ……等信息赋值
+Output Validity Requirements: The instruction pair must be valid (uop pair from
+the decode module is valid), cannot be cleared by instruction fusion, must have
+a feasible fusion result, and must not be a HINT-type instruction. Additionally,
+assign information such as fuType, src2Type, rs2FromZero, etc.
 
-![fusion decoder 总览](./figure/Fusion-Decoder-Overview.svg)
+![Fusion Decoder Overview](./figure/Fusion-Decoder-Overview.svg)
 
 # Redirect
 
-在 ctrlblock 中主要负责 redirect 的生成以及发往各个模块。
+The ctrlblock is primarily responsible for generating redirects and sending them
+to various modules.
 
 ## RedirectGenerator
 
-RedirectGenerator 模块管理不同来源的重定向信号（如执行单元和 load
-），并决定是否发生重定向，如何刷新相关信息。它通过多级寄存器和同步机制确保数据流的正确性，且通过地址转换和错误检测保证指令执行的正确性。
+The RedirectGenerator module manages redirect signals from different sources
+(such as execution units and load) and decides whether a redirect occurs and how
+to flush related information. It ensures the correctness of the data flow
+through multi-stage registers and synchronization mechanisms, and guarantees the
+correctness of instruction execution through address translation and error
+detection.
 
-将当前最老的执行 redirect 的 fullTarget 和 cfiUpdate.target 拼接得到 fullTarget 字段。另外如果当前最老的执行
-redirect 不是来自于 CSR，则还需要基于指令地址的翻译类型检查 IAF，IPF 和 IGPF 等地址的合法性。
+Concatenate the fullTarget of the oldest executing redirect with
+cfiUpdate.target to obtain the fullTarget field. Additionally, if the oldest
+executing redirect does not originate from a CSR, it is necessary to check the
+validity of addresses such as IAF, IPF, and IGPF based on the translation type
+of the instruction address.
 
-然后从最老的执行 redirect 和 load redirect 中选出一个最老的 redirect，同时还需要保证这个最老的 redirect 不会被
-robFlush 或者之前的 redirect 刷掉。
+Then, the oldest execution redirect and load redirect are selected, ensuring
+that this oldest redirect won't be flushed by robFlush or previous redirects.
 
-![redirect 总览](./figure/Redirect-Overview.svg)
+![redirect overview](./figure/Redirect-Overview.svg)
 
-## redirect 的生成
+## generation of redirect
 
-Ctrlblock 中生成的 Redirect 主要包括两个来源：
+The Redirects generated in Ctrlblock mainly originate from two sources:
 
-* 通过 redirectgen 汇总的处理器执行时发生的错误(包含分支预测和访存违例)（后面称这部分重定向为exuredirect）；
-* 以及来自 rob exceptiongen 生成的 robflush :
-  中断(csr)/异常/刷流水（csr+fence+load+store+varith+vload+vstore）+前端异常。Rob中发来的异常/中断/刷流水重定向处理类似。
+* Errors occurring during processor execution (including branch prediction and
+  memory violations) aggregated by redirectgen (referred to as exuredirect in
+  the following).
+* And robflush generated by rob exceptiongen: interrupts (CSR)/exceptions/flush
+  pipeline (CSR + fence + load + store + varith + vload + vstore) + front-end
+  exceptions. The redirect handling for exceptions/interrupts/flushes from the
+  ROB is similar.
 
-对于 redirectgen 汇总的重定向：
+For redirects aggregated by redirectgen:
 
-* 功能单元写回的 redirect(jump, brh) 在打一拍且没有被更老的已经处理过 redirect 取消的情况下输入到 redirectgen
-  模块。
-* Memblock 写回的 violation（访存违例）在打一拍且没有被更老的已经处理过的 redirect 取消的情况下输入到 redirectgen。
+* Functional unit writeback redirects (jump, brh) are input to the redirectgen
+  module after being delayed by one cycle, provided they are not canceled by
+  older, already processed redirects.
+* The violation (memory access violation) from Memblock writeback is input to
+  redirectgen after one cycle delay, provided it hasn't been canceled by an
+  older processed redirect.
 
-Redirectgen 选择最老的 redirect 在输入后等待一拍，加上从 pcMem 读回的数据后再输出。
+Redirectgen selects the oldest redirect, waits for one cycle after input, and
+then outputs it along with the data read back from pcMem.
 
-对于 robflush 信号，在接收到后，同样需要等待一拍加上从 pcMem 读回的数据。
+For the robflush signal, upon receiving it, it is also necessary to wait for one
+cycle plus the data read back from pcMem.
 
-Ctrlblock 生成 Redirect 时会优先重定向 robflush 信号，当不存在 robflush 时才会处理 exuredirect。
+When generating Redirect, CtrlBlock prioritizes redirecting the robflush signal.
+Only when robflush is absent will it handle exuredirect.
 
-上述部分整体框图如下：
+The overall block diagram of the above components is as follows:
 
-![redirect 的生成](./figure/Redirect-Gen.svg)
+![Generation of redirect](./figure/Redirect-Gen.svg)
 
-## redirect 分发
+## redirect distribution
 
-Ctrlblock 在生成出 Redirect 信号后，向流水级各个模块分发重定向信号。
+After generating the Redirect signal, Ctrlblock distributes the redirect signal
+to various pipeline stages.
 
-* 对于 decode发送当前 redirect 或 redirectpending（即 decode 等待直到 Ctrlblock 发给前端的
-  redirect 准备完成，使得前端有正确指令流到达之后才可继续流水）；
-* 对于 rename，rat，rob，dispatch，snpt，mem 发送当前 redirect；
-* 对于issueblock，datapath，exublock 发送打一拍后的 redirect。
+* For decode, send the current redirect or redirectpending (i.e., decode waits
+  until the redirect from Ctrlblock to the frontend is ready, ensuring the
+  correct instruction stream reaches the frontend before the pipeline can
+  proceed);
+* For rename, rat, rob, dispatch, snpt, and mem, the current redirect is sent.
+* For issueblock, datapath, and exublock, send the redirected signal after a
+  one-cycle delay.
 
-其中比较特殊的是发送给前端的 redirect。发送给前端的重定向以及造成的影响，总共包括三部分：rob_commit,
-redirect，ftqIdx(readAhead，seloh)。
+Among these, the redirect sent to the frontend is particularly special. The
+redirect sent to the frontend and its resulting impact consist of three parts:
+rob_commit, redirect, and ftqIdx (readAhead, seloh).
 
-![发向前端的 redirect](./figure/Redirect-ToFrontend.svg)
+![Redirect sent to the frontend](./figure/Redirect-ToFrontend.svg)
 
-### 对于 rob commit
+### For rob commit
 
-由于向前端传递的 flush 信号可能会延迟几个周期，并且如果在 flush 前继续提交，可能会导致提交后 flush 的错误。因此，我们将所有的 flush
-视为异常，确保前端的处理行为一致，当 ROB 提交一条带 flush 信号的指令时，我们需要在 ctrlblock 直接刷掉带有 robflush 的
-commit，告知前端进行 flush，但是不进行提交。
+Since the flush signal sent to the frontend may be delayed by several cycles,
+and if commits continue before the flush, it may lead to errors where commits
+are followed by flushes. Therefore, we treat all flushes as exceptions to ensure
+consistent handling behavior at the frontend. When the ROB commits an
+instruction with a flush signal, we need to directly flush the commit with
+robflush in ctrlblock, informing the frontend to perform a flush without
+committing.
 
-而对于 exuredirect，其对应的指令需要在写回 rob 等待 walk 完毕后才可以提交，因此这两类 redirect
-不需要再特殊处理，其提交一定在其写回之后。
+As for exuredirect, the corresponding instruction must wait for the walk to
+complete after being written back to the ROB before it can be committed.
+Therefore, these two types of redirects do not require special handling, as
+their commit will always occur after their write-back.
 
-### 对于 redirect：
+### For redirect:
 
-发送给前端的 redirect 信号还包括额外的 CFIupdate，而 ftq 信息通过额外的 readAhead 以及 seloh 更新。
+The redirect signal sent to the frontend includes an additional CFIupdate, while
+the ftq information is updated through additional readAhead and seloh.
 
-对于 exuredirect，它们的 CFIupdate 和 ftqidx 等信息在从功能单元传递回来的时候已经包含在里面了，因此无需进行特殊处理。
+For exuredirect, their CFIupdate and ftqidx information are already included
+when passed back from the functional unit, so no special processing is required.
 
-对于 rob 发出的 flush，exception 对 CFI 更新的目的地址需要等待从 CSR 中得到：首先 rob 发出 flush 信号，产生
-exception，向 CSR 发送 redirect 表示有 exception 产生，并从 CSR 得到 Trap Target 返回给
-ctrlblock，最后再向前端发出 redirect。
+For flushes issued by the ROB, the destination address for CFI updates due to
+exceptions must wait for retrieval from the CSR: first, the ROB issues a flush
+signal, generating an exception, sends a redirect to the CSR indicating the
+exception, receives the Trap Target from the CSR back to the ctrlblock, and
+finally issues a redirect to the front-end.
 
-其余的冲刷流水导致的目的地址更新，base pc 通过之前与 pcmem 交互得到，并在 ctrlblock 中根据是否刷自身加上偏移来生成目的地址。
+For other pipeline flushes that result in destination address updates, the base
+PC is obtained through previous interactions with pcmem. In CtrlBlock, the
+destination address is generated by adding an offset based on whether it flushes
+itself.
 
-其中比较特殊的是 CSR 发出的冲刷流水中 XRet，这种情况下目的地址更新也需要从 CSR 中得到，不过 CSR 生成 Xret 的通路不需要再依赖 rob
-发回的 exception，可以直接与 Ctrlblock 通过 csrio 交互。
+A special case is the XRet issued by CSR to flush the pipeline. In this
+scenario, the destination address update also needs to be obtained from CSR.
+However, the path generating Xret in CSR no longer relies on the exception
+feedback from rob and can directly interact with Ctrlblock via csrio.
 
-### 对于ftqIdx：
+### For ftqIdx:
 
-Ctrlblock 主要发送两组数据 ftqIdxAhead 以及 ftqIdxSelOH。
+Ctrlblock primarily sends two sets of data: ftqIdxAhead and ftqIdxSelOH.
 
-其中 ftqIdxAhead 用于前端提前一拍读取到重定向相关的 ftqidx。ftqIdxAhead 是一个大小为 3 的 FtqPtr
-向量，其中第一个是执行的 redirect（jmp/brh），第二个是 load 的redirect，第三个是 robflush。
+Here, ftqIdxAhead is used by the frontend to read the ftqidx related to the
+redirect one cycle ahead. ftqIdxAhead is a vector of FtqPtr with a size of 3,
+where the first is the executed redirect (jmp/brh), the second is the load
+redirect, and the third is robflush.
 
-ftqIdxSelOH 用于选择有效的 ftqidx：前两个通过 redirectgen 输出的独热码选择，第三个通过发送到前端的 redirect
-是否有效选择。
+ftqIdxSelOH selects valid ftqidx: the first two are chosen via one-hot codes
+from redirectgen output, while the third is determined by whether the redirect
+sent to the frontend is valid.
 
-## 保证 redirect 发出的顺序
+## Ensure the order of redirect issuance
 
-为了保证执行正确，较新的 redirect 不能先于较老的 redirect 分发。以下分四类情况说明：
+To ensure correct execution, newer redirects cannot be dispatched before older
+ones. The following four scenarios are explained:
 
-（1）新的 exuredirect 在旧的 robflush 之后发出：
+(1) New exuredirect issued after old robflush:
 
-exuredirect 在写回时，会往前看是否已经有更老的 redirect。
+During writeback, exuredirect checks forward to see if there is an older
+redirect.
 
-在 robflush 到来时，对于较晚生成的 exuredirect，会直接在 exublock 中被刷掉；对于较早生成，还未来得及被 robflush 刷掉的
-exuredirect，会检查是否有较老的 redirect，如果有则也会被刷掉。
+Upon robflush arrival, later-generated exuredirects are directly flushed in
+exublock; for earlier-generated exuredirects not yet flushed by robflush, they
+are checked against older redirects and flushed if any exist.
 
-（2）新的 exuredirect 在旧的 exuredirect 之后：
+(2) The new exuredirect follows the old exuredirect:
 
-exuredirect 在写回时，会往前看是否已经有更老的 redirect。
+During writeback, exuredirect checks forward to see if there is an older
+redirect.
 
-在发生 redirect 时，对于较晚生成的 exuredirect，同样也会直接在 exublock 中被刷掉；对于较早生成，还未来得及被当前
-redirect 刷掉的 exuredirect，会检查是否有较老的 redirect，如果有则也会被取消。
+When a redirect occurs, newly generated exuredirects will also be directly
+flushed in the exublock; for earlier generated exuredirects that haven't been
+flushed by the current redirect yet, it checks if there are older redirects, and
+if so, they will also be canceled.
 
-（3）新的 robflush 在旧的 redirect 之后
+(3) The new robflush occurs after the old redirect.
 
-这种情况，rob 保证了不会出现，robflush 输出结果是当前 robdeq 的指令带有异常/中断标志，而 robdeq 即当前最老的
-robidx，一定比现有的 redirect 更老。
+In this scenario, the ROB ensures that such a situation will not occur. The
+robflush output indicates that the current robdeq instruction carries an
+exception/interrupt flag, while robdeq (the oldest ROB index) must be older than
+any existing redirect.
 
-（4）新的 robflush 在旧的 robflush 之后
+(4) The new robflush occurs after the old robflush.
 
-这一部分主要在 rob 中保证，exceptionGen 获得最老 robflush，同时 robflush 发出时检查上一条 flushout，较新的
-robflush 会被取消。
+This is primarily ensured within the ROB. The exceptionGen obtains the oldest
+robflush, and when robflush is issued, it checks the previous flushout. Newer
+robflushes will be canceled.
 
-# 快照恢复
+# Snapshot recovery
 
-对于重命名恢复，目前昆明湖采用了快照恢复阶段：在重定向时不一定恢复到 arch
-状态，而是可能会恢复到某一个快照状态。快照即根据一定规则，在重命名阶段保存的spec state，包括ROB enqptr；Vtypebuffer
-enqptr；RAT spec table；freelist Headptr（出队指针）以及ctrlblock用于总体控制
-robidx。目前上述模块均各自维护四份快照。
+For rename recovery, Kunming Lake currently adopts a snapshot recovery phase:
+during redirection, it may not revert to the arch state but could restore to a
+certain snapshot state. Snapshots are speculative states saved during the rename
+phase according to specific rules, including ROB enqptr, Vtypebuffer enqptr, RAT
+spec table, freelist Headptr (dequeue pointer), and ctrlblock for overall
+control of robidx. Currently, each of these modules maintains four snapshots.
 
 ## SnapshotGenerator
 
-SnapshotGenerator 模块主要用于生成快照，存储维护。其本质是一个循环队列，维护最多四份快照。
+The SnapshotGenerator module is primarily used for generating and maintaining
+snapshots. It essentially functions as a circular queue, maintaining up to four
+snapshots.
 
-入队：在循环队列不满，且入队信号未被 redirect 取消的情况下，下一拍在 enqptr 入队，更新 enqptr。
+Enqueue: When the circular queue is not full and the enqueue signal is not
+canceled by a redirect, the next cycle enqueues at enqptr and updates enqptr.
 
-出队：在出队信号未被 redirect 取消的情况下，下一拍在 deqptr 出队，更新 deqptr。
+Dequeue: If the dequeue signal is not canceled by redirect, the next cycle
+dequeues at deqptr and updates deqptr.
 
-Flush：根据刷新向量在下一拍刷新掉对应的快照。
+Flush: The corresponding snapshot is flushed in the next cycle based on the
+flush vector.
 
-更新 enqptr：如果有空的快照，选择离deqptr最近的作为新的 enq 指针
+Update enqptr: If there is an empty snapshot, select the one closest to deqptr
+as the new enq pointer.
 
-Snapshots: snapshots 队列寄存器直出
+Snapshots: The snapshots queue register outputs directly.
 
-![snapshots 总览](./figure/Snapshot-Overview.svg)
+![Snapshots Overview](./figure/Snapshot-Overview.svg)
 
-## 快照的创建
+## Snapshot creation
 
-对于快照创建时机，目前在rename中进行管理。由于注意到对性能造成主要影响的重定向来源仍然是分支错误造成的重定向，因此选择在分支跳转指令处创建快照；同时为了在没有分支跳转的情况下其他的重定向也能用到快照恢复，因此固定每隔commitwidth\*4=32条uop打一份快照。
+Regarding the timing of snapshot creation, it is currently managed during
+rename. Since it is observed that the primary performance impact of redirects
+still stems from branch mispredictions, snapshots are created at branch jump
+instructions. Additionally, to ensure that other redirects can also utilize
+snapshot recovery in the absence of branch jumps, a snapshot is taken every
+commitwidth*4=32 uops.
 
-Rename模块会对输出的六条uop都打上snapshot标志，表示uop是否需要打上快照，在Ctrlblock中会把六条uop上的snapshot标志汇总到第一条uop。该操作为了解决快照机制在blockBackward下的正确性：即如果在六条uop中出现blockbackward，且在blockbackward之后需要打上snapshot，该snapshot会由于blockbackward而无法在rob中打上快照，将所有snapshot放到第一条就可以解决这个问题。
+The Rename module tags all six output uops with a snapshot flag, indicating
+whether a uop requires snapshotting. In the Ctrlblock, the snapshot flags from
+all six uops are aggregated onto the first uop. This operation ensures
+correctness of the snapshot mechanism under blockBackward scenarios: if a
+blockbackward occurs among the six uops and a snapshot is required after it, the
+snapshot would fail to be recorded in the ROB due to blockbackward.
+Consolidating all snapshots onto the first uop resolves this issue.
 
-Rat，freelist，以及ctrlblock的快照创建均通过rename模块输出的snapshot标志控制。存储数据由各个模块自己管理。
+The creation of snapshots for Rat, freelist, and ctrlblock is controlled by the
+snapshot flag output from the rename module. The storage data is managed by each
+module itself.
 
-Rob，vtype的快照创建除了rename输出流到rob的snapshot标志还需要考虑非blockbackward以及rab，rob，vtypebuffer没有满。rob，vtype的快照创建和前述模块的快照写入可能并不在一个周期，但通过snapshot标志随着rename输出流到rob我们可以保证写入的robidx相同即可同步。
+For Rob and vtype snapshot creation, in addition to the snapshot flag from the
+rename output stream to rob, considerations must also include non-blockbackward,
+as well as ensuring that rab, rob, and vtypebuffer are not full. The snapshot
+creation for rob and vtype and the snapshot writing in the aforementioned
+modules may not occur in the same cycle, but by having the snapshot flag follow
+the rename output stream to rob, we can ensure synchronization by writing the
+same robidx.
 
-## 快照的删除
+## Snapshot deletion
 
-快照删除主要包括两种情况，一种在commit的时候删除掉过期的快照；另一种是redirect的时候删除掉错误路径上的快照。
+Snapshot deletion mainly includes two scenarios: one is deleting expired
+snapshots during commit; the other is deleting snapshots on the wrong path
+during redirect.
 
-对于commit的时候删除快照：Ctrlblock通过控制deq信号删除快照：robcommit的八条uop有一条与当前deqptr指向的快照中第一条uop一致则删除过期快照。Ctrlblock将deq信号传递到上述各个模块中同步删除commit过期快照。
+For snapshot deletion during commit: Ctrlblock deletes snapshots by controlling
+the deq signal. If one of the eight uops in robcommit matches the first uop in
+the snapshot pointed to by the current deqptr, the expired snapshot is deleted.
+Ctrlblock transmits the deq signal to the aforementioned modules to synchronize
+the deletion of expired commit snapshots.
 
-对于redirect的时候：Ctrlblock通过提供flushvec信号删除错误路径上的快照：判断快照的第一条uop是否比当前redirect要新（这里要注意套圈的情况），如果老则把这条快照刷掉，即flushvec相应位置1。Ctrlblock将flushvec传递到上述模块同步刷新错误路径上的快照。
+During redirect: Ctrlblock removes snapshots on incorrect paths by providing a
+flushvec signal—it checks whether the first uop of a snapshot is newer than the
+current redirect (accounting for wrap-around cases). If older, the snapshot is
+flushed by setting the corresponding flushvec bit. Ctrlblock then propagates
+flushvec to synchronize snapshot invalidation across relevant modules.
 
-## 快照的管理
+## Management of snapshots
 
-Ctrlblock通过自身维护一个存储robidx的快照副本，在重定向到来时可以方便的向各个模块告知是否命中快照以及命中快照的编号。Ctrlblock遍历快照，在存在比当前redirect更老（或者不刷自己的情况下相等），允许使用快照恢复，并记录命中快照的编号，传递到上述模块中。
+Ctrlblock maintains a snapshot copy of robidx internally, allowing it to
+conveniently inform each module whether a snapshot is hit and the snapshot
+number when a redirect arrives. Ctrlblock traverses the snapshots and, if there
+is a snapshot older than the current redirect (or equal if not flushing itself),
+permits snapshot recovery, records the hit snapshot number, and passes it to the
+aforementioned modules.
 
-通过快照恢复spec state由各个模块自身控制。
+The recovery of the speculative state through snapshots is controlled by each
+module itself.
 
-上述部分整体框图：
+Overall block diagram of the above sections:
 
-![snapshot 的生成、删除和管理](./figure/Snapshot-Gen.svg)
+![Snapshot generation, deletion, and management](./figure/Snapshot-Gen.svg)
 
 # pcMem
 
-pcMem 实质上是例化了一个 SyncDataModuleTemplate，并需要提供多个读口，1 个写口。大小为 64 项，每一项仅包括
-startAddr。
+pcMem is essentially an instantiation of SyncDataModuleTemplate, requiring
+multiple read ports and 1 write port. It has 64 entries, each containing only
+startAddr.
 
-pcMem 读出来的是 base PC，还需要再加上 Ftq Offset 得到完整的 PC。
+pcMem reads the base PC, which needs to be combined with Ftq Offset to get the
+full PC.
 
-当前配置下，需要提供 14 个读口，为 redirect，robFlush 各自提供 1 个读口，为 bjuPC 和 bjuTarget 各自提供 3
-个读口，为 load 提供 3 个读口，以及为 trace 提供 3 个读口。
+Under the current configuration, 14 read ports are required: one each for
+redirect and robFlush, three each for bjuPC and bjuTarget, three for load, and
+three for trace.
 
-输入包括来自前端 Ftq 的写入使能，写入地址和写入数据，以及不同来源的读请求和读地址，分别输出读结果。
+Inputs include write enable, write address, and write data from the front-end
+Ftq, as well as read requests and read addresses from different sources, with
+read results output separately.
 
-![PCMem 总览](./figure/PCMem-Overview.svg)
+![PCMem Overview](./figure/PCMem-Overview.svg)
 
 # GPAMem
 
-GPAMem 模块类似于 pcMem，例化了一个 SyncDataModuleTemplate，但是只需要提供 1 个读口和 1 个写口，大小为 64
-项。每一项主要包括一个 gpaddr，存储前端的 ftq 对应的 gpaddr 信息。
+The GPAMem module is similar to pcMem, instantiating a SyncDataModuleTemplate,
+but only requires 1 read port and 1 write port, with a size of 64 entries. Each
+entry mainly includes a gpaddr, storing the gpaddr information corresponding to
+the frontend's ftq.
 
-Rob 在 exception 输出的前一拍发出 gpaddr 读请求以读地址的 ftq 信息，第二拍得到返回的 gpaddr 信息。最终通过 robio 与
-csr直接交互。
+Rob issues a gpaddr read request one cycle before exception output to read the
+ftq information of the address, and receives the returned gpaddr information in
+the second cycle. The final interaction with csr is handled directly through
+robio.
 
-输入包括来自前端 IFU 的写入使能，写入地址和写入数据，以及来自 rob 的读请求和读地址，向 rob 输出读结果。
+Inputs include write enable, write address, and write data from the frontend
+IFU, as well as read requests and read addresses from the rob. The output to the
+rob is the read result.
 
-![GPAMem 总览](./figure/GPAMem-Overview.svg)
+![GPAMem Overview](./figure/GPAMem-Overview.svg)
 
 # Trace
 
-ctrlBlock的trace子模块用来收集指令trace的信息，其接收来自rob指令提交时的信息，在rob压缩的基础上进行二次压缩（将不需要pc的指令和需要pc的指令压缩到一起存入trace
-buffer），以减小对pcMem的读压力。
+The trace submodule in ctrlBlock collects instruction trace information,
+receiving data from rob instruction commits. It performs secondary compression
+(combining instructions that do not require PC with those that do and storing
+them together in the trace buffer) on top of rob compression to reduce read
+pressure on pcMem.
 
-![trace 示意图](./figure/trace.svg)
+![Trace diagram](./figure/trace.svg)
 
-## feature支持
+## Feature support
 
-当前KMH核内trace的实现只支持指令trace。核内收集的指令trace信息包括：priv，cause，tval，itype，iretire，ilastsize，iaddr；其中itype字段支持所有类型。
+The current implementation of the KMH core's internal trace only supports
+instruction tracing. The instruction trace information collected within the core
+includes: priv, cause, tval, itype, iretire, ilastsize, and iaddr. The itype
+field supports all types.
 
-## trace 各级流水线功能：
+## Trace pipeline stage functions:
 
-在ctrlBlock里有三拍：
+There are three cycles in ctrlBlock:
 
-* Stage 0: 将 rob commitInfo 打一拍；
-* Stage 1: commitInfo压缩，阻塞提交信号产生；
-* Stage 2: 根据压缩后的ftqptr从pcmem中读出basePc，从csr获取当前提交的指令对应的priv，xcause，xtval；
+* Stage 0: Buffer rob commitInfo for one cycle;
+* Stage 1: commitInfo compression, blocking commit signal generation;
+* Stage 2: Reads the basePc from pcmem based on the compressed ftqptr, and
+  retrieves the priv, xcause, and xtval corresponding to the currently committed
+  instruction from csr.
 
 memBlock
 
-* Stage 3: 通过ftqOffest和从pcmem读到的basePc算出最终的iaddr；
+* Stage 3: Calculate the final iaddr using ftqOffset and the basePc read from
+  pcmem;
 
-## trace buffer 压缩机制
+## Trace buffer compression mechanism
 
-当每一组commitInfo进入trace buffer之前, 都需要做压缩，即把每一个需要pc的commitinfo项和其前面的项压缩成一项，送入trace
-buffer，在进trace buffer之前，会计算当前拍进入trace buffer之后，在下一拍能不能全部出队，如果不能则去block
-rob的提交，该block会一直block到产生该block信号的commitInfo从trace
-buffer完全出队。产生blockCommit信号的commitInfo会无脑进trace buffer，但是其下一拍的commitinfo一定会被堵住。
+Before each group of commitInfo enters the trace buffer, it must be compressed.
+That is, each commitInfo item requiring a PC is combined with its preceding
+items into a single entry before being sent to the trace buffer. Before entering
+the trace buffer, it is determined whether all entries can be dequeued in the
+next cycle. If not, the rob's commit is blocked. This block persists until the
+commitInfo that triggered the block signal is fully dequeued from the trace
+buffer. The commitInfo that generates the blockCommit signal will
+unconditionally enter the trace buffer, but the commitInfo in the next cycle
+will definitely be blocked.

@@ -5,39 +5,50 @@
 - Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-## 输入输出
+## Input and Output
 
-`flush` 是一个带 valid 信号的 Redirect 输入
+`flush` is a Redirect input with a valid signal.
 
-`in` 是按 issueBlock 和 每个 issueBlock 包含的 exu 对应的 ExuInput 输入。即 in(i)(j) 表示输入来源于第 i
-个issueBlock 中的第 j 个exu。
+`in` corresponds to the issueBlock and the ExuInput inputs associated with each
+exu within the issueBlock. That is, in(i)(j) represents the input from the j-th
+exu in the i-th issueBlock.
 
-`out` 是按 issueBlock 和 每个 issueBlock 包含的 exu 对应的 ExuOutput 输出。即 out(i)(j) 表示对应第 i
-个issueBlock 中的第 j 个exu 的输出。
+`out` corresponds to the issueBlock and the ExuOutput outputs associated with
+each exu within the issueBlock. That is, out(i)(j) represents the output
+corresponding to the j-th exu in the i-th issueBlock.
 
-`csrio` 、 `csrin` 和 `csrToDecode` 只有当该 ExuBlock 中存在 `CSR` 时才存在。
+`csrio`, `csrin`, and `csrToDecode` exist only if there is a `CSR` in the
+ExuBlock.
 
-类似地， `fenceio` 只有当该 ExuBlock 中存在 `fence` 时才存在。`frm` 只有当该 ExuBlock 中需要 `frm` 作为
-src 时才存在。`vxrm` 只有当该 ExuBlock 中需要 `vxrm` 作为 src 时才存在。
+Similarly, `fenceio` exists only if there is a `fence` in the ExuBlock. `frm`
+exists only if the ExuBlock requires `frm` as a source. `vxrm` exists only if
+the ExuBlock requires `vxrm` as a source.
 
-`vtype` 、 `vlIsZero` 和 `vlIsVlmax` 只有当该 ExuBlock 中需要写 Vconfig 时才存在。
+`vtype`, `vlIsZero`, and `vlIsVlmax` exist only if the ExuBlock requires writing
+to Vconfig.
 
-## 功能
+## Function
 
-ExuBlock 主要负责将外部模块传入的信号按照配置需求连接到各个 exu，并将 exu 的输出整理作为 ExuBlock 的输出。
+The ExuBlock is primarily responsible for connecting signals from external
+modules to each exu according to configuration requirements and organizing the
+outputs of the exus as the outputs of the ExuBlock.
 
-![ExuBlock 总览](./figure/ExuBlock-Overview.svg)
+![ExuBlock Overview](./figure/ExuBlock-Overview.svg)
 
-## 设计规格
+## Design Specifications
 
-在 Backend 中一共有 3 个ExuBlock：intExuBlock，fpExuBlock 和
-vfExuBlock，分别是整数、浮点、向量的执行模块。每个 ExuBlock 中包含若干个 ExeUnit 单元。
+There are a total of 3 ExuBlocks in the Backend: intExuBlock, fpExuBlock, and
+vfExuBlock, which are the execution modules for integer, floating-point, and
+vector operations, respectively. Each ExuBlock contains several ExeUnit units.
 
-intExuBlock 中包含了 8 个ExeUnit，IO 包括了 flush, in, out, csrio, csrin, csrToDecode,
-fenceio, frm, vtype, vlIsZero 和 vlIsVlmax，不包括 vxrm。
+The intExuBlock contains 8 ExeUnits. Its I/O includes flush, in, out, csrio,
+csrin, csrToDecode, fenceio, frm, vtype, vlIsZero, and vlIsVlmax, but excludes
+vxrm.
 
-fpExuBlock 中包含了 5 个ExeUnit，IO 包括了 flush, in, out 和 frm，不包括 csrio, csrin,
-csrToDecode, fenceio, vxrm, vtype, vlIsZero 和 vlIsVlmax。
+The fpExuBlock contains 5 ExeUnits. Its I/O includes flush, in, out, and frm,
+but excludes csrio, csrin, csrToDecode, fenceio, vxrm, vtype, vlIsZero, and
+vlIsVlmax.
 
-vfExuBlock 中包含了 5 个ExeUnit，IO 包括了 flush, in, out, frm, vxrm, vtype, vlIsZero 和
-vlIsVlmax，不包括 csrio, csrin, csrToDecode 和 fenceio。
+The vfExuBlock contains 5 ExeUnits. Its I/O includes flush, in, out, frm, vxrm,
+vtype, vlIsZero, and vlIsVlmax, but excludes csrio, csrin, csrToDecode, and
+fenceio.

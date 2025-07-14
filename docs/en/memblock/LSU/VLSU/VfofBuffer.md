@@ -1,44 +1,56 @@
-# 向量 FOF 指令单元 VfofBuffer
+# Vector FOF Instruction Unit VfofBuffer
 
-## 功能描述
+## Functional Description
 
-处理并写回向量 Fault only frist (fof) 指令的修改 VL 寄存器的 uop。对于 fof 指令，我们会额外拆分出单独的负责修改 VL
-寄存器的 uop。目前，我们对 fof 指令采取非推测执行的方式。
+Process and write back the uop that modifies the VL register for vector Fault
+Only First (fof) instructions. For fof instructions, we additionally split out a
+separate uop responsible for modifying the VL register. Currently, we adopt a
+non-speculative execution approach for fof instructions.
 
-### 特性 1：收集访存 uop 写回信息
+### Feature 1: Collect write-back information of memory-accessing uops
 
-VfofBuffer 负责收集 fof 指令访存 uop 的写回信息，且只有一项。如果需要更新 VL 寄存器，则更新 VfofBuffer 中维护的信息。
-当一条 Fault only frist 指令被发射时，除了正常的进入 VLSplit 之外，还会在 vfofBuffer 中分配一项。 这一项会监听来自
-VLMergeBuffer 的同 RobIdx 的 uop 的写回，并不会阻止这些 uop 写回后端，只是会收集这些 uop 的相关元数据来更新维护自身的
-VL。 VLMergeBuffer 写回至后端的 uop 会携带异常信息与 VL 等，我们需要根据这些写回的信息来判断这个 uop 是否应该导致 VL
-发生变化，如果需要 VL 发现变化，则与 VfofBuffer 中维护的 VL 比较，更新为更小的 VL。
+The VfofBuffer is responsible for collecting write-back information of
+memory-accessing uops from fof instructions, with only one entry. If the VL
+register needs to be updated, the information maintained in the VfofBuffer is
+updated accordingly. When a Fault Only First (fof) instruction is dispatched, in
+addition to the normal entry into VLSplit, an entry is also allocated in the
+vfofBuffer. This entry monitors the write-back of uops with the same RobIdx from
+the VLMergeBuffer, without preventing these uops from writing back to the
+backend. Instead, it collects relevant metadata from these uops to update its
+own VL. Uops written back to the backend from the VLMergeBuffer carry exception
+information and VL, among other details. Based on this write-back information,
+we determine whether the uop should cause a change in VL. If a VL change is
+required, it is compared with the VL maintained in the VfofBuffer and updated to
+the smaller value.
 
-### 特性 2：写回修改 VL 寄存器的 uop
+### Feature 2: Write back the uop that modifies the VL register
 
-VfofBuffer 会在该指令的所有访存 uop 写回之后，再写回修改 VL 寄存器的 uop。 即使不需要修改 VL 寄存器，该 uop
-依然会写回，只是不会使能写入信号。
+The VfofBuffer will write back the uop that modifies the VL register only after
+all memory-accessing uops of the instruction have been written back. Even if no
+modification to the VL register is needed, this uop will still be written back,
+but the write signal will not be enabled.
 
-## 整体框图
+## Overall Block Diagram
 
-单一模块无框图。
+No block diagram for a single module.
 
-## 主要端口
+## Main ports
 
-|                   | 方向  | 说明                         |
-| ----------------: | --- | -------------------------- |
-|          redirect | In  | 重定向端口                      |
-|                in | In  | 接收来自 Issue Queue 的 uop 发射  |
-| mergeUopWriteback | In  | 接收 VLMergeBuffer 写回的数据 uop |
-|      uopWriteback | Out | 写回修改 VL 的 uop 至后端          |
+|                   | Direction | Description                                           |
+| ----------------: | --------- | ----------------------------------------------------- |
+|          redirect | In        | Redirect port                                         |
+|                in | In        | Receive uop dispatch from the Issue Queue.            |
+| mergeUopWriteback | In        | Receive data uops written back from the VLMergeBuffer |
+|      uopWriteback | Out       | Write back the uop modifying VL to the backend        |
 
 
-## 接口时序
+## Interface timing
 
-接口时序较简单，只提供文字描述。
+The interface timing is relatively simple, described only in text.
 
-|                   | 说明                                   |
-| ----------------: | ------------------------------------ |
-|          redirect | 具备 Valid。数据同 Valid 有效                |
-|                in | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-| mergeUopWriteback | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|      uopWriteback | 具备 Valid、Ready。数据同 Valid && ready 有效 |
+|                   | Description                                                          |
+| ----------------: | -------------------------------------------------------------------- |
+|          redirect | Has Valid status. Data is valid when Valid is asserted.              |
+|                in | Includes Valid and Ready signals. Data is valid when Valid && Ready. |
+| mergeUopWriteback | Includes Valid and Ready signals. Data is valid when Valid && Ready. |
+|      uopWriteback | Includes Valid and Ready signals. Data is valid when Valid && Ready. |

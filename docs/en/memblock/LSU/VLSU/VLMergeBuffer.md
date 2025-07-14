@@ -1,59 +1,74 @@
-# 向量 Load 合并单元 VLMergeBuffer
+# Vector Load Merge Unit VLMergeBuffer
 
-## 功能描述
+## Functional Description
 
-一个基于 freelist 的队列，接收 VLSplit 模块发来的请求，为后端发射的每一个 uop 申请一个表项，保存 uop 的相关信息，收集从 Load
-pipeline 上返回的数据，接收该 uop 拆分的全部访存请求之后写回后端与 Load Queue。
+A freelist-based queue that receives requests from the VLSplit module, allocates
+an entry for each uop dispatched to the backend to store uop-related
+information, collects data returned from the Load pipeline, and writes back to
+the backend and Load Queue after all memory access requests split from the uop
+are received.
 
-### 特性 1：维护 uop 的拆分访存请求
+### Feature 1: Maintains split memory requests for uops.
 
-在 VLSplit 模块的 pipeline 第二阶段向 VLMergeBuffer 发起表项申请，同周期 VLMergeBuffer 向 VLSplit
-返回一个表项 index ，同时相应表项 allocated 置 true。 入队同时会在对应项的计数器中写入当前 uop 拆分的访存请求数量. 为每个 uop
-分配一项，每一项维护所需要收集的 flow 数量。当全部收集之后标记为 uopfinish，按照 uop 为粒度写回。 在标记 uopfinish
-的表项中选择一项写回后端，当有多项可以写回时index小的先写回。同时清空相应标志位。
+In the second stage of the VLSplit module's pipeline, initiate an entry request
+to the VLMergeBuffer. In the same cycle, the VLMergeBuffer returns an entry
+index to the VLSplit, with the corresponding entry's allocated flag set to true.
+During enqueue, the counter for the corresponding entry is written with the
+number of memory access requests split by the current uop. Each uop is allocated
+one entry, with each entry maintaining the number of flows that need to be
+collected. Once all are collected, it is marked as uopfinish and written back at
+the uop granularity. Among the entries marked as uopfinish, select one to write
+back to the backend. When multiple entries are ready for writeback, the one with
+the smaller index is written back first, and the corresponding flags are
+cleared.
 
-### 特性 2：合并数据
+### Feature 2: Data Merging
 
-根据 Load 流水线输出信息，以 uop 为粒度合并数据。合并时候根据是否有异常、元素位置、mask 等进行合并。
+Based on the Load pipeline output information, merge data at the uop
+granularity. Merging considers factors such as exceptions, element positions,
+and masks.
 
-### 特性 3：处理异常
+### Feature 3: Exception Handling
 
-根据流水线的输出信息，出现异常时正确的设置 ExceptionVec、vstart 等相应的数据。
+Based on the pipeline output information, correctly sets ExceptionVec, vstart,
+and other relevant data when exceptions occur.
 
-### 特性 4：阈值反压 {#sec:VLM-THRESHOLD}
+### Feature 4: Threshold Backpressure {#sec:VLM-THRESHOLD}
 
-为了避免卡死，当 VLMergeBuffer 的空闲表项小于等于 6 项时，产生 threshold 反应信号至 VLSplit。反压 VLSplit
-Pipe。 参见 [@sec:VLS-THRESHOLD] [根据 VLMergeBuffer 的 Threshold 信号进行反压](VLSplit.md)。
+To prevent deadlock, when the number of free entries in the VLMergeBuffer is
+less than or equal to 6, a threshold reaction signal is generated and sent to
+the VLSplit, backpressuring the VLSplit Pipe. Refer to [@sec:VLS-THRESHOLD]
+[Backpressure based on the VLMergeBuffer's Threshold signal](VLSplit.md).
 
-## 整体框图
+## Overall Block Diagram
 
-单一模块无框图
+Single module without a block diagram
 
-## 主要端口
+## Main ports
 
-|                | 方向  | 说明                                 |
-| -------------: | --- | ---------------------------------- |
-|   frompipeline | In  | 接收来自 Load pipeline 的读数据返回          |
-|  fromSplit.req | In  | 接收来自 VLSplit 模块的表项申请               |
-| fromSplit.resp | Out | 反馈至 VLSplit 模块，是否成功分配、分配的表项        |
-|   uopWriteback | Out | 将执行结束的 uop 写回后端                    |
-|          toLsq | Out | 执行结束的 uop 写回后端时更新 Load queue 中表项状态 |
-|       redirect | In  | 重定向端口                              |
-|       feedback | Out | 反馈至后端 Issue Queue，目前后端不做任何处理       |
-|        toSplit | Out | 反馈至 VLSplit 模块，VLMergeBuffer即将达到阈值 |
+|                | Direction | Description                                                                                          |
+| -------------: | --------- | ---------------------------------------------------------------------------------------------------- |
+|   frompipeline | In        | Receive read data returns from the Load pipeline                                                     |
+|  fromSplit.req | In        | Receives entry requests from the VLSplit module                                                      |
+| fromSplit.resp | Out       | Feedback to the VLSplit module, indicating whether allocation was successful and the allocated entry |
+|   uopWriteback | Out       | Write back the completed uop to the backend.                                                         |
+|          toLsq | Out       | Updates the entry status in the Load queue when completed uops are written back to the backend       |
+|       redirect | In        | Redirect port                                                                                        |
+|       feedback | Out       | Feedback to the backend Issue Queue, currently the backend does not perform any processing           |
+|        toSplit | Out       | Feedback to the VLSplit module indicating the VLMergeBuffer is approaching its threshold             |
 
-## 接口时序
+## Interface timing
 
-接口时序较简单，只提供文字描述。
+The interface timing is relatively simple, described only in text.
 
-|                    | 说明                                   |
-| -----------------: | ------------------------------------ |
-|       frompipeline | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|      fromSplit.req | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|     fromSplit.resp | 具备 Valid。数据同 Valid 有效                |
-|       uopWriteback | 具备 Valid、Ready。数据同 Valid && ready 有效 |
-|              toLsq | 具备 Valid。数据同 Valid 有效                |
-|           redirect | 具备 Valid。数据同 Valid 有效                |
-|           feedback | 具备 Valid。数据同 Valid 有效                |
-| fromMisalignBuffer | 不具备 Valid，数据始终视为有效，对应信号产生即响应         |
+|                    | Description                                                                                                                   |
+| -----------------: | ----------------------------------------------------------------------------------------------------------------------------- |
+|       frompipeline | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|      fromSplit.req | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|     fromSplit.resp | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|       uopWriteback | Includes Valid and Ready signals. Data is valid when Valid && Ready.                                                          |
+|              toLsq | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|           redirect | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+|           feedback | Has Valid status. Data is valid when Valid is asserted.                                                                       |
+| fromMisalignBuffer | No Valid signal; data is always considered valid, and responses are generated as soon as the corresponding signal is present. |
 

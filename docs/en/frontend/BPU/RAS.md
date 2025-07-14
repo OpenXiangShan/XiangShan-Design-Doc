@@ -1,102 +1,206 @@
-# BPU 子模块 RAS
+# BPU Submodule RAS
 
 ## Glossary of Terms
 
-| 缩写   | 全称                                         | Descrption |
-| ---- | ------------------------------------------ | ---------- |
-| TOSW | Top Of Speculative Queue Write Pointer     | 推测队列写指针    |
-| TOSR | Top Of Speculative Queue Read Pointer      | 推测队列读指针    |
-| NOS  | Next Older Speculative Queue entry Pointer | 推测队列更旧项指针  |
-| ssp  | Speculative Stack Pointer                  | 虚拟推测栈指针    |
-| nsp  | Next Stack Pointer                         | 提交栈指针      |
+| Abbreviation | Full name                                  | Descrption                                 |
+| ------------ | ------------------------------------------ | ------------------------------------------ |
+| TOSW         | Top Of Speculative Queue Write Pointer     | Speculative queue write pointer            |
+| TOSR         | Top Of Speculative Queue Read Pointer      | Speculative Queue Read Pointer             |
+| NOS          | Next Older Speculative Queue entry Pointer | Next Older Speculative Queue entry Pointer |
+| ssp          | Speculative Stack Pointer                  | Virtual Speculative Stack Pointer          |
+| nsp          | Next Stack Pointer                         | Commit Stack Pointer                       |
 
-## 功能
+## Function
 
-RAS 预测器使用栈结构来预测函数调用与返回这类具有成对匹配特性的执行流。其中调用（push/call）类指令的特征为类指令的特征为目标寄存器地址为 1 或 5
-的 jal/jalr 指令。返回（ret）类指令的特征为源寄存器为 1 或 5 的 jalr 指令。
+The RAS predictor employs a stack structure to predict execution flows with
+paired matching characteristics, such as function calls and returns. Call-type
+(push/call) instructions are identified by jal/jalr instructions with target
+register addresses of 1 or 5. Return-type (ret) instructions are characterized
+by jalr instructions with source registers of 1 or 5.
 
-在实现中，RAS 预测器在 s2 和 s3 两阶段提供预测结果。
+In the implementation, the RAS predictor provides prediction results in both the
+s2 and s3 stages.
 
-昆明湖架构的 RAS 预测器与南湖架构差异较大。通过引入持久化队列，新的 RAS
-预测器结构解决了局部预测器因推测执行所导致的预测器数据污染问题。同时，新结构也保留了和南湖架构类似的栈结构作为提交栈，存储提交后的压栈信息，以弥补持久化队列存储密度不高的缺点。
+The RAS predictor in the Kunming Lake architecture differs significantly from
+that in the South Lake architecture. By introducing a persistent queue, the new
+RAS predictor structure resolves the issue of predictor data pollution caused by
+speculative execution in local predictors. At the same time, the new structure
+retains a stack-like architecture similar to the South Lake architecture as a
+commit stack, storing post-commit push information to compensate for the low
+storage density of the persistent queue.
 
-### 基于持久化队列设计的 RAS 预测器架构整体概述
+### Overview of the RAS Predictor Architecture Based on Persistent Queue Design
 
-RAS 预测器利用分支预测 FTB 块中的 call/return 指令局部的配对信息对 return 指令作出预测。由于正常调用的函数执行完毕会返回到调用
-指令的下一条指令，RAS 预测器可在遇到 call 指令时根据当前指令 PC 及当前指令是否为 RVC 指令（确定指令宽度为 2 还是
-4）生成其函数调用返回地址的预测结果并压栈。
+The RAS predictor utilizes the local pairing information of call/return
+instructions within the branch prediction FTB block to make predictions for
+return instructions. Since a normally called function will return to the
+instruction following the call upon completion, the RAS predictor can generate a
+predicted return address for function calls when encountering a call instruction
+based on the current instruction PC and whether it is an RVC instruction
+(determining the instruction width as 2 or 4 bytes), then push this prediction
+onto the stack.
 
-由于现代超标量乱序处理器通常采用深流水线推测执行技术，分支预测器会在之前所预测指令执行结果确定前为后续指令生成预测结果，也即，若面临 ABC
-三个连续的分支指令预测请求，RAS 预测器并不能在预测 B 时获取到 A 块内指令的最终执行结果，而只能获取到 A 块的 Z
-块内指令的最终执行结果和基于分支预测结果的 Z 到 B 块间推测结果。若 Z 到 B
-块间存在错误的分支预测结果，则需要对其涉及的分支预测器状态进行误预测恢复。如前文所述，RAS 预测器基于栈结构对 call-return
-指令对作出预测，配对信息准确性对其准确率至关重要。要精确地恢复 RAS
-预测器在发生错误预测点的状态，最直观的做法是从当前最新预测点回溯到发生误预测点，撤销其间对 RAS
-栈作出的所有改动。而为提升误预测恢复及时性，现代处理器通常难以允许误预测恢复时进行如此高复杂度的操作。在南湖架构设计中，RAS
-预测器在发生误预测时仅恢复发生误预测预测块对应栈顶项和 RAS 栈顶指针。这一恢复策略可以应对因推测执行导致的误预测点 RAS
-栈顶及其更上方数据的污染，但无法应对推测执行中因先 pop 再 push 对 RAS 栈顶下方数据的污染。
+Modern superscalar out-of-order processors typically employ deep pipeline
+speculative execution techniques. The branch predictor generates predictions for
+subsequent instructions before the execution results of previously predicted
+instructions are confirmed. That is, when facing three consecutive branch
+prediction requests (A, B, C), the RAS predictor cannot obtain the final
+execution results of instructions within block A when predicting B. Instead, it
+can only access the final execution results of instructions within block Z of
+block A and the speculative results between blocks Z and B based on branch
+predictions. If there are incorrect branch prediction results between blocks Z
+and B, the branch predictor states involved must be recovered from
+misprediction. As mentioned earlier, the RAS predictor uses a stack structure to
+predict call-return instruction pairs, where the accuracy of pairing information
+is crucial. The most straightforward approach to precisely restore the RAS
+predictor's state at the misprediction point is to backtrack from the latest
+prediction point to the misprediction point and undo all modifications made to
+the RAS stack during this period. However, to improve the timeliness of
+misprediction recovery, modern processors generally cannot afford such
+high-complexity operations during recovery. In the Nanhu architecture design,
+the RAS predictor only restores the top stack entry and the stack pointer
+corresponding to the mispredicted block during misprediction. This recovery
+strategy can address contamination of the RAS stack top and above due to
+speculative execution but cannot handle contamination below the stack top caused
+by pop-push operations during speculation.
 
-这类污染会导致后续的 return 指令跳转目标出错，从而产生误预测。为解决这一问题，昆明湖架构的新 RAS 预测器通过引入持久化队列， 保存 RAS
-推测执行过程中的所有局部状态，实现了抗上述污染的预测。具体地，持久化队列模拟的栈结构有读指针 TOSR、写指针 TOSW 和栈底指针 BOS
-三个指针，每一项除记录自身数据外，还记录其前一项在持久化队列中的位置指针 NOS；在每次栈 push 操作时均前移一次 TOSW
-为当前压栈数据新分配一项存储空间，并将当前 TOSR 指向 TOSW 原位置（即新分配空间），新压栈的项记录的 NOS 存储 push
-操作前的读指针位置；在每次栈 pop 操作时，将 TOSR 移动到当前 TOSR 指向的项内 NOS 指针位置。通过上述方式，RAS
-能够通过前向链表遍历当前版本（对应一个推测执行路径）栈的所有项，这一设计也不会覆盖任何非本版本（对应其他推测执行路径）的 RAS 栈数据。
+Such contamination can cause subsequent return instructions to jump to incorrect
+targets, leading to mispredictions. To address this issue, the new RAS predictor
+in the Kunming Lake architecture introduces a persistence queue to save all
+local states during speculative execution of RAS, achieving
+contamination-resistant prediction. Specifically, the stack structure simulated
+by the persistence queue has three pointers: read pointer TOSR, write pointer
+TOSW, and bottom pointer BOS. Each entry records its own data and a pointer NOS
+indicating the previous entry's position in the persistence queue. During each
+stack push operation, TOSW is advanced to allocate new storage space for the
+current push data, and the current TOSR points to the original position of TOSW
+(i.e., the newly allocated space). The NOS of the newly pushed entry stores the
+read pointer position before the push operation. During each stack pop
+operation, TOSR is moved to the NOS pointer position of the current TOSR entry.
+This design allows RAS to traverse all entries of the current version
+(corresponding to a speculative execution path) via a forward-linked list
+without overwriting any data from other versions (corresponding to other
+speculative execution paths).
 
-为提升 RAS 有效存储容量，并非所有 RAS 项均采用持久化队列形式存储。根据实践数据，为满足推测执行路径需要，持久化队列最大约需要 28 项，因而 RTL
-实现中使用了 32 项持久化队列。在 RAS 项对应预测块（即含 call
-指令的预测块）指令提交后，我们可以将该块从持久化队列释放移入提交栈中，释放操作通过改变 BOS 指针到提交预测块对应的 TOSW
-指针。提交栈采用与南湖架构相同的设计，压栈时增加提交栈指针 nsp 并将压入数据写入新栈顶；出栈时减少栈指针
-nsp。由于其仅存放提交后的确定性信息，不存在推测执行污染问题。原 BOS 到新 TOSW
-这一区间在提交栈中可能存在其他错误路径上的压栈结果，而这些结果可以在这一 BOS 移动过程中被自然释放。
+To enhance the effective storage capacity of RAS, not all RAS entries are stored
+in the form of a persistent queue. Based on empirical data, a maximum of
+approximately 28 persistent queue entries are required to meet the needs of
+speculative execution paths. Thus, the RTL implementation uses a 32-entry
+persistent queue. After the instructions of a prediction block (i.e., a block
+containing a call instruction) corresponding to an RAS entry are committed, the
+block can be released from the persistent queue and moved into the commit stack.
+This release operation is performed by adjusting the BOS pointer to the TOSW
+pointer corresponding to the committed prediction block. The commit stack
+follows the same design as the Nanhu architecture: pushing increases the commit
+stack pointer nsp and writes the data to the new stack top; popping decreases
+the stack pointer nsp. Since it only stores deterministic post-commit
+information, there is no risk of speculative execution pollution. The interval
+between the original BOS and the new TOSW may contain push results from other
+erroneous paths in the commit stack, which are naturally released during this
+BOS movement.
 
-由于引入了持久化队列和提交栈两个结构，栈顶项可能在二者之一，在提供预测结果时会需要动态判断。持久化队列是一个环形队列，其指针除用于寻址的 value 外还有一
-flag 位，这一位可协助判定 BOS 和 TOSW、TOSR 的位置关系。当 TOSR 位于 BOS 之上 TOSW 之下时，栈顶项位于持久化队列内部；当
-TOSR 位于 BOS
-之下时，栈顶项位于持久化队列外部，即位于提交栈内。因而，我们能够在运行时动态选出栈顶项。注意到，我们从提交栈获取的栈顶项并非始终与已提交指令的栈顶一致，因而，我们需要为
-RAS 预测器维护另一个提交栈指针 ssp，其含义为，持久化队列中该项在被压入提交栈后所处的位置。在从提交栈访问栈顶项时利用 ssp 而非 nsp
-完成数据读取。
+Due to the introduction of two structures—the persistent queue and the commit
+stack—the top-of-stack item may reside in either one. Dynamic judgment is
+required when providing prediction results. The persistent queue is a circular
+queue where each pointer, in addition to its value for addressing, includes a
+flag bit. This bit helps determine the positional relationships among BOS, TOSW,
+and TOSR. When TOSR is located above BOS and below TOSW, the top-of-stack item
+is inside the persistent queue. When TOSR is below BOS, the top-of-stack item is
+outside the persistent queue, i.e., within the commit stack. Thus, we can
+dynamically select the top-of-stack item during runtime. Note that the
+top-of-stack item retrieved from the commit stack does not always align with the
+top of the committed instructions' stack. Therefore, we need to maintain another
+commit stack pointer, ssp, for the RAS predictor, which indicates the position
+of the item in the persistent queue after it is pushed into the commit stack.
+When accessing the top-of-stack item from the commit stack, ssp is used instead
+of nsp for data retrieval.
 
-上述讨论全部基于持久化队列容量充足而不发生溢出的情况。若当前程序段内 push
-操作过于密集而后端执行速度不够快，可能会出现持久化队列容量不足发生溢出的情况。这一情况有两种可能的处理方案：强行覆盖或者动态关闭返回堆栈的预测。目前昆明湖架构选择后一种实现策略。在当前
-BOS 和 TOSW 即将重叠时，将 BOS 强制前进一项来避免持久化队列被意外清空。由于 BOS
-记录项并不一定需要在此期间使用，此策略能够略微减少前端的阻塞。不足在于密集的push操作可能在错误路径上，被覆写的项如果需要使用也会导致少量出栈错误，且出栈错误原因复杂。动态关闭方案不足在于密集的push操作可能在正确路径上，因为存在未被写入返回堆栈的项，将可能导致栈内数据错误。如果是递归这种错误的影响可能减轻。出于可控性考虑，目前昆明湖使用后一种方案。
+The above discussion assumes the persistence queue has sufficient capacity and
+does not overflow. If push operations are too frequent and backend execution is
+slow, the persistence queue may overflow. Two possible solutions exist: forced
+overwriting or dynamically disabling return stack prediction. The Kunming Lake
+architecture currently adopts the latter. When BOS and TOSW are about to
+overlap, BOS is forcibly advanced by one entry to prevent accidental clearing of
+the persistence queue. Since BOS entries may not be needed during this period,
+this strategy slightly reduces frontend stalls. The drawback is that frequent
+push operations on incorrect paths may lead to minor pop errors if overwritten
+entries are needed, and the causes of such errors are complex. The dynamic
+disablement approach risks data errors if frequent push operations occur on the
+correct path, as unrecorded entries may corrupt stack data. Recursive scenarios
+may mitigate such errors. For controllability, Kunming Lake currently uses the
+latter approach.
 
-为时序优化考虑，栈顶项的读取/更新并非在收到读取请求的当拍完成，而是在其上一拍或上 N 拍根据当拍的压/出栈操作更新。为减少对 推测队列的写操作，在 BPU 2
-流水级的 push/pop 结果也不会直接写入推测队列，而是延迟一拍后写入。考虑到存在本拍写入的数据在下一 拍需要获取读数据的情况，设计了写 bypass
-机制，准备写入的数据将在本拍首先用于更新写 bypass 的 writeEntry 项。下一拍要求读取的指针若与写 bypass 记录的指针位置匹配，则使用
-bypass 值，否则使用从栈顶读取的值（实际因时序优化考虑这一逻辑被提前到读取栈顶的上一拍）。
+For timing optimization, the reading/updating of the stack top entry is not
+completed in the same cycle as the read request but is updated in the previous
+or N-th cycle based on the current push/pop operations. To minimize write
+operations to the speculative queue, the push/pop results in BPU Stage 2 are not
+directly written to the speculative queue but are delayed by one cycle.
+Considering scenarios where data written in the current cycle needs to be read
+in the next cycle, a write bypass mechanism is designed. The data to be written
+is first used to update the writeEntry item in the write bypass during the
+current cycle. If the pointer requested in the next cycle matches the pointer
+position recorded in the write bypass, the bypass value is used; otherwise, the
+value read from the stack top is used (this logic is actually advanced to the
+cycle before reading the stack top for timing optimization).
 
-### 2 阶段结果
+### Stage 2 results.
 
-在 BPU 2
-阶段，由于其他分支预测器的预测结果还未完全确定，可能存在需要更新的预测结果，当前的预测结果并非最终确定的推测执行路径。当前的预测结果对同一时刻位于 3
-阶段的分支预测块不会改变当前 2 阶段预测块的起始地址和现在位于 call/ret 指令前的其他分支指令不会再被预测跳转作出了成立假设。若 2 阶段从 FTB
-传来的 FTB 项有效且其中存在 push 类指令，则将该指令之后下一指令的 PC 值压入 RAS 栈；若 2 阶段从 FTB 预测器传来的 FTB
-项有效且其中存在 pop 类指令，则将当前栈顶的地址作为结果返回并对结果出栈
+In BPU stage 2, since the prediction results from other branch predictors are
+not yet fully determined, there may be prediction results that require updates.
+The current prediction results are not the final confirmed speculative execution
+path. The current prediction results assume that the starting address of the
+branch prediction block in stage 3 at the same time will not change, and other
+branch instructions located before call/ret instructions will no longer be
+predicted to jump. If the FTB entry received from the FTB in stage 2 is valid
+and contains a push-type instruction, the PC value of the next instruction after
+this instruction is pushed onto the RAS stack. If the FTB entry received from
+the FTB predictor in stage 2 is valid and contains a pop-type instruction, the
+address at the top of the stack is returned as the result and popped from the
+stack.
 
-在 RAS 内，上述行为具体分解如下
+Within the RAS, the above behavior is decomposed as follows:
 
-在 2 阶段的 FTB 项内看到预测跳转的 call 指令，则拉高 s2_spec_push 信号并根据当前 call 指令 pc 生成压栈的地址信息，指示内部
-RASStack 模块动作。RASStack 模块在检测到 push 动作时，会利用传入的栈顶地址作为新写入持久化队列 entry
-的预测地址，若新写入地址与原地址相同且原栈顶 counter 未饱和，则基于原栈顶项 counter+1 作为新项 counter，否则新项 counter 取
-0。生成的新 entry 被用于以下三个用途：1，下一拍更新 writeByassEntry
-寄存器，供连续预测读取栈顶项使用；2，当拍内更新栈顶项，供连续预测读取使用；3，打拍后用于在下下拍更新持久化队列。与此同时，如上所述，TOSR 被更新为当前的
-TOSW，TOSW 更新为当前 TOSW+1，全局的 ssp、sctr 类似上述 counter 更新算法，若新旧栈顶地址相同且原 sctr（与原栈顶
-entry 的 ctr 相同）未饱和，则 ssp 不变，sctr=sctr+1；否则 ssp=ssp+1，sctr=0。为
-处理可能的持久化队列溢出情形，若此时持久化队列接近溢出，返回堆栈预测器将被暂停。
+When a predicted jump call instruction is detected in the FTB entry at Stage 2,
+the s2_spec_push signal is raised, and the stack push address information is
+generated based on the current call instruction's PC, instructing the internal
+RASStack module to act. Upon detecting a push operation, the RASStack module
+uses the incoming stack top address as the predicted address for the new entry
+in the persistent queue. If the new address matches the original address and the
+original stack top counter is not saturated, the new entry's counter is set to
+the original counter + 1; otherwise, it is set to 0. The newly generated entry
+serves three purposes: 1) updating the writeBypassEntry register in the next
+cycle for continuous prediction stack top reads; 2) updating the stack top entry
+within the current cycle for continuous prediction reads; 3) being used to
+update the persistent queue two cycles later. Meanwhile, as described, TOSR is
+updated to the current TOSW, and TOSW is updated to TOSW + 1. The global ssp and
+sctr follow a similar counter update algorithm: if the old and new stack top
+addresses match and the original sctr (same as the original stack top entry's
+ctr) is not saturated, ssp remains unchanged, and sctr = sctr + 1; otherwise,
+ssp = ssp + 1, and sctr = 0. To handle potential persistent queue overflow
+scenarios, the return stack predictor is paused if the persistent queue is
+nearing overflow.
 
-在 2 阶段的 FTB 项内看到预测跳转的 call 指令，则拉高 s2_spec_pop 信号，指示内部 RASStack 模块动作。RASStack
-模块在检测到 pop 动作时，若当前 sctr 非 0，则 sctr=sctr-1，ssp 不变；否则 ssp=ssp-1，sctr=新栈顶项的
-sctr。TOSR=原 top 的 NOS，TOSW 保持不变。单独维护的栈顶项也会利用更新后的 ssp、sctr、TOSR 和 TOSW 来更新
+If a predicted jump call instruction is observed in the FTB entry during stage
+2, the s2_spec_pop signal is raised to instruct the internal RASStack module to
+act. When the RASStack module detects a pop action, if the current sctr is not
+0, then sctr = sctr - 1 and ssp remains unchanged; otherwise, ssp = ssp - 1 and
+sctr is set to the sctr of the new top stack entry. TOSR is set to the NOS of
+the original top, and TOSW remains unchanged. The separately maintained top
+stack entry is also updated using the new ssp, sctr, TOSR, and TOSW.
 
-### 3 阶段结果
+### Stage 3 result
 
-在 3 阶段的 FTB 项内看到预测跳转的 return 指令，则拉高 s3_push 信号；在 3 阶段的 FTB 项内看到预测跳转的 call 指令，则拉高
-s3_pop 信号。当前预测块在 2 阶段作出的预测结果也分别被打拍到 3 阶段（s3_pushed_in_s2 和 s3_poped_in_s2）。若 2
-阶段与 3 阶段判断要 采取的动作不同，则需要在 3 阶段进行恢复，无论是否恢复，3 阶段均使用 2 阶段读出的 RAS 栈顶项作为预测结果
+If a predicted jump return instruction is seen in the 3-stage FTB entry, the
+s3_push signal is raised; if a predicted jump call instruction is seen in the
+3-stage FTB entry, the s3_pop signal is raised. The prediction results made by
+the current prediction block in stage 2 are also latched to stage 3
+(s3_pushed_in_s2 and s3_poped_in_s2). If the actions determined in stage 2 and
+stage 3 differ, recovery is required in stage 3. Regardless of recovery, stage 3
+uses the RAS stack top entry read in stage 2 as the prediction result.
 
-因为 2 阶段的 push/pop 和 3 阶段的 push 和 pop 仅存在如下几种情况，因而 3 阶段可通过 push/pop 操作撤销 2 阶段的操作。
+Because the push/pop operations in Stage 2 and the push/pop operations in Stage
+3 only occur in the following scenarios, Stage 3 can undo the operations
+performed in Stage 2 via push/pop actions.
 
 |         |         |               |
 | ------- | ------- | ------------- |
@@ -108,107 +212,155 @@ s3_pop 信号。当前预测块在 2 阶段作出的预测结果也分别被打�
 | S2 pop  | S3 keep | Fix by push   |
 | S2 pop  | S3 pop  | No fix needed |
 
-3 阶段 push/pop 操作在 RASStack 内的具体动作与 2 阶段相同，此处不再重复
+The specific actions of 3-stage push/pop operations in RASStack are identical to
+those in the 2-stage process and are not repeated here.
 
-### 误预测状态恢复
+### Misprediction state recovery
 
-在预测块离开 BPU 后，在 IFU 或后端执行时可能会触发重定向，在遇到重定向时，RAS 预测器需要进行状态恢复。具体地，RAS 的
-TOSR、TOSW、ssp 和 sctr 都需要根据误预测发生前的对应 meta 信息恢复，随后，根据误预测的指令自身是否为 call/return
-指令，还需要分别通过 push 和 pop 操作来调整栈结构。Push 和 pop 操作的具体动作同 2、3 预测流水级，此处略。
+After the prediction block exits the BPU, redirections may be triggered during
+execution in the IFU or backend. Upon encountering a redirection, the RAS
+predictor needs to restore its state. Specifically, the RAS's TOSR, TOSW, ssp,
+and sctr must be restored according to the corresponding meta information before
+the misprediction occurred. Subsequently, depending on whether the mispredicted
+instruction itself is a call/return instruction, the stack structure must be
+adjusted via push and pop operations. The specific actions for push and pop
+operations are the same as in the 2nd and 3rd prediction pipeline stages and are
+omitted here.
 
-### 提交 entry 迁移
+### Commit entry migration
 
-如上所述，在含 call 指令的预测块提交时，BOS 会被更新为预测时的 TOSW，同时将预测块对应的 entry 写入 commit stack 栈顶（以
-nsp 寻址 ）并更新 nsp。Nsp 更新算法类似 ssp，若存在递归且栈顶 counter 未满则 counter=counter+1，nsp 不变，否则
-nsp=nsp+1，counter=0。
+As described, when a prediction block containing a call instruction is
+committed, BOS is updated to the TOSW at prediction time. Simultaneously, the
+entry corresponding to the prediction block is written to the commit stack top
+(addressed by nsp), and nsp is updated. The nsp update algorithm is similar to
+ssp: if recursion exists and the stack top counter is not full,
+counter=counter+1 and nsp remains unchanged; otherwise, nsp=nsp+1 and counter=0.
 
-## 整体框图
+## Overall Block Diagram
 
-![整体框图](../figure/BPU/RAS/structure.svg)
+![Overall Block Diagram](../figure/BPU/RAS/structure.svg)
 
-## 接口时序
+## Interface timing
 
-### RAS 模块 2 阶段更新输入输出接口
+### RAS Module Stage 2 Update Input/Output Interface
 
-![2 阶段更新输入输出接口](../figure/BPU/RAS/port1.png)
+![2-Stage Update Input/Output Interface](../figure/BPU/RAS/port1.png)
 
-上图展示了 RAS 模块 2 阶段更新的一次 pop 和一次 push，由于 push 和 pop 的块前一个分支预测 slot 均无效，在本流水级看到
-return 和 call 指令跳转，因而分别指示 RASStack 模块出/压栈。在压栈时，使用 FTB 的 fallThrough
-地址作为跳转返回地址。若最后一条指令为被截断的 RVI call 指令，则该地址+2 才是正确的返回地址
+The above figure demonstrates a pop and a push operation in the RAS module's
+2-stage update. Since the branch prediction slots before the push and pop blocks
+are invalid, the pipeline stage observes jumps for return and call instructions,
+instructing the RASStack module to pop/push accordingly. During push, the FTB's
+fallThrough address is used as the return address. If the last instruction is a
+truncated RVI call instruction, the correct return address is this address +2.
 
-### RAS 模块 3 阶段更新输入输出接口
+### RAS Module 3-Stage Update Input/Output Interface
 
-![3 阶段更新输入输出接口](../figure/BPU/RAS/port2.png)
+![3-Stage Update Input/Output Interface](../figure/BPU/RAS/port2.png)
 
-### RASStack 模块输入接口
+### RASStack Module Input Interface
 
-![Stack 模块输入接口](../figure/BPU/RAS/port3.png)
+![Stack Module Input Interface](../figure/BPU/RAS/port3.png)
 
-上图展示了 RASStack 模块 2 阶段更新的一次 push 和一次 pop 操作，可以注意到，在 push 操作后，从 RASStack
-模块中读出的栈顶被更新为新 push 的值，而 pop 操作后，栈顶恢复为 push 操作前的值
+The above diagram shows a push and a pop operation during the Stage 2 update of
+the RASStack module. It can be observed that after the push operation, the
+top-of-stack read from the RASStack module is updated to the newly pushed value,
+while after the pop operation, the top-of-stack reverts to its pre-push value.
 
-### RAS 模块重定向恢复接口
+### RAS module redirection recovery interface
 
-![重定向恢复接口](../figure/BPU/RAS/port4.png)
+![Redirect Recovery Interface](../figure/BPU/RAS/port4.png)
 
-上图展示了 RAS 和 RASStack 模块重定向恢复且恢复点指令为 call 指令的情形，BPU 传入的重定向信号在 RAS 预测器内部被打一拍后送入
-RASStack，用于恢复持久化队列中各项指针。由于该误预测点指令为 call 指令，还需压入新项
+The above diagram illustrates the scenario where the RAS and RASStack modules
+perform redirection recovery, and the recovery point instruction is a call
+instruction. The redirection signal from the BPU is delayed by one clock cycle
+within the RAS predictor before being sent to the RASStack to restore the
+pointers of each item in the persistent queue. Since the mispredicted
+instruction is a call instruction, a new entry must also be pushed.
 
-![重定向恢复接口](../figure/BPU/RAS/port5.png)
+![Redirect Recovery Interface](../figure/BPU/RAS/port5.png)
 
-类似地，若误预测点指令为 return 指令，则需基于当时的栈顶 pop 出一项
+Similarly, if the mispredicted instruction is a return instruction, an entry
+must be popped from the top of the stack based on the state at that time.
 
-### RAS 模块指令提交训练接口
+### RAS Module Instruction Commit Training Interface
 
-![指令提交训练接口](../figure/BPU/RAS/port6.png)
+![Instruction Commit Training Interface](../figure/BPU/RAS/port6.png)
 
-如图展示了一次含 return 和一次含 call 指令的指令提交，可以看到，在提交时提交栈顶发生变化，且在 call 指令提交后 BOS 指针也相 应调整
+The figure illustrates instruction commits involving one return and one call
+instruction. It shows that the commit stack top changes during commit, and the
+BOS pointer is adjusted accordingly after the call instruction is committed.
 
-## RAS存储结构
+## RAS Storage Structure
 
-返回堆栈预测器分为推测队列（持久化队列）和提交栈。推测队列有32项，提交栈有16项。
+The Return Address Stack (RAS) predictor consists of a speculative queue
+(persistent queue) and a commit stack. The speculative queue has 32 entries, and
+the commit stack has 16 entries.
 
-推测队列项结构如下
+The speculative queue entry structure is as follows
 
-| retAddr | sctr         | nos        |
-| ------- | ------------ | ---------- |
-| 返回地址    | 连续出现相同返回地址次数 | 推测队列更旧一项位置 |
+| retAddr        | sctr                                                         | nos                                           |
+| -------------- | ------------------------------------------------------------ | --------------------------------------------- |
+| Return Address | Number of consecutive occurrences of the same return address | Older entry position in the speculative queue |
 
-提交栈项结构如下
+The commit stack entry structure is as follows:
 
-| retAddr | sctr         |
-| ------- | ------------ |
-| 返回地址    | 连续出现相同返回地址次数 |
+| retAddr        | sctr                                                         |
+| -------------- | ------------------------------------------------------------ |
+| Return Address | Number of consecutive occurrences of the same return address |
 
-## 预测与更新
+## Prediction and Update
 
-返回堆栈与其他预测器有所区别，对于推测队列来说其在预测的同时实际上也作出了相应的更新。提交栈的更新则是在指令退休的时候。下图分别展示了返回堆栈预测地址的获取，推测Pop以及推测Push时对推测队列的更新操作。
+The return stack differs from other predictors in that it performs updates
+simultaneously with predictions. The commit stack is updated when instructions
+retire. The following diagrams illustrate the operations for obtaining the
+return stack prediction address, speculative Pop, and speculative Push updates
+to the speculative queue.
 
-### 栈顶地址获取
+### Stack Top Address Retrieval
 
-![getTop逻辑细节](../figure/BPU/RAS/get_top.png)
+![Details of getTop Logic](../figure/BPU/RAS/get_top.png)
 
-返回堆栈的栈顶数据可能在推测栈中，也有可能在提交栈中。当推测栈为空时，栈顶数据就在提交栈中。推测栈和提交栈采用不同的策略进行维护。推测栈是推测执行的，允许回退。提交栈的数据是真实有效的，不允许回退。推测栈判不为空的逻辑是
-BOS<=TOSR<TOSW
-，反之推测栈为空。（解释一下，推测栈弹栈时TOSR是向BOS逼近的。因此TOSR不在推测栈内，就说明推测栈为空。推测栈的数据去那了呢？在提交栈中，这与BOS的更新逻辑有关，前提是推测栈不能溢出。）
+The top data of the return stack may reside in the speculative stack or the
+commit stack. When the speculative stack is empty, the top data is in the commit
+stack. The speculative stack and commit stack are maintained using different
+strategies. The speculative stack is speculative and allows rollback, while the
+commit stack contains real and valid data that does not allow rollback. The
+logic for determining if the speculative stack is not empty is BOS <= TOSR <
+TOSW; otherwise, the speculative stack is empty. (To clarify, during a
+speculative stack pop, TOSR moves toward BOS. Thus, if TOSR is not within the
+speculative stack, it indicates the speculative stack is empty. Where does the
+speculative stack data go? It resides in the commit stack, which is related to
+the BOS update logic, provided the speculative stack does not overflow.)
 
-### 推测弹栈
+### Speculative pop
 
-![specPop逻辑细节](../figure/BPU/RAS/spec_pop.png)
+![specPop logic details](../figure/BPU/RAS/spec_pop.png)
 
-推测栈进行Pop的时候，只会移动一个指针TOSR，用于指向当前推测栈的栈顶。TOSR :=
-spec_nos(TOSR)。NOS不进行更新，是因为每一个推测栈项都记录了nos点，TOSR移动，也就代表着当前的NOS跟着移动了。TOSW不移动，目的保留压栈历史，便于追踪回溯。还有一个指针是ssp，用于记录预测过程中栈顶的位置。它的更新是按照原始的RAS栈结果进行更新的，Pop的时候，ssp减一。当然ssp是否减1需要结合sctr的值。
+During a speculative stack Pop, only the TOSR pointer is moved to point to the
+current speculative stack top: TOSR := spec_nos(TOSR). NOS is not updated
+because each speculative stack entry records its nos point, and moving TOSR
+inherently updates the current NOS. TOSW remains unchanged to preserve push
+history for traceability. Another pointer, ssp, records the stack top position
+during prediction. It is updated based on the original RAS stack results: during
+a Pop, ssp is decremented by one, though this depends on the sctr value.
 
 
-### 推测压栈
+### Speculative Push
 
-![specPush逻辑细节](../figure/BPU/RAS/spec_push.png)
+![Details of specPush Logic](../figure/BPU/RAS/spec_push.png)
 
-推测栈进行Push的时候，TOSW := TOSW + 1，spec_nos(TOSW) := TOSR，TOSR :=
-TOSW，spec_queue(TOSW) := io.spec_push_addr，ssp = ssp +
-1.U。当压入新项时，TOSW指向新的未分配项，TOSR指向新的栈顶，NOS指针将记录上一个栈顶的位置，即为记录在spec_nos队列中，便于后续的恢复使用。新压入项的地址将被记录在spec_queue中。（你可能会疑惑，栈一直在增长，炸了这么办。---
-BOS指针更新与栈溢出机制处理）
+When the speculative stack performs a Push operation, TOSW := TOSW + 1,
+spec_nos(TOSW) := TOSR, TOSR := TOSW, spec_queue(TOSW) := io.spec_push_addr, ssp
+= ssp + 1.U. Upon pushing a new entry, TOSW points to the new unallocated entry,
+TOSR points to the new stack top, and the NOS pointer records the position of
+the previous stack top, stored in the spec_nos queue for subsequent recovery.
+The address of the newly pushed entry is recorded in spec_queue. (You might
+wonder, what if the stack keeps growing indefinitely? --- BOS pointer update and
+stack overflow handling mechanisms.)
 
-### 提交栈更新
+### Commit stack update
 
-提交栈的更新与通常的返回堆栈结构类似不再赘述，稍有点区别是其Push和Pop信号来自于对应call和ret指令退休时。
+The update of the commit stack is similar to the conventional return stack
+structure and will not be elaborated further. A slight difference is that its
+Push and Pop signals come from the retirement of corresponding call and ret
+instructions.

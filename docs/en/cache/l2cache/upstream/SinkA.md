@@ -1,10 +1,14 @@
 # SinkA
 
-## 功能描述
-SinkA把来自[总线A通道，预取器]的请求进行处理，转化为内部任务格式，然后发送给RequestBuffer。二者同时来请求时，总线A通道的请求有着更高的优先级。
+## Functional Description
+SinkA processes requests from [Bus A channel, prefetcher], converts them into
+the internal task format, and then sends them to the RequestBuffer. When
+requests arrive simultaneously, those from the Bus A channel have higher
+priority.
 
-### 特性1：A通道/预取器阻塞
-当RequestBuffer不能接收SinkA的申请时，总线A通道接口/预取器通过valid/ready协议来阻塞后面的申请。
+### Feature 1: A channel/prefetcher blocking
+When the RequestBuffer cannot accept requests from SinkA, the Bus A channel
+interface/prefetcher blocks subsequent requests using the valid/ready protocol.
 
-## 整体框图
+## Overall Block Diagram
 ![SinkA](./figure/SinkA.svg)

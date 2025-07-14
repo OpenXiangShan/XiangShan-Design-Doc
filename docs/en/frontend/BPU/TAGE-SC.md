@@ -1,376 +1,602 @@
-# BPU 子模块 TAGE-SC
+# BPU Submodule TAGE-SC
 
-## 功能
+## Function
 
-TAGE-SC 是南湖架构条件分支的主预测器，属于精确预测器（Accurate Predictor，简称 APD）。其中 TAGE
-利用历史长度不同的多个预测表，可以挖掘极长的分支历史信息；SC 是统计校正器。
+TAGE-SC is the main predictor for conditional branches in the Nanhu
+architecture, classified as an Accurate Predictor (APD). TAGE leverages multiple
+prediction tables with varying history lengths to exploit extremely long branch
+history information, while SC serves as a statistical corrector.
 
-TAGE 由一个基预测表和多个历史表组成，基预测表用 PC 索引，而历史表用 PC 和一定长度的分支历史折叠后的结果异或索引，不同历
-史表使用的分支历史长度不同。在预测时，还会用 PC 和每个历史表对应的分支历史的另一种折叠结果异或计算 tag，与表中读出的 tag
-进行匹配，如果匹配成功则该表命中。最终的结果取决于命中的历史长度最长的预测表的结果。
+TAGE consists of a base prediction table and multiple history tables. The base
+prediction table is indexed by the PC, while the history tables are indexed by
+the XOR result of the PC and a folded version of the branch history of a certain
+length. Different history tables use branch histories of varying lengths. During
+prediction, a tag is also calculated by XORing the PC with another folded
+version of the branch history corresponding to each history table, which is then
+matched against the tag read from the table. A match indicates a hit for that
+table. The final result depends on the prediction from the history table with
+the longest matching history length.
 
-当 SC 认为 TAGE 有较大的概率误预测时，它会反转最终的预测结果。
+When SC determines that TAGE has a high probability of misprediction, it inverts
+the final prediction result.
 
-在南湖架构中，每次预测最多同时预测 2 条条件分支指令。在访问 TAGE 的各个历史表时，用预测块的起始地址作为
-PC，同时取出两个预测结果，它们所用的分支历史也是相同的。
+In the Nanhu architecture, each prediction can simultaneously predict up to two
+conditional branch instructions. When accessing various history tables of TAGE,
+the starting address of the prediction block is used as the PC, and two
+prediction results are fetched simultaneously, both using the same branch
+history.
 
-### TAGE：设计思路
+### TAGE: Design Concept
 
-TAGE
-作为一种混合式预测器，其优势在于可以同时根据不同长度的分支历史序列，对某一个分支指令分别进行分支预测，并且对在该分支指令在各个历史序列下的准确率进行评估，并且选择历史准确率最高者作为最终分支预测的判断标准。
+As a hybrid predictor, TAGE's advantage lies in its ability to perform branch
+predictions for a given branch instruction based on different lengths of branch
+history sequences simultaneously. It evaluates the accuracy of the branch
+instruction under various historical sequences and selects the one with the
+highest historical accuracy as the final branch prediction criterion.
 
-相较于传统的混合式预测器，TAGE 兼具下两个新的设计特性，使得其预测准确率得到可观的提升：
+Compared to traditional hybrid predictors, TAGE incorporates two new design
+features that significantly improve its prediction accuracy:
 
-- 对于每个预测表中的表项添加了 tag 数据。在传统的优先分支预测器中，往往仅采用分支历史以及当前分支指令的 PC 值作为依据来对预
-  测表进行取指。这种情况会导致多条不同的分支指令指向同一个预测表表项的情况(aliasing)产生，而这种情况对混合式预测器中采取的分支历史长度较短的部分预测表所给出的分支预测准确率影响尤为显著。因此，在
-  TAGE 的设计中，通过 partial tagging 的方法，可以更 好地将当前指令与预测表中的表项进行实际的匹配，从而较大程度地避免上述情况的产生。
-- 采用几何级数变化的分支历史长度来索引不同的预测表，从而使得在分支预测过程中对各个预测表中的表项选择过程的粒度得到了很大的提升。除此之外，在每个表项中还添加了一个
-  usefulness
-  计数器，用于记录该表项对于分支预测的有用程度。通过这种设计，各类分支指令都有更高的几率藉由预测准确率最高的分支历史长度进行索引来做出最终的分支预测。
+- Tag data is added to each entry in the prediction tables. In traditional
+  priority branch predictors, only branch history and the current branch
+  instruction's PC value are often used as the basis for fetching from the
+  prediction table. This can lead to multiple different branch instructions
+  pointing to the same prediction table entry (aliasing), which particularly
+  affects the prediction accuracy of the shorter history length parts in hybrid
+  predictors. Therefore, in the TAGE design, the partial tagging method better
+  matches the current instruction with the actual entries in the prediction
+  table, significantly reducing the occurrence of such situations.
+- Geometrically varying branch history lengths are used to index different
+  prediction tables, significantly improving the granularity of table entry
+  selection during branch prediction. Additionally, a usefulness counter is
+  included in each table entry to record its contribution to branch prediction
+  accuracy. This design ensures that various branch instructions have a higher
+  likelihood of being indexed by the most accurate branch history length for
+  final prediction.
 
-以上两个设计特性使得 TAGE
-预测器既不会因为所选取的历史分支长度过短而使得某个预测表中的表项同时映射到多条不同的指令从而降低表项的信息有效程度，也不会因为选取的历史长度分支过大而使得整个
-TAGE 需要经过很长时间的更新之后才能够发挥有效的预测功能。因此，TAGE 所可采用的分支历史长度范围非常大，可以用于判断各种代码语境下的分支指令。
+These two design features ensure that the TAGE predictor neither suffers from
+reduced information effectiveness due to overly short selected branch history
+lengths (which could cause multiple different instructions to map to the same
+table entry) nor requires an excessively long time to become effective due to
+overly long branch history lengths. Therefore, TAGE can utilize a very wide
+range of branch history lengths, making it suitable for predicting branch
+instructions in various code contexts.
 
-### TAGE：硬件实现
+### TAGE: Hardware Implementation
 
-TAGE 是高精度条件分支方向预测器。使用不同长度的分支历史和当前 PC 值寻址多个 SRAM 表，当在多个表中出现命中时，优先选择最
-命中的历史长度最长的对应表项的预测结果作为最终结果。
+TAGE is a high-precision conditional branch direction predictor. It uses branch
+histories of varying lengths and the current PC value to address multiple SRAM
+tables. When hits occur in multiple tables, the prediction result from the entry
+with the longest matching history is prioritized as the final result.
 
-![TAGE 原理](../figure/BPU/TAGE-SC/principle.png)
+![TAGE Principle](../figure/BPU/TAGE-SC/principle.png)
 
-TAGE 的结构原理图如上图所示，提供了一个基准预测器 T0 和四个带 tag 的预测表 T1-T4，基准预测器和带 tag 的预测表的基本信息见下表。
+The structural schematic of TAGE is shown in the figure above, featuring a
+baseline predictor T0 and four tagged prediction tables T1-T4. Basic information
+about the baseline predictor and the tagged prediction tables is provided in the
+table below.
 
-| **预测器**   | **是否带 tag** | **作用**                           | **表项构成**                                                                  | **项数**         |
-| --------- | ----------- | -------------------------------- | ------------------------------------------------------------------------- | -------------- |
-| 基准预测器 T0  | 否           | 用于在四个局部 tag 预测表的 tag 均不匹配时提供预测结果 | ctr 2bits（最高位给出预测结果，1 跳转，0 不跳转）                                           | set 2048way 2  |
-| 预测表 T1-T4 | 是           | 存在 tag 匹配时，选历史长度最长者提供预测结果        | valid 1bittag 8bitsctr 3bits（最高位给出预测结果，1 跳转，0 不跳）us: 1bit（usefulness 计数器） | T1-T4 各 4096 项 |
+| **predictor**           | ** with tag** | ** function **                                                                                            | ** entry composition **                                                                                                                          | **item count**                |
+| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| Baseline Predictor T0   | No            | Used to provide prediction results when none of the four local tag prediction tables' tags match.         | ctr is 2 bits (the highest bit provides the prediction result: 1 for jump, 0 for no jump).                                                       | set 2048way 2                 |
+| Prediction tables T1-T4 | Yes           | When there is a tag match, the one with the longest history is selected to provide the prediction result. | valid 1bit, tag 8bits, sctr 3bits (the highest bit indicates the prediction result: 1 for taken, 0 for not taken), us: 1bit (usefulness counter) | T1-T4 each have 4096 entries. |
 
-注：上表中的 way 是 chisel 里 SRAMTemplate 类的参数名字，这个参数的值表达在 SRAM 里面存储几份同样类型的数据，不一定代表通常意义
-上的需要 tag 匹配的 way。T0 有两个 way 是因为预测块内最多两条分支指令，不同的 way 是为了分别对预测块内两条不同的分支指令进行预测。
+Note: The "way" in the table above is a parameter name in the SRAMTemplate class
+in Chisel. The value of this parameter indicates how many copies of the same
+type of data are stored in the SRAM, not necessarily representing the
+conventional sense of "way" that requires tag matching. T0 has two ways because
+the prediction block can contain up to two branch instructions, with different
+ways used to predict the two distinct branch instructions within the block.
 
-每个预测块的两条跳转指令的预测内容是分开存储、分开 update 的。带 tag 的预测表 T1-T4 的 4096 项要平均分成两个 bank
-分给预测块内最多两条分支，每个 bank 有 2048 项，所以预测表 T1-T4 的 index 只有 11bit，是
-log2（预测表的项数/2）。同一个预测块中的两条分支指令的 index 是相同的，但是索引的是两个不同的 bank，一次读出来的来自两个 bank
-代表两条预测信息的结果可能会出现一个是 hit，一个没有 hit。
+The prediction contents for the two jump instructions in each prediction block
+are stored and updated separately. The 4096 entries of the tagged prediction
+tables T1-T4 are evenly divided into two banks for up to two branches per
+prediction block, with each bank containing 2048 entries. Thus, the index for
+tables T1-T4 is only 11 bits, calculated as log2(number of table entries/2). The
+two branch instructions in the same prediction block share the same index but
+access different banks, potentially resulting in one hit and one miss when
+reading prediction results from both banks simultaneously.
 
-TAGE 类预测器的每一个预测表都有特定的历史长度。为了让原本很长的全局分支历史表能够与 PC 异或后进行预测表的索引或 tag 匹配，原
-本很长的分支历史序列需要被分成很多段，然后全部异或起来。每一段的长度一般等于历史表深度的对数。由于异或的次数一般较多，为了避免预测路径上多级异或的时延，我们会直接存储折叠后的历史。
+Each prediction table in a TAGE-style predictor has a specific history length.
+To enable the originally long global branch history table to index or match tags
+with the PC through XOR operations, the lengthy branch history sequence is
+divided into multiple segments, which are then XORed together. The length of
+each segment is typically equal to the logarithm of the history table depth. Due
+to the frequent XOR operations, folded history is stored directly to avoid the
+latency of multi-level XOR operations on the prediction path.
 
-每个预测表对应的折叠分支历史都有三份，一份用于索引预测表，两份用于 tag 匹配。在 BPU 模块中维护了一个 256 比特的全局分支历史 ghv，并为
-TAGE 的 4 个带 tag 的预测表分别维护了各自的折叠分支历史。具体配置见下表（见 TageTableInfos），其中 ghv 是一个循环队列，"低"n
-位指的是从 ptr 指示的位置算起的低位：
+Each prediction table has three corresponding folded branch histories: one for
+indexing the prediction table and two for tag matching. The BPU module maintains
+a 256-bit global branch history ghv and separately maintains folded branch
+histories for each of TAGE's four tagged prediction tables. The specific
+configuration is shown in the table below (see TageTableInfos), where ghv is a
+circular queue, and the "lower" n bits refer to the lower bits starting from the
+position indicated by ptr:
 
-| **历史**      | **index 折叠分支历史长度** | **tag 折叠分支历史 1 长度** | **tag 折叠分支历史 2 长度** | **设计原理**                |
-| ----------- | ------------------ | ------------------- | ------------------- | ----------------------- |
-| 全局分支历史 ghv  | 256 比特（非折叠）        | 无                   | 无                   | 每比特代表对应分支跳转与否           |
-| T1 对应折叠分支历史 | 8 比特               | 8 比特                | 7 比特                | ghv 取 ptr 起低 8 比特折叠异或   |
-| T2 对应折叠分支历史 | 11 比特              | 8 比特                | 7 比特                | ghv 取 ptr 起低 13 比特折叠异或  |
-| T3 对应折叠分支历史 | 11 比特              | 8 比特                | 7 比特                | ghv 取 ptr 起低 32 比特折叠异或  |
-| T4 对应折叠分支历史 | 11 比特              | 8 比特                | 7 比特                | ghv 取 ptr 起低 119 比特折叠异或 |
+| ** history**                             | **index folded branch history length** | **tag folded branch history 1 length** | ** tag folded branch history 2 length** | ** Design principle **                                                |
+| ---------------------------------------- | -------------------------------------- | -------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
+| Global branch history ghv                | 256 bits (non-folded)                  | None                                   | None                                    | Each bit represents whether the corresponding branch is taken or not. |
+| T1 corresponds to folded branch history  | 8-bit                                  | 8-bit                                  | 7 bits                                  | ghv takes the lower 8 bits of ptr for folded XOR                      |
+| T2 corresponds to folded branch history  | 11 bits                                | 8-bit                                  | 7 bits                                  | ghv takes the lower 13 bits from ptr, folds, and XORs them.           |
+| T3 corresponds to folded branch history. | 11 bits                                | 8-bit                                  | 7 bits                                  | ghv takes the lower 32 bits of ptr for folded XOR                     |
+| T4 corresponds to folded branch history  | 11 bits                                | 8-bit                                  | 7 bits                                  | ghv takes the lower 119 bits from ptr for folded XOR.                 |
 
-![折叠历史真实实现](../figure/BPU/TAGE-SC/folded_history.png)
+![Folded History Actual
+Implementation](../figure/BPU/TAGE-SC/folded_history.png)
 
-如上图所示，出于时序考虑，折叠分支历史的具体实现方式并不是设计原理中的折叠，而是把折叠前的分支历史最老的那一位（图中对应 h[12]）和最新的一位（图中对应
-h[0]）异或到相应的位置（图中对应 c[1]和 c[4]），再做一个移位操作（图中对应变为 c[0]和 c[2]）即 可，伪代码如下所示：
+As shown in the figure above, for timing considerations, the specific
+implementation of the folded branch history is not the folding in the design
+principle. Instead, the oldest bit of the pre-folded branch history (h[12] in
+the figure) and the newest bit (h[0] in the figure) are XORed to the
+corresponding positions (c[1] and c[4] in the figure), followed by a shift
+operation (transforming into c[0] and c[2] in the figure). The pseudocode is as
+follows:
 
-c[0] \<= c[4] ^ h[0];
+c[0] <= c[4] ^ h[0];
 
-c[1] \<= c[0];
+c[1] \&lt;= c[0];
 
-c[2] \<= c[1] ^ h[12];
+c[2] <= c[1] ^ h[12];
 
-c[3] \<= c[2];
+c[3] <= c[2];
 
-c[4] \<= c[3];
+c[4] \&lt;= c[3];
 
-分支历史表不只会在后端提交之后更新，s1~s3 中间每一级都有可能更新，更新时更新的是 pointer 和值。如果在 s1~s3 产生了新的结果就 会恢复
-pointer，更新新的值.但是如果预测没有错误就不会修改（因为之前已经更新过了）。
+The branch history table is not only updated after backend commit; each stage
+from s1 to s3 may update it, updating the pointer and value. If new results are
+generated in s1~s3, the pointer is restored, and new values are updated.
+However, if the prediction is correct, no modification is made (as it was
+already updated previously).
 
-注：由 TAGE 的折叠分支历史具体配置表可见，tag 折叠分支历史有 2 个。二者都是使用相同的折叠算法，区别只是在于折叠长度不同，T1-T4 的 tag
-折叠分支历史 1 都为 8 比特，而 tag 折叠分支历史 2 都为 7 比特。
+Note: As seen in the specific configuration table of TAGE's folded branch
+history, there are two folded branch histories for tags. Both use the same
+folding algorithm, differing only in the folding length. The tag folded branch
+history 1 for T1-T4 is 8 bits, while tag folded branch history 2 is 7 bits.
 
-### TAGE：预测时序
+### TAGE: Prediction Timing
 
-在每次进行预测时，首先在每个带 tag 的预测表中使用 pc 值以及各自的分支历史进行两种不同的哈希函数计算（见下表），计算结果分别 用于计算该运算的最终
-tag 以及对预测表的索引。
+During each prediction, two different hash functions are first computed in each
+tagged prediction table using the pc value and their respective branch histories
+(see table below). The computation results are used to calculate the final tag
+for the operation and to index the prediction table.
 
-|       | 计算方式                                          |
-| ----- | --------------------------------------------- |
-| Index | （index 折叠分支历史）^（（pc>>1）的低位）                   |
-| Tag   | （tag 折叠分支历史 1）^（tag 折叠分支历史 2<<1）^（（pc>>1）的低位） |
+|       | Calculation Method                                                                             |
+| ----- | ---------------------------------------------------------------------------------------------- |
+| Index | (index folded branch history) ^ ((pc >> 1) lower bits)                                         |
+| Tag   | (tag folded branch history 1) ^ (tag folded branch history 2 << 1) ^ (lower bits of (pc >> 1)) |
 
-若 T1-T4 中索引所得到的 valid 为 1，且 tag 与计算 tag 哈希函数得到的结果匹配，则该预测表中给出的 pred
-最高位被加入最终的分支预判序 列。最终，通过多级 MUX，可以从所有 tag 匹配的分支预判中选择历史长度最长者作为最终预测结果。
+If the valid bit obtained from indexing T1-T4 is 1, and the tag matches the
+result computed by the tag hash function, the highest bit of the pred provided
+by that prediction table is added to the final branch prediction sequence.
+Ultimately, through multi-level MUX, the prediction with the longest history
+length among all tag-matched branch predictions can be selected as the final
+prediction result.
 
-若 T1-T4 无匹配，则采用 T0 为最终的预测结果。T0 的索引方式为直接用 pc 的低 11 位进行索引。
+If there is no match in T1-T4, T0 is used as the final prediction result. T0 is
+indexed directly using the lower 11 bits of the PC.
 
-TAGE 需要 2 拍延迟：
+TAGE requires a 2-cycle delay:
 
-- 0 拍生成 SRAM 寻址用 index。index 的生成过程就是把折叠历史和 pc 异或，折叠历史的管理不在 ITTAGE 和 TAGE 内部，而在
-  BPU 里
-- 1 拍读出结果
-- 2 拍输出预测结果
+- The index for SRAM addressing is generated in 0 cycles. The index generation
+  process involves XORing the folded history with the PC. The management of the
+  folded history is handled outside ITTAGE and TAGE, within the BPU.
+- 1-cycle Readout Result
+- 2-cycle output prediction result
 
-  ### TAGE：预测器训练
+  ### TAGE: Predictor Training
 
-首先，定义所有产生 tag 匹配的预测表中所需历史长度最长者为 provider，而其余产生 tag 匹配的预测表（若存在的话）被称为 altpred。
+First, define the predictor with the longest required history length among all
+prediction tables that produce a tag match as the provider, while the remaining
+prediction tables (if any) that produce a tag match are referred to as altpred.
 
-TAGE 表项中包含一个 usefulness 域，当 provider 预测正确而 altpred 预测错误时 provider 的 usefulness 置
-1，表示该项是一个有用的项，便不会被训练时的分配算法当作空项分配出去。当 provider 产生的预测被证实为一个正确的预测，且此时的 provider 与
-altpred 的预测结果 不同，则 provider 的 usefulness 域被置 若分支指令实际是跳转，则将对应 provider 表项的 ctr
-计数器自增 1；若分支指令实际是不跳转，则将对应 provider 表项的 ctr 计数器自减 若由于误预测导致 TAGE 表项需要更新，且误预测不是由使用
-altpred 而抛弃了正确的 provider 导致的，则说明需要增添表项。但此时并不 一定真的能够增添表项。还需要满足 provider
-所源自的预测表并非所需历史长度最长的预测表，则此时执行表项增添操作。
+The TAGE entry includes a usefulness field. When the provider predicts correctly
+and the altpred predicts incorrectly, the provider's usefulness is set to 1,
+indicating that the entry is useful and will not be treated as an empty entry by
+the allocation algorithm during training. When the provider's prediction is
+confirmed to be correct, and the provider's prediction differs from the
+altpred's result, the provider's usefulness field is set. If the branch
+instruction actually jumps, the corresponding provider entry's ctr counter is
+incremented by 1; if the branch instruction does not jump, the ctr counter is
+decremented. If a misprediction requires updating the TAGE entry, and the
+misprediction is not caused by using altpred while discarding the correct
+provider, it indicates the need to add an entry. However, this does not
+necessarily guarantee the addition of an entry. It also requires that the
+provider's prediction table is not the one with the longest required history
+length, in which case the entry addition operation is performed.
 
-这里从逻辑上举一个判断是否满足 provider 所源自的预测表并非所需历史长度最长的预测表的例子：
+Here is a logical example to determine whether the prediction table from which
+the provider originates is not the one with the longest required history length:
 
-s1_providers(i)表示预测块中第 i 条分支的 provider 对应的预测表序号，假设 provider 在预测表 T2 中，则
-LowerMask(UIntToOH(s1_providers(i)), TageNTables)为 0b0011。
-s1_provideds(i)表示预测块中第 i 条分支的 provider 是否在 T1~T4，根据刚刚的假设，Fill(TageNTables,
-s1_provideds(i).asUInt)为 0b1111，二者相与，得到结果为 0b0011，再取反得到 0b1100，于是可以看出 T3、T4 都是比
-provider 历史长度更长的预测表。
+s1_providers(i) represents the serial number of the prediction table
+corresponding to the provider of the i-th branch in the prediction block.
+Assuming the provider is in prediction table T2, then
+LowerMask(UIntToOH(s1_providers(i)), TageNTables) is 0b0011. s1_provideds(i)
+indicates whether the provider of the i-th branch in the prediction block is in
+T1~T4. Based on the previous assumption, Fill(TageNTables,
+s1_provideds(i).asUInt) is 0b1111. The two are ANDed to get 0b0011, then
+inverted to get 0b1100, showing that T3 and T4 are prediction tables with longer
+history lengths than the provider.
 
-再举一个例子。在最开始，预测表都是空的，不存在 provider，此时对应的 s1_providers(i)为 0， s1_provideds(i)为
-false，则此时 Fill(TageNTables, s1_provideds(i).asUInt)为 0b0000，二者相与取反一定得到 0b1111，说明
-T1~T4 都属于所谓的比 provider 历史长度 更长的预测表。
+Take another example. Initially, the prediction tables are all empty, and there
+is no provider. At this time, the corresponding s1_providers(i) is 0, and
+s1_provideds(i) is false. Then, Fill(TageNTables, s1_provideds(i).asUInt) is
+0b0000. The bitwise AND of these values and their inversion will definitely
+yield 0b1111, indicating that T1~T4 belong to the so-called prediction tables
+with longer history lengths than the provider.
 
-具体的表项增添操作如下：
+The specific steps for adding a new table entry are as follows:
 
-表项增添操作会首先读取所有历史长度长于 provider 的预测表的 usefulness。若此时有某表的 usefulness 域值为 0，则在该表中分配一对
-应的表项；若没有找到满足 usefulness 域值为 0 的表，则分配失败。当有多个预测表（如 Tj,Tk 两项）的 usefulness 域均为 0
-时，表项的分配概率是随机的，分配的时候随机把某些 table 给 mask 掉，让它不会每次都分配同一个。这个 mask 的具体实现是：待选的历史表中（长度
-大于 provider 且 u 为 0 的所有历史表），使用产生的随机数随机将一些表屏蔽掉，如果 maskedEntry 的第一个不可用，那么选没 mask
-的第一个。这里的表项分配的随机性是通过 chisel 的 util 包里的 64 位线性反馈移位寄存器原语 LFSR64 生成伪随机数来实现的，在
-verilog 代码中 对应 allocLFSR_lfsr 寄存器。在训练时，用 7bit 饱和计数器 bankTickCtrs
-统计分配失败次数-成功次数，当分配失败的次数足够多，bankTickCtrs 计数器计数到满达到饱和时，触发全局 useful bit reset，把所有的
-usefulness 域清零。
+The entry addition operation first reads the usefulness fields of all prediction
+tables with history lengths longer than the provider's. If any table's
+usefulness field is 0, a corresponding entry is allocated in that table; if no
+such table is found, the allocation fails. When multiple prediction tables
+(e.g., Tj and Tk) have usefulness fields of 0, the entry allocation is random.
+During allocation, certain tables are randomly masked to prevent repeated
+allocations to the same table. The masking implementation involves: among the
+candidate history tables (those with lengths greater than the provider's and
+u=0), a random number is used to mask some tables. If the first masked entry is
+unavailable, the first unmasked entry is selected. The randomness in entry
+allocation is achieved using a 64-bit linear feedback shift register (LFSR64)
+primitive from the Chisel util package, corresponding to the allocLFSR_lfsr
+register in the Verilog code. During training, a 7-bit saturating counter
+bankTickCtrs tracks the difference between allocation failures and successes.
+When allocation failures accumulate sufficiently, causing bankTickCtrs to
+saturate, a global useful bit reset is triggered, clearing all usefulness
+fields.
 
-最后，在初始化时/TAGE 表分配新项时，所有的表项中的 ctr 计数器均被设置为 0，所有的 usefulness 域均被设置为 0。
+Finally, during initialization or when allocating new entries in the TAGE table,
+all ctr counters in the entries are set to 0, and all usefulness fields are set
+to 0.
 
-注：同一个预测块中的两条分支指令对应的 usefulness 不一定是相等的，如果 altpred 的第一条分支预测跳转，第二条分支预测不跳转，provider
-的都预测跳转，就只有第一个 u 要置一。
+Note: The usefulness values corresponding to two branch instructions in the same
+prediction block are not necessarily equal. If the first branch prediction of
+altpred jumps and the second does not, while the provider's predictions both
+jump, only the first u needs to be set to one.
 
-注：meta 是预测器预测的时候的数据，update 的时候拿回来更新用。都叫 meta 是因为 composer 将所有预测器整合起来，用共同的接口 meta
-和外界交互。TAGE 的 meta 具体构成见下图：
+Note: Meta refers to the data used by the predictor during prediction, which is
+retrieved during updates for training. It is called meta because the composer
+integrates all predictors with a common interface named meta for external
+interaction. The specific composition of TAGE's meta is shown in the figure
+below:
 
-![TAGE meta 构成](../figure/BPU/TAGE-SC/tage_meta.png)
+![TAGE Meta Structure](../figure/BPU/TAGE-SC/tage_meta.png)
 
-### TAGE：备选预测逻辑（USE ALT ON NA）
+### TAGE: Alternative Prediction Logic (USE ALT ON NA)
 
-当 tag 匹配的项的置信度计数器 ctr 为 0 时，altpred 有时比正常预测更准确。因此在实现中使用一个 4-bit 计数器
-useAltCtr，动态决定是否在最长历史匹配结果信心不足时使用备选预测。在实现中处于时序考虑，始终用基预测表的结果作为备选预测，这带来的准确率损失很小。
+When the confidence counter ctr of a tag-matched entry is 0, altpred can
+sometimes be more accurate than the regular prediction. Thus, a 4-bit counter
+useAltCtr is implemented to dynamically decide whether to use the alternative
+prediction when the longest-history match lacks confidence. For timing
+considerations, the base prediction table's result is always used as the
+alternative prediction, resulting in minimal accuracy loss.
 
-备选预测逻辑的具体实现如下：
+The specific implementation of the alternative prediction logic is as follows:
 
-ProviderUnconf 表示最长历史匹配结果的信心不足。当 provider 对应的 ctr 值为 0b100、0b011
-时，说明最长历史匹配结果的信心很足，此 时 providerUnconf 为 false；当 provider 对应的 ctr 值为 0b01、0b10
-时，说明最长历史匹配结果的信心不足，此时 providerUnconf 为 true。
+ProviderUnconf indicates insufficient confidence in the longest history match
+result. When the provider's corresponding ctr value is 0b100 or 0b011, it means
+the confidence in the longest history match result is high, and providerUnconf
+is false. When the provider's corresponding ctr value is 0b01 or 0b10, it means
+the confidence is insufficient, and providerUnconf is true.
 
-useAltOnNaCtrs 是 128 个 4-bit 饱和计数器构成的计数器组，每个计数器都被初始化为 0b1000。在 TAGE
-收到训练更新请求时，如果拿来训练的预测中，发现 provider 的预测结果与 altpred 不同，且 provider
-的预测结果信心不足，则讨论备选预测结果是否正确。如果备选预测结 果正确而 provider 错误，则对应 useAltOnNaCtrs
-计数器的值+1；若备选预测结果错误而 provider 正确，则对应 useAltOnNaCtrs 计数器的值-1。因为 useAltOnNaCtrs
-是饱和计数器，所以当 useAltOnNaCtrs 值已经为 0b1111 且正确或已经为 0b0000 且错误时，useAltOnNaCtrs 的值不变。
+useAltOnNaCtrs is a counter group consisting of 128 4-bit saturating counters,
+each initialized to 0b1000. When TAGE receives a training update request, if the
+training prediction shows that the provider's prediction differs from altpred
+and the provider's prediction lacks confidence, the correctness of the
+alternative prediction is evaluated. If the alternative prediction is correct
+while the provider's is wrong, the corresponding useAltOnNaCtrs counter
+increments by 1; if the alternative prediction is wrong while the provider's is
+correct, the counter decrements by 1. Since useAltOnNaCtrs are saturating
+counters, their values remain unchanged when already at 0b1111 (correct) or
+0b0000 (wrong).
 
-useAltOnNa 是利用 pc(7, 1)，即 pc 的对应低位索引 useAltOnNaCtrs 计数器组后得到的计数结果的最高位。
+useAltOnNa is obtained by indexing the useAltOnNaCtrs counter group with pc(7,
+1), i.e., the corresponding lower bits of the PC, and taking the highest bit of
+the resulting count.
 
-当 providerUnconf && useAltOnNa 为真时，使用备选预测结果（即基预测表的结果）为 TAGE 最终的预测结果，而不是 provider
-的预测结果。
+When providerUnconf && useAltOnNa is true, the alternative prediction result
+(i.e., the base prediction table's result) is used as the final TAGE prediction
+result instead of the provider's prediction result.
 
-### TAGE：wrbypass
+### TAGE: wrbypass
 
-Wrbypass 里面有 Mem，也有 Cam，用于给更新做定序，每次 TAGE 更新时都会写进这个 wrbypass，同时写进对应预测表的
-sram。每次更新的时候会查这个 wrbypass，如果 hit 了，那就把读出的 TAGE 的 ctr 值作为旧值，之前随 branch
-指令带到后端再送回前端的 ctr 旧值就不要了。这 样如果一个分支重复更新，那 wrbypass 可以保证某一次更新一定能拿到相邻的上一次更新的最终值。
+Wrbypass contains both Mem and Cam, used to sequence updates. Every TAGE update
+is written to this wrbypass and the corresponding prediction table's SRAM.
+During each update, the wrbypass is checked. If a hit occurs, the read TAGE ctr
+value is used as the old value, discarding the old ctr value brought back from
+the backend with the branch instruction. This ensures that if a branch is
+updated repeatedly, wrbypass guarantees that one update will always obtain the
+final value from the adjacent previous update.
 
-T0 有一个对应的 wrbypass，T1~T4 各有 16 个。每个预测表对应的 wrbypass 中，Mem 都有 8 个 entry，T0 每个
-entry 存储 2 个（对应两个 bank）预测表的表项，T1~T4 每个 entry 存储 1 个（因为 2 个 bank 存在不同的 wrbypass
-里）预测表的表项 ；Cam 有 8 个 entry，输入更新的 idx 和 tag（T0 没有 tag）就可以读到对应数据在 Cam 中的位置。Cam 和
-Mem 是同时写的，所以数据在 Cam 中的位置就是在 Mem 中的位置。于是利用这个 Cam， 我们就可以在更新的时候查看对应 idx 的数据是否在
-wrbypass 中。
+T0 has a corresponding wrbypass, while T1~T4 each have 16. In the wrbypass
+corresponding to each prediction table, Mem has 8 entries. For T0, each entry
+stores 2 prediction table entries (corresponding to two banks), while for T1~T4,
+each entry stores 1 (since the two banks are stored in separate wrbypasses). Cam
+also has 8 entries, and inputting the update idx and tag (T0 has no tag)
+retrieves the corresponding data's position in Cam. Cam and Mem are written
+simultaneously, so the data's position in Cam matches its position in Mem. This
+Cam allows checking during updates whether the data for a given idx is in the
+wrbypass.
 
-### 存储结构
+### Storage structure
 
-- 4 张历史表，每张表根据 pc 低位分了共 8 个 bank，每个 bank 有 256 个 set，每个 set 对应一个 FTB 项的最多 2
-  条分支。每个 bank 共 512 项，每张表共 4096 项，所有表共 16K 项
-- 每个表项含有 1bit valid，8bit tag，3bit ctr，1bit useful；其中 useful bit 独立存储
-- base table 有 2048 set，每 set 两条分支各一个 2bit 饱和计数器，共记录 4K 条分支
-- 历史表每个 bank 有 8 项的写缓存 wrbypass，base table 共有 8 项的 wrbypass
-- use_alt_on_na 预测共 128 个 4 bit 饱和计数器
+- There are 4 history tables, each divided into 8 banks based on the lower bits
+  of the PC, with each bank containing 256 sets. Each set corresponds to a
+  maximum of 2 branches in an FTB entry. Each bank has 512 entries, each table
+  has 4096 entries, and all tables combined have 16K entries.
+- Each table entry contains 1-bit valid, 8-bit tag, 3-bit ctr, and 1-bit useful;
+  the useful bit is stored independently.
+- The base table has 2048 sets, with each set containing two branches, each with
+  a 2-bit saturating counter, recording a total of 4K branches.
+- Each bank of the history table has an 8-entry write buffer wrbypass, and the
+  base table has a total of 8-entry wrbypass.
+- use_alt_on_na predicts a total of 128 4-bit saturating counters
 
-### 索引方式
+### Indexing method
 
 - index = pc[11:1] ^ folded_hist(11bit)
 - tag = pc[11:1] ^ folded_hist(8bit) ^ (folded_hist(7bit) << 1)
-- 历史采取基本的分段异或折叠
-- 每项两条分支和 FTB 两个 slot 之间的两种对应关系，用 pc[1]选取，由于 FTB 项的建立机制，第一个 slot
-  的使用率会大于第二个，此举可以缓解这种分布不均的情况
-- base table 和 use_alt_on_na 都直接使用 pc 低位索引
+- The history employs basic segmented XOR folding.
+- Each item has two branches and two corresponding relationships between the two
+  slots in the FTB, selected by pc[1]. Due to the establishment mechanism of FTB
+  entries, the utilization rate of the first slot is higher than the second.
+  This measure can alleviate such uneven distribution.
+- The base table and use_alt_on_na directly use the lower bits of the PC for
+  indexing.
 
-### 预测流程
+### Prediction flow
 
-- s0 进行索引计算，地址送入 SRAM，仅有对应的 bank 被使能
-- s1 进行 tag 匹配和 bank 数据选取，以及两个 slot 间的重排序，得到每张历史表的总结果，传到顶层进行最长历史选取，结合
-  use_alt_on_na 机制，在最长历史匹配和 base table 之间进行选取（将原算法简化为始终用 base table
-  作为备选预测），得到每条分支的预测结果后暂存至 s2
-- s2 使用预测结果，在 BPU 内和 s1 结果进行比对，判断是否需要冲刷流水线
+- s0 performs index calculation, sends the address to SRAM, with only the
+  corresponding bank enabled.
+- In s1, tag matching and bank data selection are performed, along with
+  reordering between two slots, to obtain the overall result for each history
+  table. These results are passed to the top level for longest-history
+  selection. Combined with the use_alt_on_na mechanism, selection is made
+  between the longest-history match and the base table (simplifying the original
+  algorithm to always use the base table as the alternative prediction). The
+  prediction results for each branch are temporarily stored in s2.
+- s2 uses the prediction results, compares them with the s1 results within the
+  BPU, and determines whether the pipeline needs to be flushed.
 
-### 训练流程
+### Training process
 
-![训练流程](../figure/BPU/TAGE-SC/tage_update.svg)
+![Training Process](../figure/BPU/TAGE-SC/tage_update.svg)
 
-收到来自 FTQ 的训练请求后，根据预测时记录的信息进行更新，更新流程分为两个流水级，其中第一个流水级在历史表外部判断一些更新条件，细节如下：
+Upon receiving a training request from FTQ, updates are made based on the
+information recorded during prediction. The update process is divided into two
+pipeline stages, with the first stage evaluating certain update conditions
+externally to the history table. Details are as follows:
 
-- provider 更新：预测时命中的最长历史表会进行更新
-  - 当备选预测和它不同时，按 provider 是否正确，决定新的 useful bit
-  - 根据实际方向决定 ctr 的加减
-- alloc：当误预测，且排除以下情况（provider 正确，但预测时选择了错误的备选预测结果）时进行分配
-  - 分配时根据预测时记录的所有历史表的 useful bit 信息生成 mask，用随机数 LFSR 随机 mask 掉一些 bit，判断是否仍有比
-    provider 更长的历史表空余项？
-    - 如有，使用其中最短历史的项
-    - 如无，用 LFSR mask 前，历史长于 provider 的最短历史的可分配项
-- useful reset 计数器：根据分配成功/失败的净次数增减一个 8bit 饱和计数器，如失败次数过多以至饱和，清除所有的 useful bit
-  - 记比 provider 长的历史表个数为 n，其中 useful bit 为 0 的视为分配成功，反之视为失败，两者次数之差作为此次增减的绝对值
-- use_alt_on_na 训练：当 provider 的 ctr 为两个最弱的值，且备选预测和 provider 方向不同时，根据备选预测的正确与否，增减
-  pc 低 位索引的的 use_alt_on_na 饱和计数器
+- Provider update: The longest history table hit during prediction will be
+  updated.
+  - When the alternative prediction differs from it, the new useful bit is
+    determined based on whether the provider is correct.
+  - Determine the increment or decrement of ctr based on the actual direction
+- alloc: Allocation occurs when there is a misprediction, excluding the
+  following cases (the provider is correct, but the wrong alternative prediction
+  result was chosen during prediction)
+  - During allocation, a mask is generated based on the useful bit information
+    recorded in all history tables during prediction. Some bits are randomly
+    masked using the LFSR random number. It is then determined whether there are
+    any remaining entries in history tables longer than the provider's.
+    - If available, use the item with the shortest history
+    - If none are available, use the LFSR to mask the allocatable entries with
+      the shortest history longer than the provider's before masking.
+- Useful reset counter: An 8-bit saturating counter is incremented or
+  decremented based on the net success/failure of allocations. If failures
+  exceed a saturation threshold, all useful bits are cleared.
+  - Let n be the number of history tables longer than the provider. Those with a
+    useful bit of 0 are considered successful allocations, while those with a
+    useful bit of 1 are considered failures. The difference between the two
+    counts serves as the absolute value for this adjustment.
+- use_alt_on_na training: When the provider's ctr is at its two weakest values
+  and the alternative prediction differs from the provider's direction, the
+  use_alt_on_na saturating counter indexed by the lower bits of pc is
+  incremented or decremented based on the correctness of the alternative
+  prediction.
 
-第二个流水级将更新请求发入各个预测表内部，尝试写入 SRAM
+The second pipeline stage sends update requests into each prediction table,
+attempting to write to SRAM.
 
-- 其中 ctr 的旧值可能来自很久以前的预测内容，也许和现在表内 ctr 的情况已经大相径庭，为解决此问题，引入 wrbypass 机制：
-  - wrbypass 是 TAGE table 的全相联写缓存，每当尝试写入时，首先根据历史表的索引查询此全相联表，若命中，将对应的内容当作旧
-    ctr，根据对应的跳转方向更新后，同时写入 SRAM 和 wrbypass，如果不命中，根据替换算法选取一项替换
-  - 每个 bank 有一个对应的 8 项全相联 wrbypass，每个 table 共 64 项
-- 由于使用了单口 SRAM，不能同时处理读写请求，故为了避免读写冲突：
-  - 使用分 bank 的做法
-  - 当饱和且新值等于旧值时，不写入
-- 当仍然发生了读写冲突时，处理写请求，但不阻塞读请求，使用读结果时默认当作 not hit，此举可能降低准确率
+- The old value of ctr may come from predictions made long ago, possibly vastly
+  different from the current state of ctr in the table. To address this issue,
+  the wrbypass mechanism is introduced:
+  - wrbypass is a fully associative write buffer for the TAGE table. Whenever a
+    write is attempted, it first queries this fully associative table based on
+    the history table index. If a hit occurs, the corresponding content is
+    treated as the old ctr, updated according to the branch direction, and then
+    written to both SRAM and wrbypass. If a miss occurs, an entry is selected
+    for replacement based on the replacement algorithm.
+  - Each bank has a corresponding 8-entry fully associative wrbypass, with a
+    total of 64 entries per table.
+- Due to the use of single-port SRAM, read and write requests cannot be
+  processed simultaneously. To avoid read-write conflicts:
+  - Adopting a bank-partitioned approach
+  - When saturated and the new value equals the old value, no write is
+    performed.
+- When read-write conflicts still occur, the write request is processed, but the
+  read request is not blocked. The read result is treated as a miss by default,
+  which may reduce accuracy.
 
-### SC：设计思路
+### SC: Design Concept
 
-一些应用上，一些分支行为与分支历史或路径相关性较弱，表现出一个统计上的预测偏向性。对于这些分支，相比 TAGE，使用计数器捕捉统计偏向的方法更为有效。TAGE
-在预测非常相关的分支时非常有效，TAGE 未能预测有统计偏向的分支，例如只对一个方向有小偏差，但 与历史路径没有强相关性的分支。
+In some applications, certain branch behaviors exhibit a statistical prediction
+bias with weak correlation to branch history or path. For these branches, using
+counters to capture statistical bias is more effective than TAGE. TAGE is highly
+effective in predicting strongly correlated branches but fails to predict
+branches with statistical bias, such as those with a slight deviation in one
+direction but no strong correlation to historical paths.
 
-SC 统计校正的目的是检测不太可靠的预测并将其恢复。SC 负责预测具有统计偏向的条件分支指令并在该情形下反转 TAGE 预测器的结果。
+The purpose of SC statistical correction is to detect less reliable predictions
+and recover them. SC is responsible for predicting condition branch instructions
+with statistical bias and reversing the TAGE predictor's result in such cases.
 
-### SC：硬件实现
+### SC: Hardware Implementation
 
-SC 共维护了 4 个预测表，预测表的具体参数见下表。
+SC maintains 4 prediction tables, with specific parameters detailed in the table
+below.
 
-| 序号  | 项数  | ctr 长度 | 折叠后历史长度 | 设计原理                   |
-| --- | --- | ------ | ------- | ---------------------- |
-| T1  | 512 | 6      | 0       | ghv 取 ptr 起低 0 比特折叠异或  |
-| T2  | 512 | 6      | 4       | ghv 取 ptr 起低 4 比特折叠异或  |
-| T3  | 512 | 6      | 8       | ghv 取 ptr 起低 10 比特折叠异或 |
-| T4  | 512 | 6      | 8       | ghv 取 ptr 起低 16 比特折叠异或 |
+| Serial Number | Number of entries. | ctr length | Folded history length | Design Principles                                       |
+| ------------- | ------------------ | ---------- | --------------------- | ------------------------------------------------------- |
+| T1            | 512                | 6          | 0                     | GHV takes the XOR of the lower 0 bits starting from ptr |
+| T2            | 512                | 6          | 4                     | ghv takes the lower 4 bits of ptr for folded XOR        |
+| T3            | 512                | 6          | 8                     | ghv takes the lower 10 bits of ptr, folded and XORed.   |
+| T4            | 512                | 6          | 8                     | ghv takes the lower 16 bits of ptr for folded XOR       |
 
-### SC：预测时序
+### SC: Prediction Timing
 
-SC 收到来自 TAGE 的预测结果 pred 和 ctr、来自 BPU 的折叠分支历史信息和 pc，根据（（index
-折叠分支历史）^（（pc>>1）的低位））索 引 SC 预测表，根据 SC 预测表的结果 ctr 和 TAGE 的预测结果 pred 和 ctr 动态判定（见
-HasSC）是否反转 TAGE 的预测。
+SC receives the prediction result pred and ctr from TAGE, folded branch history
+information and PC from BPU, and indexes the SC prediction table based on
+((index folded branch history) ^ (lower bits of (pc>>1))). The SC prediction
+result ctr, along with TAGE's pred and ctr, dynamically determines (see HasSC)
+whether to invert TAGE's prediction.
 
-SC 的动态判定具体逻辑如下：
+The specific logic for SC's dynamic determination is as follows:
 
-SC 中实现了 2 个 bank 的 scThresholds 寄存器组，2 个 bank 是为了和 TAGE 的 2 个 bank
-对应，都是因为一个预测块内最多会有两条分支指令。SC 中动态判定的寄存器组一共就是这两个。每个 bank 的 scThresholds 中有一个 5
-比特的饱和计数器 ctr（初始值为 0b10000）和一个 8 比特的 thres（初始值为 6）。为了以示区别，我们后面用
-tage_ctr、sc_ctr、thres_ctr 来分别表示 TAGE 传给 SC 的 ctr、SC 自己的 ctr、scThresholds 中的 ctr。
+The SC implements two banks of scThresholds register sets, with two banks
+corresponding to TAGE's two banks, both because a prediction block can contain
+up to two branch instructions. The dynamically determined register sets in SC
+consist solely of these two. Each bank's scThresholds includes a 5-bit
+saturating counter ctr (initial value 0b10000) and an 8-bit thres (initial value
+6). For distinction, we later refer to TAGE's ctr passed to SC as tage_ctr, SC's
+own ctr as sc_ctr, and the ctr in scThresholds as thres_ctr.
 
-scThresholds 的更新：当 SC 收到训练数据时，如果当时 SC 翻转了 TAGE
-的预测结果，且(sc_ctr_0*2+1)+(sc_ctr_1*2+1)+(sc_ctr_2*2+1)+(sc_ctr_3*2+1)+(2*(tage_ctr-4)+1)*8（有符号进位加）后取绝对值后在[thres-4,
-thres-2]的范围内，则 scThresholds 会被更新。
+scThresholds update: When SC receives training data, if SC flipped TAGE's
+prediction result and the signed carry-sum of (sc_ctr_0*2+1) + (sc_ctr_1*2+1) +
+(sc_ctr_2*2+1) + (sc_ctr_3*2+1) + (2*(tage_ctr-4)+1)*8, after taking the
+absolute value, falls within the range [thres-4, thres-2], then scThresholds is
+updated.
 
-- scThresholds 中 ctr 的更新：若预测正确，则 thres_ctr+1；若预测错误，则 thres_ctr-1；若 thres_ctr 已为
-  0b11111 且预测正确，或 thres_ctr 已为 0b00000 且预测错误，则 thres_ctr 保持不变。
-- ScThresholds 中 thres 的更新：若 thres_ctr 更新后的值已达 0b11111 且 thres<= 31，则 thres+2；若
-  thres_ctr 更新后的值为 0 且 thres>=6，则 thres-2。其余情况 thres 不变。
-- Thres 更新判断结束后，会对 thres_ctr 再做一次判断，若更新后的 thres_ctr 若为 0b11111 或 0，则 thres_ctr
-  会被置回初始值 0b10000。
+- Updating ctr in scThresholds: If the prediction is correct, thres_ctr
+  increments by 1; if incorrect, it decrements by 1. If thres_ctr is already
+  0b11111 (correct) or 0b00000 (incorrect), it remains unchanged.
+- Update of thres in ScThresholds: If the updated value of thres_ctr reaches
+  0b11111 and thres <= 31, then thres + 2; if the updated value of thres_ctr is
+  0 and thres >= 6, then thres - 2. In all other cases, thres remains unchanged.
+- After the Thres update decision, the thres_ctr is checked again. If the
+  updated thres_ctr is 0b11111 or 0, it is reset to the initial value of
+  0b10000.
 
-设定 scTableSums 为 (sc_ctr_0*2+1)+(sc_ctr_1*2+1)+(sc_ctr_2*2+1)+(sc_ctr_3*2+1)
-（有符号进位加），tagePrvdCtrCentered 为 (2*(tage_ctr-4)+1)*8（有符号进位加），totalSum 为
-scSum+tagePvdr（有符号进位加）。若 scTableSums>(有符号的 thres - tagePrvdCtrCentered)并且
-totalSum 为正，或者 scTableSums<(-有符号的 thres - tagePrvdCtrCentered)并且 totalSum 为负，都
-说明已经超过了阈值，翻转 TAGE 的预测结果，否则仍使用 TAGE 的预测结果不变。
+Define scTableSums as (sc_ctr_0*2+1) + (sc_ctr_1*2+1) + (sc_ctr_2*2+1) +
+(sc_ctr_3*2+1) (signed carry addition), tagePrvdCtrCentered as
+(2*(tage_ctr-4)+1)*8 (signed carry addition), and totalSum as scSum + tagePvdr
+(signed carry addition). If scTableSums > (signed thres - tagePrvdCtrCentered)
+and totalSum is positive, or if scTableSums < (-signed thres -
+tagePrvdCtrCentered) and totalSum is negative, the threshold is exceeded, and
+TAGE's prediction result is inverted. Otherwise, TAGE's prediction remains
+unchanged.
 
-SC 的预测算法依赖 TAGE 里面的是否有历史表 hit 的信号 provided，以及 provider 的预测结果 taken，从而来决定 SC
-自己的预测。provided 是使用 SC 预测的必要条件之一，provider 的 taken 作为 choose bit，选出 SC 最终的预测，这是因为
-SC 在 TAGE 预测结果不同的场景下可能有不同的预测。
+SC's prediction algorithm relies on signals from TAGE, such as whether there is
+a history table hit (provided) and the provider's prediction result (taken), to
+determine its own prediction. The provided signal is one of the necessary
+conditions for using SC prediction, while the provider's taken serves as the
+choose bit to select SC's final prediction. This is because SC may yield
+different predictions depending on TAGE's varying outcomes.
 
-sc 反转 TAGE 的预测结果会造成 TAGE 表增添新项。
+SC reversing TAGE's prediction result may cause the TAGE table to add new
+entries.
 
-SC 需要 3 拍延迟：
+SC requires a 3-cycle delay:
 
-- 0 拍生成寻址 index 得到索引 s0_idx
-- 1 拍读出 SCTable 对应 s0_idx 的计数器数据 s1_scResps
-- 2 拍根据 s1_scResps 选择是否需要反转预测结果
-- 3 拍输出完整的预测结果
+- Cycle 0: Generate the addressing index to obtain s0_idx
+- 1. Read out the counter data s1_scResps corresponding to s0_idx from the
+  SCTable.
+- In the second cycle, determine whether the prediction result needs to be
+  inverted based on s1_scResps.
+- Three cycles to output the complete prediction result.
 
-### SC：Wrbypass
+### SC: Wrbypass
 
-Wrbypass 里面有 Mem，也有 Cam，用于给更新做定序，每次 SC 更新时都会写进这个 wrbypass，同时写进对应预测表的
-sram。每次更新的时候会查这个 wrbypass，如果 hit 了，那就把读出的 SC 的 ctr 值作为旧值，之前随 branch 指令带到后端再送回前端的
-ctr 旧值就不要了。这样如 果一个分支重复更新，那 wrbypass 可以保证某一次更新一定能拿到相邻的上一次更新的最终值。
+Wrbypass contains both Mem and Cam, used to sequence updates. Every SC update is
+written to this wrbypass and the corresponding prediction table's SRAM. During
+each update, the wrbypass is checked. If a hit occurs, the read SC ctr value is
+used as the old value, discarding the old ctr value brought back from the
+backend with the branch instruction. This ensures that if a branch is updated
+repeatedly, wrbypass guarantees that one update will always obtain the final
+value from the adjacent previous update.
 
-SC 的 T1~T4 各有 2 个 wrbypass，每个预测表的 wrbypass 中，Mem 都有 16 个 entry，每个 entry 存储 2
-个预测表的表项；Cam 有 16 个 entry，输入更新的 idx 就可以读到对应数据在 Cam 中的位置。Cam 和 Mem 是同时写的，所以数据在 Cam
-中的位置就是在 Mem 中的位置。于是利用这个 Cam，我 们就可以在更新的时候查看对应 idx 的数据是否在 wrbypass 中。
+SC's T1~T4 each have 2 wrbypasses. In the wrbypass of each prediction table, Mem
+has 16 entries, each storing 2 entries of the prediction table; Cam has 16
+entries, and inputting the updated idx allows reading the corresponding data's
+position in Cam. Cam and Mem are written simultaneously, so the data's position
+in Cam is also its position in Mem. Using this Cam, we can check whether the
+data corresponding to the idx is in the wrbypass during updates.
 
-### SC：预测器训练
+### SC: Predictor training.
 
-sc_ctr（见 signedSatUpdate）是一个 6 比特的有符号饱和计数器，在指令实际 taken
-后+1，nottaken-1，计数范围是[-32，31]。
+sc_ctr (see signedSatUpdate) is a 6-bit signed saturating counter that
+increments by 1 when the instruction is actually taken and decrements by 1 when
+not taken, with a counting range of [-32, 31].
 
-注：meta 是预测器预测的时候的数据，update 的时候拿回来更新用。都叫 meta 是因为 composer 将所有预测器整合起来，用共同的接口 meta
-和外界交互。SC 的 meta 具体构成见下图：
+Note: meta refers to the data used by the predictor during prediction, which is
+retrieved for updates later. All predictors are integrated by the composer using
+a common interface called meta for external interaction. The specific
+composition of SC's meta is shown in the following diagram:
 
-![SC meta 具体构成](../figure/BPU/TAGE-SC/sc_meta.png)
+![SC meta specific composition](../figure/BPU/TAGE-SC/sc_meta.png)
 
-## 整体框图
+## Overall Block Diagram
 
-![整体框图](../figure/BPU/TAGE-SC/structure.png)
+![Overall Block Diagram](../figure/BPU/TAGE-SC/structure.png)
 
-## 接口时序
+## Interface timing
 
-s0 输入 pc 和折叠历史时序示例
+s0 inputs pc and folded history timing example
 
-![pc 和折叠历史时序](../figure/BPU/TAGE-SC/port1.png)
+![PC and Folded History Timing](../figure/BPU/TAGE-SC/port1.png)
 
-上图示意了 s0 输入 pc 和折叠历史时序的示例，当 io_s0_fire 为高时，输入的 io_in_bits 数据有效。
+The diagram illustrates an example of s0 input PC and folded history timing.
+When io_s0_fire is high, the input io_in_bits data is valid.
 
-### 存储结构
+### Storage structure
 
-- 4 张表，历史长度分别为 0、4、10、16，每张表有 256 项，每项中是 4 个 6 bit 宽的饱和计数器，其中 4 个饱和计数器分别对应 2
-  条分支*TAGE 的 2 种预测结果（T/NT）。每张表共 1024 个计数器，存储开销 3KB
-- 每张表有 16 项的写缓存 wrbypass
-- 2 个 threshold 寄存器，分别对应一个 slot 的分支。每个 threshold 有 8bit 宽的阈值饱和计数器，以及 5bit
-  的增减缓冲饱和计数器
+- Four tables with history lengths of 0, 4, 10, and 16, each containing 256
+  entries. Each entry consists of four 6-bit-wide saturating counters,
+  corresponding to two branches * two prediction results (T/NT) of TAGE. Each
+  table has a total of 1024 counters, with a storage overhead of 3KB.
+- Each table has a 16-entry write buffer (wrbypass).
+- Two threshold registers, each corresponding to a branch in a slot. Each
+  threshold has an 8-bit-wide threshold saturating counter and a 5-bit
+  increment/decrement buffer saturating counter.
 
-### 索引方式
+### Indexing method
 
 - index = pc[8:1] ^ folded_hist(8bit)
-- 历史采取基本的分段异或折叠
-- 每项两条分支和 FTB 两个 slot 之间的两种对应关系，用 pc[1]选取，由于 FTB 项的建立机制，第一个 slot
-  的使用率会大于第二个，此举可以缓解这种分布不均的情况
+- The history employs basic segmented XOR folding.
+- Each item has two branches and two corresponding relationships between the two
+  slots in the FTB, selected by pc[1]. Due to the establishment mechanism of FTB
+  entries, the utilization rate of the first slot is higher than the second.
+  This measure can alleviate such uneven distribution.
 
-### 预测流程
+### Prediction flow
 
-- s0 进行索引计算，地址送入 SRAM
-- s1 读出饱和计数器，进行 slot 间的重排序，对应 TAGE 两种预测结果的 SC ctr 传到顶层分别做加法，结果寄存到 s2
-- s2 将 SC 的 ctr 和与 TAGE 的 provider ctr 做加法，得到最终结果，取绝对值，若大于阈值，且 TAGE 也有
-  hit，用加法结果的符号作为最终预测的方向，寄存到 s3
-- s3 使用方向结果，在 BPU 内和 s2 结果进行比对，判断是否需要冲刷流水线
+- s0 performs index calculation, and the address is sent to the SRAM.
+- s1 reads the saturating counters, performs reordering between slots, and
+  transmits the SC ctrs corresponding to TAGE's two prediction results to the
+  top level for separate addition. The results are then registered to s2.
+- s2 adds SC's ctr with TAGE's provider ctr to obtain the final result, takes
+  the absolute value, and if it exceeds the threshold and TAGE also has a hit,
+  uses the sign of the addition result as the final predicted direction, stored
+  in s3.
+- s3 uses the direction result and compares it with the s2 result within the BPU
+  to determine whether the pipeline needs to be flushed.
 
-### 训练流程
+### Training process
 
-收到来自 FTQ 的训练请求后，根据预测时记录的信息进行更新，更新流程分为两个流水级，其中第一个流水级在历史表外部判断一些 更新条件，细节如下：
+Upon receiving a training request from FTQ, updates are performed based on the
+information recorded during prediction. The update process is divided into two
+pipeline stages, with the first stage determining certain update conditions
+externally to the history table. Details are as follows:
 
-- 若预测时 TAGE 命中，根据预测时存下的旧 SC ctr 与旧 TAGE ctr
-  再次做加法，和更新所用的阈值（预测阈值*8+21）比对，若小于阈值，或者此时预测结果和执行方向不符，则根据 perceptron
-  训练规则训练每个计数器，请求寄存到下一拍发送给每张表
+- If TAGE hits during prediction, the old SC ctr and old TAGE ctr saved during
+  prediction are added again and compared against the update threshold
+  (prediction threshold * 8 + 21). If the sum is below the threshold or the
+  prediction result does not match the execution direction, each counter is
+  trained according to the perceptron training rules, and the request is
+  registered to be sent to each table in the next cycle.
 
-第二个流水级将更新请求发入各个预测表内部，尝试写入 SRAM，仍然尝试查询写缓存 wrbypass 获取最新计数器值（应该可以在上一
-个流水级先查询，而不是直接使用旧 ctr）
+The second pipeline stage sends update requests into each prediction table,
+attempting to write to SRAM while still trying to query the write cache wrbypass
+for the latest counter value (this could potentially be queried in the previous
+pipeline stage rather than directly using the old ctr).
 
-![训练流程](../figure/BPU/TAGE-SC/sc_update.svg)
+![Training Process](../figure/BPU/TAGE-SC/sc_update.svg)

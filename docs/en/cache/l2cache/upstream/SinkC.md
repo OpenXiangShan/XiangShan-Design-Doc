@@ -1,18 +1,27 @@
 # SinkC
 
-## 功能描述
-SinkC接收来自总线C通道的请求(Release/ReleaseData/ProbeAck/ProbeAckData)，内部Buffer深度为3，用valid/ready握手协议阻塞C通道，进行如下操作：
-a.如果请求是 Release(Data)，则为其分配一个 buffer项保存，等到流水线可以接收C请求的时候，就发往RequestArb进入主流水线；
-如果包含数据，则延迟两拍在请求进入到S3的时候将其数据发送给MainPipe；
-b.如果请求是ProbeAckData，则直接向MSHR发送反馈，同时将其数据写入ReleaseBuf 中。
+## Functional Description
+SinkC receives requests from the C channel of the bus
+(Release/ReleaseData/ProbeAck/ProbeAckData), with an internal Buffer depth of 3.
+It uses the valid/ready handshake protocol to block the C channel and performs
+the following operations: a. If the request is Release(Data), it allocates a
+buffer entry to save it, and when the pipeline is ready to accept the C request,
+sends it to RequestArb to enter the main pipeline; if it contains data, delays
+it by two cycles and sends the data to MainPipe when the request reaches S3; b.
+If the request is ProbeAckData, it directly sends feedback to MSHR while writing
+its data into ReleaseBuf.
 
-### 特性1：RefillBuffer覆盖
-因为目前缺失重填操作会首先将数据返回给L1，然后再安排重填数据（在RefillBuf中）写入L2的DataStorage，二者之间存在一个时间差。
-如果在此期间L1就将脏数据释放下来，为了保证写入L2的最新数据，我们就让ReleaseData也将其数据同步写入一份到RefillBuf中，覆盖原有的重填数据。
+### Feature 1: RefillBuffer Override
+Currently, the missing refill operation first returns data to L1, then schedules
+the refill data (in RefillBuf) to be written into L2's DataStorage, creating a
+time gap between these two steps. If dirty data is released from L1 during this
+interval, to ensure the latest data is written to L2, we have ReleaseData also
+synchronously write its data into RefillBuf, overriding the existing refill
+data.
 
-### 特性2：ReleaseBuffer覆盖
-当MSHR处理一笔release需要probe
-L1D$时，这笔probeAckData查找匹配到MSHR中的这笔release后，会主动把数据写入到ReleaseBuf中。
+### Feature 2: ReleaseBuffer Override
+When MSHR processes a release that requires probing L1D$, this ProbeAckData,
+upon matching the release in MSHR, actively writes the data into ReleaseBuf.
 
-## 整体框图
+## Overall Block Diagram
 ![SinkC](./figure/SinkC.svg)

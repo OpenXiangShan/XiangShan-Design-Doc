@@ -1,7 +1,12 @@
-# 目录 Directory
+# Directory
 
-CoupledL2 采用基于目录的一致性实现方式，利用目录记录L2 Cache内数据块的元数据信息。如 [@fig:directory]
-所示，Directory 会根据读请求的 tag 和 set，查找 L2 Cache
-是否存储该数据块（是否命中）。如果命中，则返回该数据块的元数据信息。如果缺失，则挑选一个无效的路/被替换的路，返回该路数据的元数据信息。请求处理完成后，会将新的目录信息写入Directory进行更新。
+CoupledL2 adopts a directory-based coherence implementation, utilizing the
+directory to record metadata information of data blocks within the L2 Cache. As
+shown in [@fig:directory], the Directory checks whether the L2 Cache stores the
+requested data block (hit or miss) based on the tag and set of the read request.
+If it hits, the metadata information of that data block is returned. If it
+misses, an invalid way or a way to be replaced is selected, and the metadata
+information of that way's data is returned. After processing the request, the
+new directory information is written back to the Directory for updates.
 
-![目录流水线框图](./figure/directory.svg){#fig:directory}
+![Directory Pipeline Block Diagram](./figure/directory.svg){#fig:directory}

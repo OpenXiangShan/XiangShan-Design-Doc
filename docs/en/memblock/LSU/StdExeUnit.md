@@ -1,17 +1,27 @@
-# Store 数据执行单元 StdExeUnit
+# Store Execution Unit: StdExeUnit
 
-## 功能描述
+## Functional Description
 
-标量store指令数据流水线，用于给StoreQueue对应位置写入store的数据。
+Scalar store instruction data pipeline, used to write store data to the
+corresponding position in the StoreQueue.
 
-## 整体框图
-![stdExeUnit整体框图](./figure/LSU-StdExeUnit.svg){#fig:LSU-StdExeUnit}
+## Overall Block Diagram
+![Overall block diagram of
+stdExeUnit](./figure/LSU-StdExeUnit.svg){#fig:LSU-StdExeUnit}
 
-## 接口时序
+## Interface timing
 
-### 接口时序实例
+### Interface timing example
 
-![stdExeUnit有效请求接口时序](./figure/LSU-StdExeUnit-Timing.svg){#fig:LSU-StdExeUnit-Timing}
+![Timing diagram of stdExeUnit valid request
+interface](./figure/LSU-StdExeUnit-Timing.svg){#fig:LSU-StdExeUnit-Timing}
 
-如图\ref{fig:LSU-StdExeUnit-Timing},
-io_ooo_to_mem_issueStd_0_ready和io_ooo_to_mem_issueStd_0_valid为高握手后，接收到了有效的写入请求，数据为io_ooo_to_mem_issueStd_0_bits_src_0，上图示例了在第三个clk时写入到StoreQueue的第sqIdx0项，数据为src0。在第四个clk时io_ooo_to_mem_issueStd_0_ready为低电平，此时数据不写入StoreQueue。这种情况一般是有向量store指令要向StoreQueue写数据。
+As shown in Figure \ref{fig:LSU-StdExeUnit-Timing}, after the handshake where
+both io_ooo_to_mem_issueStd_0_ready and io_ooo_to_mem_issueStd_0_valid are high,
+a valid write request is received with the data being
+io_ooo_to_mem_issueStd_0_bits_src_0. The example above illustrates that at the
+third clock cycle, the data is written to the sqIdx0 entry of the StoreQueue,
+with the data being src0. At the fourth clock cycle,
+io_ooo_to_mem_issueStd_0_ready goes low, at which point the data is not written
+to the StoreQueue. This situation typically occurs when a vector store
+instruction attempts to write data to the StoreQueue.

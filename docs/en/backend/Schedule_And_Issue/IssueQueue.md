@@ -5,102 +5,186 @@
 - Date: 2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-## 设计规格
+## Design specifications
 
-- 支持 4 类不同的发射队列模块以适配标量整型，向量浮点，标量访存和向量访存
-- 支持两个入队口两个出对口
-- 支持推测唤醒信号产生
-- 支持推测唤醒信号寄存器复制
-- 支持指令写回冲突提前判定
-- 支持就绪指令中选择最老指令发射
+- Supports four different types of issue queue modules to accommodate scalar
+  integer, vector floating-point, scalar memory, and vector memory operations
+- Supports two enqueue ports and two dequeue ports
+- Supports speculative wake-up signal generation
+- Support speculative wake-up signal register replication
+- Supports early detection of instruction write-back conflicts
+- Supports issuing the oldest instruction among ready instructions
 
-## 功能
+## Function
 
-发射队列模块作为处理器乱序调度的起点，连接前一级 Dispatch 流水级和后一级 DataPath
-流水级。在超标量乱序处理器中，为了实现指令的正确乱序执行，需要正确处理器指令间的依赖关系，描述指令是否能够正确执行的关键就是每条指令源操作数的就绪情况，当源操作数依赖的前面的指令执行完成后，该源操作数才进入就绪状态。IQ
-接收从 Dispatch 阶段分派而来的至多两条指令，指令的源操作数可能还未就绪，指令会暂存在IQ内部，IQ
-实时监听唤醒信号，唤醒信号会将其对应的源操作数由未就绪置为就绪。每个周期，IQ 内部会选出最多两条操作数都就绪的指令，并遵循最老最优先策略，发往后续的
-DataPath 流水级。发射队列通过上述方法，保证了指令乱序执行时，所有指令间依赖关系均能得到保证，并尽可能提升乱序调度的性能。
+The issue queue module serves as the starting point of the processor's
+out-of-order scheduling, connecting the previous Dispatch pipeline stage and the
+subsequent DataPath pipeline stage. In a superscalar out-of-order processor, to
+achieve correct out-of-order execution of instructions, it is necessary to
+correctly handle the dependencies between instructions. The key to determining
+whether an instruction can execute correctly is the readiness of its source
+operands. A source operand becomes ready only after the preceding instruction it
+depends on has completed execution. The IQ receives up to two instructions
+dispatched from the Dispatch stage, whose source operands may not yet be ready.
+These instructions are temporarily stored inside the IQ, which continuously
+monitors wake-up signals that will mark the corresponding source operands as
+ready. Each cycle, the IQ internally selects up to two instructions with all
+operands ready, following the oldest-first policy, and sends them to the
+subsequent DataPath pipeline stage. Through this method, the issue queue ensures
+that all inter-instruction dependencies are guaranteed during out-of-order
+execution while maximizing the performance of out-of-order scheduling.
 
-### 指令入队
+### Instruction enqueue
 
-4 类不同的发射队列的指令入队逻辑基本一致，仅因部分信号的不同而有些许差异。发射队列内部实例化了 Entries
-模块负责指令的存储，一般情况下，发射队列支持两个入队口，即每周期至多从前一流水级接收 2 条有效指令，故与之对应的，Entries 模块同样支持两个入队口。
-指令入队过程，即通过 IQ 的输入端进入，选出关键信号，送至 Entries 的输入端，这个过程中，诸如 robIdx，fuType
-等指令自带信号不做额外处理直接接入；而 srcState 等指示指令状态的信号，会在进入 Entries 之前通过部分组合逻辑进行初始化赋值。各信号详细信息参见
-Entries 接口文档。 本发射队列支持指令入队的同时进行唤醒，基于时序考虑，唤醒逻辑并未直接在指令进入 Entries 之前实现，而是采用将输入唤醒信号送入
-Entries 后，同步打拍后再唤醒的方法。
+The enqueue logic for the four different types of issue queues is largely the
+same, with only minor differences due to variations in certain signals. The
+issue queue internally instantiates the Entries module responsible for
+instruction storage. Generally, the issue queue supports two enqueue ports,
+meaning it can receive up to two valid instructions from the previous pipeline
+stage each cycle. Correspondingly, the Entries module also supports two enqueue
+ports. The instruction enqueue process involves the instructions entering
+through the IQ's input ports, selecting key signals, and sending them to the
+Entries' input ports. During this process, signals inherent to the instructions,
+such as robIdx and fuType, are directly connected without additional processing.
+Signals indicating instruction status, such as srcState, are initialized through
+combinational logic before entering the Entries. For detailed signal
+information, refer to the Entries interface documentation. This issue queue
+supports simultaneous instruction enqueue and wake-up. Due to timing
+considerations, the wake-up logic is not implemented directly before the
+instructions enter the Entries but instead involves sending the input wake-up
+signals to the Entries, synchronously delaying them by one cycle before wake-up.
 
-### 指令年龄关系维护
+### Maintenance of instruction age relationships
 
-为了实现指令发射选择的最老最优先策略，在发射队列内，需要每个周期对存在 Entries 内的指令进行指令年龄的记录和处理。发射队列内部实例化了若干个
-AgeDetector 模块进行这部分功能的实现。对应 3 类不同的 Entry，发射队列需要实例化至多 3 个
-AgeDetector。每个年龄矩阵可同时接收多个出队端口的年龄查询，并返回查询中最老的一项。AgeDetector 每周期接收 Entries 反馈的 3 类
-entry 的入队状态，负责维护全部指令的年龄关系，直观来说，当一条指令入队时，它的年龄必然是全部指令中最年轻的；发射队列通过 Entries -->
-AgeDetector 的信号传递实现指令年龄关系的维护，并在指令发射选择阶段通过读取 AgeDetector 完成最老最优先策略的运用。
+To implement the oldest-first policy for instruction issue selection, the issue
+queue needs to record and process the age of instructions within the entries
+every cycle. The issue queue internally instantiates several AgeDetector modules
+to achieve this functionality. Corresponding to the three different types of
+entries, the issue queue needs to instantiate up to three AgeDetectors. Each age
+matrix can simultaneously receive multiple age queries from dequeue ports and
+return the oldest entry among the queries. Each cycle, the AgeDetector receives
+the enqueue status of the three types of entries from the Entries feedback,
+responsible for maintaining the age relationships of all instructions.
+Intuitively, when an instruction is enqueued, its age is necessarily the
+youngest among all instructions. The issue queue maintains instruction age
+relationships through signal transmission from Entries to AgeDetector and
+applies the oldest-first policy during the instruction issue selection phase by
+reading the AgeDetector.
 
-### 指令发射选择
+### Instruction issue selection
 
-发射队列将 Entry 分为至多 3 类，并支持了指令在 Entry 之间存储位置的转移，3 类 Entry
-之间有着严格的年龄关系，所以指令发射选择，也分别针对 3 类 Entry 进行并行选择，最后再进行 3 选 1
-选择最老的指令发射。基于时序考虑，为了满足发射队列两出队端口的需求，设计优先满足第一个出队端口的需要，功能实现为：依据
-EnqEntry/SimpleEntry/ComplexEntry 三类 Entry 对应的三个 Detector，分别选出三条最老能发射指令，而后依据三类
-Entry 间严格的年龄关系，按照 Complex > Simple > Enq 的优先级顺序最终选出一条，送往第一个出队端口；对于第二个出队端口，取决于出口
-fu 的配置：如果两个出口的 fu 不同，那么他们可出队的指令不会重叠，第二个口也按第一口的方法选出一条最老指令；如果两个出口的 fu
-相同，就可能重叠，因此屏蔽掉第一个口的选择结果后，“随机”选一条有效指令。目前的 IQ 配置中，两个口的 fu
-都是不同的（或者就只有一个出口），因此不存在“随机”选的情况，就不再赘述“随机”的具体流程。
+The issue queue divides entries into at most three types and supports the
+transfer of instruction storage locations between entries. The three types of
+entries have strict age relationships, so instruction issue selection is
+performed in parallel for each type of entry, followed by a final 3-to-1
+selection of the oldest instruction for issue. Due to timing considerations, to
+meet the requirement of two dequeue ports, the design prioritizes the needs of
+the first dequeue port. The functional implementation is as follows: based on
+the three Detectors corresponding to EnqEntry, SimpleEntry, and ComplexEntry,
+the three oldest issuable instructions are selected, and then, according to the
+strict age relationships among the three types of entries, one instruction is
+ultimately selected following the priority order Complex > Simple > Enq and sent
+to the first dequeue port. For the second dequeue port, the selection depends on
+the configuration of the functional units (fu) at the ports: if the fus of the
+two ports are different, the instructions they can dequeue will not overlap, and
+the second port selects the oldest instruction using the same method as the
+first port. If the fus of the two ports are the same, overlap is possible, so
+after masking the selection result of the first port, a "random" valid
+instruction is selected. In the current IQ configuration, the fus of the two
+ports are different (or there is only one port), so there is no "random"
+selection scenario, and the specific "random" process is not elaborated further.
 
-### 推测唤醒信号产生
+### Speculative wake-up signal generation
 
-发射队列负责管理指令，不仅包括对指令何时发射的管理，还包括告知其他指令何时发射的管理，后者即是通过推测唤醒实现的。在一般情况下，如果一条指令的源操作数依赖于前一条指令的写回值，那么只有前一条指令写回时，当前指令的源操作数才能被置为就绪状态。为了提升指令乱序执行的性能，实际上如果前一条指令是固定执行延时的指令，那么当它从发射队列发射出去时，就能够确定其何时写回，相应的便可以在某个时刻由发射队列发出推测唤醒信号，只要保证被推测唤醒的指令，取得源操作数的时刻不早于前一条指令得到结果的时刻，便可通过
-forward、bypass 等方式加速指令的乱序执行。在发射队列中，对于非访存 IQ 负责产生推测唤醒信号的模块就是
-WakeupQueue，指令被选择发射的同拍，也会进入 WakeupQueue 中，根据其执行延迟，进入不同的移位 pipeline，0 lat
-则一拍后产生推测唤醒；2 lat则三拍之后，以此类推。通过这种方式，可以实现推测唤醒信号的产生。对于访存 IQ，其唤醒信号使用访存 IQ 独有的
-loadWakeUp 接口从访存单元传入，将其打一拍后，当做 IQ 自己的唤醒信号，再走和前面 WakeupQueue 相同的接口广播给其他 IQ。
+The issue queue is responsible for managing instructions, not only including the
+management of when instructions are issued but also informing other instructions
+when they can be issued, the latter of which is achieved through speculative
+wake-up. Generally, if an instruction's source operand depends on the write-back
+value of a previous instruction, the current instruction's source operand can
+only be marked as ready when the previous instruction writes back. To improve
+the performance of out-of-order instruction execution, if the previous
+instruction has a fixed execution latency, its write-back time can be determined
+when it is issued from the issue queue. Accordingly, the issue queue can
+generate a speculative wake-up signal at a certain time, as long as it is
+ensured that the speculatively woken instruction does not fetch its source
+operand earlier than the time the previous instruction obtains its result. This
+can accelerate out-of-order execution through forwarding or bypassing. In the
+issue queue, for non-memory IQ, the module responsible for generating
+speculative wake-up signals is the WakeupQueue. In the same cycle an instruction
+is selected for issue, it also enters the WakeupQueue, moving through different
+shift pipelines based on its execution latency—0 latency generates a speculative
+wake-up after one cycle, 2 latency after three cycles, and so on. This method
+enables the generation of speculative wake-up signals. For memory IQ, its
+wake-up signal is passed from the memory unit through the loadWakeUp interface
+unique to the memory IQ, delayed by one cycle, treated as the IQ's own wake-up
+signal, and then broadcast to other IQs through the same interface as the
+WakeupQueue.
 
-### 写回冲突的提前判断
+### Early detection of write-back conflicts
 
-写回冲突分为两个部分。 第一部分，是 IQ 出口自身的写回冲突。发射队列每个出队端口对应一个 EXU，每个 EXU 里可能有一组 Fu，这一组 Fu
-的执行延迟不尽相同，而每个 EXU 只有一个写回端口（指写回 rob 的写回端口，与寄存器堆的写口不同，一或多个 EXU 写回口共用一个寄存器堆写口）。比如
-Alu 与 Mul 的 Fu 组合，会产生 0 lat 和 2 lat 的写回冲突问题，如果一条 0 lat 指令在 2 lat
-指令发出两拍后发射，就会同时执行完成，产生 Fu 写回冲突。为了避免这类情况的发生，发射队列内部实例化了 fuBusyTable 模块进行 Fu
-冲突的判断。fuBusyTable
-以出队端口为基本单位，记录各自的出队端口每周期出队的指令及各自的反馈信号，以此修改记录值，后续指令的选择发射也需要参考此模块的记录值情况，以此避免 Fu
-写回冲突。 第二部分，是寄存器堆的写回冲突。由于寄存器堆的写口有限，多个 EXU
-的写回端口可能共用一个寄存器堆的写口，因此发射队列之间可能发生写口共用，此时同样可能产生写口冲突的问题。类似地，发射队列中实例化了 intWbBusyTable
-和 vfWbBusyTable，每当指令发射时，便产生相应的写逻辑，送至外部的 WbFuBusyTable 模块中将写口相同的取或处理，得到最终的
-WbFuBusyTable；指令发射选择时，则根据写口从外部读取 WbFuBusyTable 送入 IQ 内部作为选择参考。
+Write-back conflicts are divided into two parts. The first part involves the
+write-back conflict at the IQ exit itself. Each dequeue port of the issue queue
+corresponds to an EXU, and each EXU may contain a group of FUs with varying
+execution latencies. However, each EXU has only one write-back port (referring
+to the write-back port to the ROB, distinct from the register file write port,
+where one or more EXU write-back ports share a single register file write port).
+For example, a combination of ALU and Mul FUs can lead to write-back conflicts
+between 0-latency and 2-latency instructions. If a 0-latency instruction is
+issued two cycles after a 2-latency instruction, they will complete execution
+simultaneously, resulting in an FU write-back conflict. To prevent such
+scenarios, the issue queue internally instantiates the fuBusyTable module to
+detect FU conflicts. The fuBusyTable operates on a per-dequeue-port basis,
+recording each port's dequeued instructions and their respective feedback
+signals each cycle to update its records. Subsequent instruction selection and
+issuance also reference this module's records to avoid FU write-back conflicts.
+The second part involves register file write-back conflicts. Due to the limited
+number of register file write ports, multiple EXU write-back ports may share a
+single register file write port, leading to potential write port conflicts
+between issue queues. Similarly, the issue queue instantiates intWbBusyTable and
+vfWbBusyTable. Whenever an instruction is issued, the corresponding write logic
+is generated and sent to the external WbFuBusyTable module, where write ports
+with the same identifier are processed to obtain the final WbFuBusyTable. During
+instruction selection, the WbFuBusyTable is read from the external module based
+on the write port and fed into the IQ as a reference for selection.
 
-## 整体框图
+## Overall Block Diagram
 
-![示意图](./figure/IssueQueue_top.svg)
+![Schematic diagram](./figure/IssueQueue_top.svg)
 
-## 接口时序
+## Interface timing
 
-![示意图](./figure/IssueQueue_io.png)
+![Schematic diagram](./figure/IssueQueue_io.png)
 
-## 二级模块 WakeupQueue
+## Secondary module WakeupQueue
 
-控制各个 IQ 发出推测唤醒信号的关键模块，作为推测唤醒的唤醒源且非访存的 IQ
-的各出队端口各自对应一个，模块内部由若干条流水线构成，流水线的条数和出队端口对应的 Fu Latency 直接相关，出队端口对应的 Fu 有几种
-Lat，就有几条相应的流水线。
+A critical module controlling the issuance of speculative wake-up signals by
+each IQ, serving as the wake-up source for speculative wake-up and corresponding
+to each non-memory access IQ's dequeue port. The module internally consists of
+multiple pipelines, with the number of pipelines directly related to the Fu
+Latency of the corresponding dequeue port. The number of pipelines corresponds
+to the different Latencies of the Fu associated with the dequeue port.
 
-### 整体框图
+### Overall Block Diagram
 
-![示意图](./figure/IssueQueue_wakeupqueue.svg)
+![Schematic diagram](./figure/IssueQueue_wakeupqueue.svg)
 
-### 接口时序
+### Interface timing
 
-![示意图](./figure/IssueQueue_wq_io.png)
+![Schematic diagram](./figure/IssueQueue_wq_io.png)
 
-## 二级模块 AgeDetector
+## Secondary module AgeDetector
 
-此模块为年龄矩阵模块，维护发射队列中各个 Entry 内指令的新旧顺序，发射队列的 Entry 至多三类，对每类 Entry，它们的 AgeDetector
-模块都是独立的。 此模块使用矩阵寄存器标识 Entry 间的年龄关系，矩阵的行列均和 Entry 的个数一致，下面以 6 项的 SimpleEntry 为例：
+This module is the age matrix module, maintaining the order of instruction age
+among entries in the issue queue. The entries in the issue queue can be
+categorized into at most three types, and for each type, their AgeDetector
+modules are independent. This module uses matrix registers to indicate the age
+relationships between entries, with the rows and columns of the matrix
+corresponding to the number of entries. Below is an example using a 6-entry
+SimpleEntry:
 
-![示意图](./figure/IssueQueue_age.svg)
+![Schematic diagram](./figure/IssueQueue_age.svg)
 
-### 整体框图
+### Overall Block Diagram
 
-![示意图](./figure/IssueQueue_age_top.svg)
+![Schematic diagram](./figure/IssueQueue_age_top.svg)
 

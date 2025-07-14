@@ -7,284 +7,472 @@
 
 ## Glossary of Terms
 
-| 缩写   | 全称                      | Descrption |
-| ---- | ----------------------- | ---------- |
-| VFPU | Vector Float Point Unit | 向量浮点功能单元   |
-| IQ   | Issue Queue             | 发射队列       |
+| Abbreviation | Full name                  | Descrption                            |
+| ------------ | -------------------------- | ------------------------------------- |
+| VFPU         | Vector Floating-Point Unit | Vector Floating-Point Functional Unit |
+| IQ           | Issue Queue                | Issue Queue                           |
 
-## 设计规格
+## Design specifications
 
-1. 支持向量浮点 Mul 计算
-2. 支持向量浮点 FMA 计算
-3. 支持向量浮点 Div 计算
-4. 支持向量浮点 Sqrt 计算
-5. 支持 fp32,fp64,fp16 计算
-6. 支持 RV-V1.0 版本向量浮点指令的计算
+1. Support Vector Floating-Point Mul Calculation
+2. Support vector floating-point FMA computation
+3. Support Vector Floating-Point Div Calculation
+4. Support for vector floating-point Sqrt computation
+5. Supports fp32, fp64, fp16 computation
+6. Supports computation of RV-V1.0 version vector floating-point instructions
 
-## 功能
+## Function
 
-VFPU 模块接收来自 Issue Queue 发射的 uop 信息，根据 fuType 和 fuOpType
-等信息，完成向量浮点指令的计算，主要包括：VFAlu、VFMA、VFDivSqrt、VFCvt 四个模块。
+The VFPU module receives uop information issued from the Issue Queue and
+performs vector floating-point instruction calculations based on fuType and
+fuOpType information. It mainly consists of four modules: VFAlu, VFMA,
+VFDivSqrt, and VFCvt.
 
-VFAlu 主要负责fadd相关的指令和一些其他简单指令，如比较指令、符号注入指令，特别的是reduction sum
-指令也通过拆uop的方式在此模块进行计算。
+VFAlu is primarily responsible for fadd-related instructions and some other
+simple instructions, such as comparison instructions and sign injection
+instructions. Notably, the reduction sum instruction is also computed in this
+module by splitting into micro-operations (uops).
 
-VFMA 主要负责乘法和乘加相关的指令。
+VFMA is primarily responsible for multiplication and multiply-add related
+instructions.
 
-VFDivSqrt 主要负责除法和开方相关的指令。
+VFDivSqrt is primarily responsible for instructions related to division and
+square root.
 
-VFCvt 主要负责格式转换和倒数估计相关的指令。
+VFCvt is primarily responsible for format conversion and reciprocal
+estimation-related instructions.
 
-## 算法设计
+## Algorithm design
 
-向量浮点运算单元的难点在于支持多组单一精度格式（操作数和结果的浮点数格式相同）的计算以及支持混合精度（操作数和结果的浮点数格式不同）的计算，以常见的半精度（$f16$）、单精度（$f32$）、双精度（$f64$）为例，对比标量浮点运算单元和向量浮点运算单元的区别。
+The challenge of the vector floating-point unit lies in supporting multiple
+single-precision format calculations (where the floating-point formats of
+operands and results are the same) and mixed-precision calculations (where the
+floating-point formats of operands and results differ). Taking common formats
+such as half-precision ($f16$), single-precision ($f32$), and double-precision
+($f64$) as examples, the differences between scalar and vector floating-point
+units are compared.
 
-以典型的浮点加法为例，对于标量浮点运算单元，只需支持三种单一精度格式的计算，该运算单元输入的操作数和输出的结果都应该是 $64$
-位的，那么它要支持三种格式的计算：
+Taking a typical floating-point addition as an example, for a scalar
+floating-point unit, it only needs to support calculations in three
+single-precision formats. The input operands and output results of this unit
+should all be $64$-bit, meaning it must support calculations in three formats:
 
-（1）$1$ 个 $f64 = f64 + f64$；
+(1) One $f64 = f64 + f64$;
 
-（2）$1$ 个 $f32 = f32 + f32$；
+(2) $1$ $f32 = f32 + f32$;
 
-（3）$1$ 个 $f16 = f16 + f16$。
+(3) $1$ $f16 = f16 + f16$.
 
-看似需要三个模块完成这三种格式的计算，但是因为浮点数都是有符号位、阶码、尾数三部分组成，并且高精度浮点数的阶码位宽和尾数位宽都要比低精度的更大，这就使得高精度浮点数的硬件设计可以完全满足低精度浮点数的硬件需求，稍加处理之后就可以通过在硬件中添加
-$Mux$（多路选择器）的方式兼容多种单一精度格式的计算，并且面积只会略微增加。
+At first glance, three modules seem necessary to handle these three formats.
+However, since floating-point numbers consist of a sign bit, exponent, and
+mantissa, and higher-precision floating-point numbers have wider exponent and
+mantissa bit widths than lower-precision ones, the hardware design for
+higher-precision floating-point numbers can fully meet the requirements of
+lower-precision floating-point calculations. With slight modifications, adding
+$Mux$ (multiplexers) to the hardware can enable compatibility with multiple
+single-precision formats, with only a marginal increase in area.
 
-而向量浮点运算单元要支持向量操作，向量操作的一个特点是对数据带宽利用率高，比如标量运算单元虽然接口是 $64$ 位的，但在计算 $f32/f16$
-时，其有效数据只有 $32/16$ 位，带宽利用率骤减到 $50\%/25\%$；向量运算单元接口也是 $64$ 位的，但是在计算单一精度格式
-$f32/f16$ 时，它可以同时进行 $2/4$ 组操作，带宽利用率还是可以达到 $100\%$，支持的单一精度格式计算如下：
+The vector floating-point unit needs to support vector operations, which are
+characterized by high data bandwidth utilization. For example, although the
+interface of a scalar arithmetic unit is 64-bit, when computing f32/f16, the
+effective data is only 32/16 bits, reducing bandwidth utilization to 50%/25%.
+The vector arithmetic unit also has a 64-bit interface, but when computing
+single-precision formats f32/f16, it can perform 2/4 sets of operations
+simultaneously, maintaining 100% bandwidth utilization. The supported
+single-precision format computations are as follows:
 
-（1）$1$ 个 $f64 = f64 + f64$；
+(1) One $f64 = f64 + f64$;
 
-（2）$2$ 个 $f32 = f32 + f32$；
+(2) 2 $f32 = f32 + f32$;
 
-（3）$4$ 个 $f16 = f16 + f16$。
+(3) $4$ $f16 = f16 + f16$.
 
-需要同时进行多组相同格式的浮点数相加使得硬件设计比标量更困难，但是也能将高精度格式的硬件复用来计算低精度格式。另外，向量浮点运算单元还要支持的一个特性是混合精度计算，$RISC-V$
-向量指令集拓展定义了一系列需要混合精度计算的 $widening$ 指令，要求浮点加法运算单元还要支持以下四种计算格式：
+Performing multiple sets of floating-point additions with the same format
+simultaneously makes hardware design more challenging than scalar operations,
+but it also allows the reuse of high-precision format hardware for low-precision
+formats. Additionally, a key feature that vector floating-point units must
+support is mixed-precision computation. The $RISC-V$ vector instruction set
+extension defines a series of $widening$ instructions requiring mixed-precision
+computation, mandating that floating-point addition units also support the
+following four computation formats:
 
-（1）$1$ 个 $f64 = f64 + f32$；
+(1) $1$ $f64 = f64 + f32$;
 
-（2）$1$ 个 $f64 = f32 + f32$；
+(2) One $f64 = f32 + f32$;
 
-（3）$2$ 个 $f32 = f32 + f16$；
+(3) Two $f32 = f32 + f16$;
 
-（4）$2$ 个 $f32 = f16 + f16$。
+(4) Two $f32 = f16 + f16$.
 
-混合精度计算的设计难度比多组单一精度格式要大得多。一方面，不同的数据格式操作数需要进行格式转换，转换成和结果相同的格式再计算，逻辑复杂度提高了；另一方面，格式转换对电路时序的压力非常大，尤其是将低精度的非规格化数转换成高精度浮点数时，因此本文专门设计了一种快速数据格式转换算法来解决时序问题。
+The design difficulty of mixed-precision computation is much greater than that
+of multiple single-precision formats. On one hand, operands of different data
+formats need to be converted to the same format as the result before
+computation, increasing logical complexity. On the other hand, format conversion
+imposes significant pressure on circuit timing, especially when converting
+low-precision denormal numbers to high-precision floating-point numbers.
+Therefore, this paper specifically designs a fast data format conversion
+algorithm to address the timing issue.
 
-综上所述，向量浮点运算器的设计难点在于多组单一精度格式的实现和混合精度格式的实现。本节将逐一介绍向量浮点加法算法、浮点顺序累加算法、向量浮点融合乘加算法、向量浮点除法算法来解决向量浮点运算器的设计难点，实现频率可达
-$3GHz$ 的高性能向量浮点运算器。
+In summary, the design challenges of the vector floating-point unit lie in the
+implementation of multiple single-precision formats and mixed-precision formats.
+This section will introduce the vector floating-point addition algorithm,
+floating-point sequential accumulation algorithm, vector fused multiply-add
+algorithm, and vector floating-point division algorithm to address these
+challenges, achieving a high-performance vector floating-point unit with a
+frequency of up to $3GHz$.
 
-### 向量浮点加法
+### Vector Floating-Point Addition
 
-浮点加法是科学计算中最常用的算术运算之一。尽管概念简单，但是传统的单通路浮点加法算法需要两到三个有符号加法步骤，这是一个相对耗时的操作。双通路浮点加法算法在最坏情况下关键路径上只有一个有符号加法操作，因此与单通路算法相比具有很大的速度优势，本文在双通路浮点加法算法的基础上，设计了一种更为快速的改进的双通路浮点加法算法。本节先介绍单一精度格式的单通路浮点加法算法、双通路浮点加法算法、改进的双通路浮点加法算法，最后介绍向量浮点加法算法。
+Floating-point addition is one of the most commonly used arithmetic operations
+in scientific computing. Although conceptually simple, the traditional
+single-path floating-point addition algorithm requires two to three signed
+addition steps, which is a relatively time-consuming operation. The dual-path
+floating-point addition algorithm has only one signed addition operation on the
+critical path in the worst case, thus offering significant speed advantages over
+the single-path algorithm. Based on the dual-path floating-point addition
+algorithm, this paper designs an even faster improved dual-path floating-point
+addition algorithm. This section first introduces the single-path floating-point
+addition algorithm, the dual-path floating-point addition algorithm, and the
+improved dual-path floating-point addition algorithm for single-precision
+format, and finally presents the vector floating-point addition algorithm.
 
-浮点加法公式表示为：$fp\_result = fp\_a + fp\_b$。当 $fp\_a$ 和 $fp\_b$
-符号相同时，有效数字对齐后做加法，这种情况称作等效加法；当 $fp\_a$ 和 $fp\_b$
-符号不同时，有效数字对齐后做减法，这种情况称作等效减法。对于非规格化数阶码等于 $0$，和规格化数阶码等于 $1$
-对应的规格化的指数是一样的，所以计算指数差时，阶码为 $0$ 时应当作1处理（称为规格化的阶码），规格化的阶码之差的绝对值为规格化的指数之差。
+The floating-point addition formula is expressed as: $fp\_result = fp\_a +
+fp\_b$. When $fp\_a$ and $fp\_b$ have the same sign, the significands are
+aligned and added, which is referred to as equivalent addition. When $fp\_a$ and
+$fp\_b$ have opposite signs, the significands are aligned and subtracted, which
+is referred to as equivalent subtraction. For denormal numbers, the exponent is
+$0$, and for normalized numbers, the exponent is $1$, but the corresponding
+normalized exponent is the same. Therefore, when calculating the exponent
+difference, an exponent of $0$ should be treated as $1$ (referred to as the
+normalized exponent). The absolute difference between the normalized exponents
+is the normalized exponent difference.
 
-#### 单通路浮点加法算法
+#### Single-path floating-point addition algorithm
 
-传统的单通路浮点加法运算如图所示，由以下步骤组成：
+The traditional single-path floating-point addition operation is illustrated as
+follows, consisting of the following steps:
 
-![单通路浮点加法算法](./figure/SinglePassFloating-pointAddition.svg)
+![Single-path floating-point addition
+algorithm](./figure/SinglePassFloating-pointAddition.svg)
 
-（1）规格化的指数减法（Exponent subtraction，$ES$）：求规格化的指数之差 $d = |Ea - Eb|$，$Ea$、$Eb$
-都是规格化的阶码。
+(1) Normalized exponent subtraction (ES): Calculate the difference between
+normalized exponents, d = |Ea - Eb|, where Ea and Eb are both normalized
+exponents.
 
-（2）对齐（Alignment，$Align$）：将较小的操作数的有效数字右移 $d$ 位。较大的指数记作 $Ef$。
+(2) Alignment ($Align$): Shift the significand of the smaller operand right by
+$d$ bits. The larger exponent is denoted as $Ef$.
 
-（3）有效数字加法（Signicand addition，$SA$）：根据有效操作 $Eo$ 执行加法或减法，$Eo$
-是浮点加法单元中加法器实际执行的算术运算，根据两浮点操作数的符号位确定。
+(3) Significand addition ($SA$): Performs addition or subtraction based on the
+effective operation $Eo$, which is the arithmetic operation executed by the
+adder in the floating-point addition unit, determined by the sign bits of the
+two floating-point operands.
 
-（4）转换（Conversion，$Conv$）：如果有效数字加法结果为负，则将结果转换为符号-幅度表示。转换是通过一个加法步骤完成的，转换结果表示为
-$Sf$。
+(4) Conversion ($Conv$): If the significand addition result is negative, convert
+the result to sign-magnitude representation. The conversion is completed through
+an addition step, with the result denoted as $Sf$.
 
-（5）前导零检测（Leading zero detection，$LZD$）：计算所需的左移或右移量，并将其表示为 $En$，右移为正，否则为负。
+(5) Leading zero detection (LZD): Calculates the required left or right shift
+amount, expressed as $En$, where right shift is positive and left shift is
+negative.
 
-（6）归一化（Normalization，$Norm$）：通过移 $En$ 位将有效数字归一化，并将 $En$ 加到$Ef$ 上。
+(6) Normalization ($Norm$): Normalize the significand by shifting $En$ bits and
+add $En$ to $Ef$.
 
-（7）舍入（Rounding，$Round$）：根据 $IEEE$-$754$ 标准舍入，必要时在 $Sf$ 的 $LSB$ 上加
-$1$，此步骤可能导致溢出，需要将尾数结果右移一位，同时指数 $Ef$ 加 $1$。
+(7) Rounding ($Round$): Round according to the $IEEE$-$754$ standard, adding $1$
+to the $LSB$ of $Sf$ if necessary. This step may cause overflow, requiring the
+mantissa result to be right-shifted by one bit while incrementing the exponent
+$Ef$ by $1$.
 
-#### 双通路浮点加法算法
+#### Dual-path floating-point addition algorithm
 
-上述单通路浮点算法很慢，因为加法运算中的步骤基本上都是串行执行的，可以通过以下方式改进该算法：
+The above single-path floating-point algorithm is slow because the steps in the
+addition operation are essentially executed serially. This algorithm can be
+improved in the following ways:
 
-（1）在单通路浮点加法算法中，仅当结果为负时才需要 $Conv$ 步骤，并且可以通过交换两操作数的有效数字来避免 $Conv$ 步骤。通过检查 $ES$
-步骤结果的正负号，并可以相应的交换（$Swap$）有效数字，总是计算较大的有效数字减去较小的有效数字。在指数相等的情况下，结果仍可能为负，需要进行转换，但在这种情况下不需要舍入。因此，交换步骤使舍入和转换相互排斥，允许将它们并行起来。注意交换还有一个优点是只需要一个移位器。
+(1) In the single-path floating-point addition algorithm, the $Conv$ step is
+only needed when the result is negative, and it can be avoided by swapping the
+significands of the two operands. By checking the sign of the $ES$ step result,
+the significands can be swapped ($Swap$) accordingly, always computing the
+larger significand minus the smaller one. When exponents are equal, the result
+may still be negative, requiring conversion, but no rounding is needed in this
+case. Thus, the swap step makes rounding and conversion mutually exclusive,
+allowing them to be parallelized. Note that another advantage of swapping is
+that only one shifter is required.
 
-（2）前导零检测步骤可以与有效数字加法步骤并行执行，将其从关键路径中移除。在计算减法的情况下，当需要大量左移时，这种优化非常重要。
+(2) The leading zero detection step can be executed in parallel with the
+significand addition step, removing it from the critical path. This optimization
+is particularly important in cases where subtraction requires significant left
+shifts.
 
-（3）到目前为止，已经能够将关键路径步骤减少为：规格化的指数减法，交换，对齐，有效数字加法 $||$ 前导零检测, 转换 $||$ 舍入，归一化（ $||$
-表示可以并行执行的步骤）。对齐和归一化步骤是互斥的，可以进一步优化，只有当 $d≤1$ 时或者等效减法时，归一化需要大量的左移。相反，只有当 $d > 1$
-时，对齐步骤需要大量的右移。通过区分这两种情况，只有一个大量的移位关键路径，对齐或归一化。
+(3) So far, the critical path steps have been reduced to: normalized exponent
+subtraction, swapping, alignment, significand addition $||$ leading zero
+detection, conversion $||$ rounding, normalization (where $||$ denotes steps
+that can be executed in parallel). The alignment and normalization steps are
+mutually exclusive and can be further optimized. Normalization requires a large
+left shift only when $d≤1$ or during equivalent subtraction. Conversely,
+alignment requires a large right shift only when $d > 1$. By distinguishing
+these two cases, only one large shift—either alignment or normalization—remains
+on the critical path.
 
-单通路浮点加法算法和双通路浮点加法算法中的步骤如表所示。在双通路浮点加法算法中，$d≤1$ 路径中的预处理步骤（$Pred$）根据 $d$
-的值决定是否需要右移一位来对齐有效数字。双通路浮点加法算法通过并行执行更多的步骤来提高速度，因此需要更多的硬件来实现。
+The steps for single-path and dual-path floating-point addition algorithms are
+shown in the table. In the dual-path algorithm, the preprocessing step ($Pred$)
+in the $d ≤ 1$ path determines whether a right shift is needed to align
+significands based on the value of $d$. The dual-path algorithm improves speed
+by executing more steps in parallel, requiring additional hardware for
+implementation.
 
-Table: 两种浮点加法算法步骤
+Table: Steps for Two Floating-Point Addition Algorithms
 
 +------------------+-----------------------------------------------------+ |
-单通路浮点加法 | 双通路浮点加法算法 | | +-----------------------------+-----------------------+
-| | $d\leq1$ 且 等效减法 | $d>1$ 或 等效加法 |
+Single-Path Floating-Point Addition | Dual-Path Floating-Point Addition
+Algorithm | | +-----------------------------+-----------------------+ | |
+$d\leq1$ and Equivalent Subtraction | $d>1$ or Equivalent Addition |
 +:================:+:===========================:+:=====================:+ |
-规格化的指数加法 | 预处理+交换 | 规格化的指数减法+交换 |
-+------------------+-----------------------------+-----------------------+ | 对齐
-| -- | 对齐 |
+Normalized Exponent Addition | Preprocessing + Swap | Normalized Exponent
+Subtraction + Swap |
 +------------------+-----------------------------+-----------------------+ |
-有效数字加法 | 有效数字加法 或 前导零检测 | 有效数字加法 |
-+------------------+-----------------------------+-----------------------+ | 转换
-| 转换 或 舍入 | 舍入 |
+Alignment | -- | Alignment |
 +------------------+-----------------------------+-----------------------+ |
-前导零检测 | -- | -- |
-+------------------+-----------------------------+-----------------------+ | 归一化
-| 归一化 | -- |
-+------------------+-----------------------------+-----------------------+ | 舍入
-| 选择路径 | 选择路径 |
+Significant Digit Addition | Significant Digit Addition or Leading Zero
+Detection | Significant Digit Addition |
++------------------+-----------------------------+-----------------------+ |
+Conversion | Conversion or Rounding | Rounding |
++------------------+-----------------------------+-----------------------+ |
+Leading Zero Detection | -- | -- |
++------------------+-----------------------------+-----------------------+ |
+Normalization | Normalization | -- |
++------------------+-----------------------------+-----------------------+ |
+Rounding | Path Selection | Path Selection |
 +------------------+-----------------------------+-----------------------+
 
-在双通路浮点加法算法中，$SA$ 步骤在等效减法的情况下，其中一个有效数字是 $2$
-的补码，该求补码步骤和舍入步骤是互斥的，因此可以并行，优化后的双通路浮点加法算法见表。
+In the dual-path floating-point addition algorithm, during the $SA$ step in the
+case of equivalent subtraction, one of the significant digits is in 2's
+complement form. The complementation step and the rounding step are mutually
+exclusive, thus they can be performed in parallel. The optimized dual-path
+floating-point addition algorithm is shown in the table.
 
-Table: 优化后的双通路浮点加法算法
+Table: Optimized Dual-Path Floating-Point Addition Algorithm
 
-|       $d≤1$ 且 等效减法       | $d>1$ 或 等效加法 |
-| :----------------------: | :----------: |
-|          预处理+交换          | 规格化的指令减法+交换  |
-| 有效数字加法转换$|$ 舍入 $|$ 前导零检测 |      对齐      |
-|           归一化            | 有效数字加法$|$ 舍入 |
-|           选择路径           |     选择路径     |
+|                     $d≤1$ and equivalent subtraction                      |       $d>1$ or equivalent addition        |
+| :-----------------------------------------------------------------------: | :---------------------------------------: |
+|                         Preprocessing + Exchange                          | Normalized Instruction Subtraction + Swap |
+| Significant Digit Addition Conversion | Rounding | Leading Zero Detection |                 Alignment                 |
+|                               Normalization                               |      Significand addition | Rounding      |
+|                              Selection Path                               |              Selection Path               |
 
-在 $IEEE$ 舍入到最近值（$RTN$）模式中，计算 $A+B$ 和 $A+B+1$ 足以解决所有归一化可能性（向正负无穷方向舍入时还需额外计算
-$A+B+2$）。通过使用 $Cin$
-从多组有效数字加法器结果中选择最终尾数舍入后的结果，可以同时完成求补码和舍入，从而节省一个加法步骤。由于在浮点加法中，结果的归一化可能需要右移一位、不移位或左移，左移的位数可能与有效数字的长度一样多，因此
-$Cin$ 需要考虑所有这些归一化的可能性，使得最终选择的结果是舍入后的结果。
+In the IEEE round-to-nearest ($RTN$) mode, computing $A+B$ and $A+B+1$ suffices
+to address all normalization possibilities (additional computation of $A+B+2$ is
+required for rounding toward positive or negative infinity). By utilizing $Cin$
+to select the final rounded mantissa result from multiple sets of significand
+adder outputs, both two's complement conversion and rounding can be completed
+simultaneously, saving an addition step. Since floating-point addition may
+require normalization through a right shift by one bit, no shift, or a left
+shift (potentially as extensive as the significand's length), $Cin$ must account
+for all these normalization possibilities to ensure the selected result is the
+rounded one.
 
-#### 改进的双通路浮点加法算法
+#### Improved dual-path floating-point addition algorithm
 
-本节详细介绍本文改进的双通路浮点加法算法，等效加法或 $d＞1$ 的等效减法的通路称为 $far$ 路径，$d≤1$ 且等效减法的通路称为 $close$
-路径。含有无穷或 $NaN$ 操作数的情况单独判断，不属于 $far$ 路径或 $close$ 路径。
+This section details the improved dual-path floating-point addition algorithm
+proposed in this paper. The path for equivalent addition or equivalent
+subtraction with d > 1 is called the far path, while the path for equivalent
+subtraction with d ≤ 1 is called the close path. Cases involving infinity or NaN
+operands are handled separately and do not belong to the far or close paths.
 
-##### $far$ 路径
+##### $far$ path
 
-$far$ 路径算法如图所示，其中主要步骤如下：
+The $far$ path algorithm is illustrated in the figure, with the main steps as
+follows:
 
-![far 路径算法示意图](./figure/FarPath.svg)
+![far Path Algorithm Diagram](./figure/FarPath.svg)
 
-第一步，$far$ 路径下指数差 $d$ 大于 $1$
-，要对较小的有效数字右移d位来对齐较大的有效数字，首先计算规格化的指数差，为了加快计算速度，使用两个加法器来计算规格化的指数差，同时进行 $Efp\_a$ 与
-$Efp\_b$ 大小比较，根据指数大小的比较结果选择出正确的规格化的指数差。
+Step 1: In the $far$ path, when the exponent difference $d$ is greater than $1$,
+the smaller significand is shifted right by $d$ bits to align with the larger
+significand. First, calculate the normalized exponent difference. To accelerate
+computation, two adders are used to compute the normalized exponent difference
+while comparing the magnitudes of $Efp\_a$ and $Efp\_b$. The correct normalized
+exponent difference is selected based on the comparison result of the exponent
+magnitudes.
 
-第二步，根据第一步中指数大小比较关系，可以与第一步求规格化的指数差并行选择出指数较大的操作数的有效数字和指数较小的操作数的有效数字，同时选出较大的指数
-$EA$，当等效减法时，$EA$ 自减 $1$（此时 $EA$ 不可能等于 $0$，因为如果等于 $0$ 就是 $close$
-路径了），这样做的目的是调整有效数字做完减法后的值域，和等效加法值域统一起来方便后面选择出最终结果。调整后有效数字加或减的结果值域在 $[1$-$4)$
-之间，分为两种情况：$[1$-$2)$ 之间、$[2$-$4)$ 之间。
+In the second step, based on the exponent comparison from the first step, the
+significand of the operand with the larger exponent and the significand of the
+operand with the smaller exponent can be selected in parallel while also
+selecting the larger exponent $EA$. For equivalent subtraction, $EA$ is
+decremented by $1$ (in this case, $EA$ cannot be $0$, as that would fall under
+the $close$ path). This adjustment aims to align the value range of the
+significand after subtraction with that of equivalent addition, facilitating the
+selection of the final result. The adjusted significand addition or subtraction
+result falls within the range $[1$-$4)$, divided into two cases: $[1$-$2)$ and
+$[2$-$4)$.
 
-第三步，对较小的有效数字右移，此处右移分两种情况：在等效减法时，对较小的有效数字先取反再算数右移，比先右移再取反节省了一些时间；等效加法时之间逻辑右移。为了节省右移器的级数，当规格化的指数差的高位全
-$0$ 时，右移时用规格化的指数差的低位（具体位数取决于有效数字宽度）进行右移，当规格化的指数差的高位不是全 $0$ 时，右移结果为
-$0$。这里使用第一步中的求两个规格化的指数差的加法器结果，并且先使用最低位进行右移（因为加法结果最低位最先得到），具体如下：假设 $fp\_a$
-指数大，则只需对 $fp\_b$ 的有效数字进行右移，右移的值就是 $fp\_a$ 的规格化的指数减 $fp\_b$ 的规格化的指数；假设 $fp\_b$
-指数大，则只需对 $fp\_a$ 的有效数字进行右移，右移的值就是 $fp\_b$ 的规格化的指数减 $fp\_a$
-的规格化的指数。然后根据指数大小关系和规格化的指数差的值选出最终右移后的有效数字，并且计算出右移后的
-$grs$（$guard$，$round$，$sticky$）位。此处为了对第二步的两种情况正确舍入，需要计算有效数字加减后结果在 $[1$-$2)$
-之间，$[2$-$4)$ 之间的两组 $grs$。
+Step three involves right-shifting the smaller significand, which is divided
+into two scenarios: during equivalent subtraction, the smaller significand is
+first inverted and then arithmetically right-shifted, saving some time compared
+to right-shifting first and then inverting; during equivalent addition, a
+logical right shift is directly applied. To reduce the number of shifter stages,
+when the high-order bits of the normalized exponent difference are all $0$, the
+lower bits (the specific number depends on the significand width) are used for
+the right shift. If the high-order bits are not all $0$, the right-shift result
+is $0$. Here, the adder result from the first step, which calculates the
+normalized exponent difference between the two, is used, with the least
+significant bit applied first (since the adder result's least significant bit is
+obtained earliest). Specifically: if $fp\_a$'s exponent is larger, only
+$fp\_b$'s significand is right-shifted by the value of $fp\_a$'s normalized
+exponent minus $fp\_b$'s normalized exponent; if $fp\_b$'s exponent is larger,
+only $fp\_a$'s significand is right-shifted by the value of $fp\_b$'s normalized
+exponent minus $fp\_a$'s normalized exponent. The final right-shifted
+significand is then selected based on the exponent magnitude relationship and
+the normalized exponent difference, and the $grs$ ($guard$, $round$, $sticky$)
+bits after the shift are calculated. To ensure correct rounding for the two
+scenarios in step two, two sets of $grs$ need to be computed for the significand
+addition/subtraction results within $[1$-$2)$ and $[2$-$4)$.
 
-第四步，进行有效数字加法，因为等效减法时较小的有效数字在右移前已经取反了，此处记较大的有效数字为 $A$，较小的有效数字右移后为
-$B$，两个有效数字加法器分别计算 $A+B$ 和 $A+B+2$，最终舍入结果从这两个加法器结果中选择出来。
+Step 4: Perform significand addition. For equivalent subtraction, the smaller
+significand is inverted before right-shifting. Denote the larger significand as
+$A$ and the right-shifted smaller significand as $B$. Two adders compute $A+B$
+and $A+B+2$, and the final rounded result is selected from these two adder
+outputs.
 
-第五步，产生最终结果，根据有效数字 $A+B$ 的结果在 $[1$-$2)$ 之间（情况一）还是 $[2$-$4)$之间（情况二），根据之前右移中计算的两套
-$grs$ 和舍入模式，分别确定情况一选择两个有效数字加法器的条件，情况二选择两个有效数字加法器的条件，最后用四选一的独热码选择出尾数结果。指数结果则是
-$EA$（情况一且尾数舍入后 $<1$）或 $EA+1$ （情况二或情况一舍入后 $=2$），注意舍入后指数是否 $overflow$，最终结果由
-$overflow$ 选出 $overflow$ 结果和正常计算结果。异常标志位 $far$ 路径下只会产生上溢和不精确。
+Step five: generate the final result. Depending on whether the significant
+digits $A+B$ result falls within $[1$-$2)$ (case one) or $[2$-$4)$ (case two),
+and based on the two sets of $grs$ and rounding modes calculated during the
+previous right shift, determine the conditions for selecting the two significant
+digit adders in case one and case two, respectively. Finally, use a one-hot
+four-way selection to choose the mantissa result. The exponent result is either
+$EA$ (case one and mantissa rounded to $<1$) or $EA+1$ (case two or case one
+rounded to $=2$). Note whether the exponent overflows after rounding, and the
+final result is selected between the overflow result and the normal computation
+result based on $overflow$. The exception flags in the $far$ path only produce
+overflow and inexact results.
 
-##### $close$ 路径
+##### $close$ path
 
-$close$ 路径下一定是等效减法并且 $d≤1$ 的情况，具体细分为 $d=0$ 或 $d=1$，算法如图所示，具体步骤如下：
+In the $close$ path, it must be an effective subtraction with $d \leq 1$,
+specifically categorized as $d=0$ or $d=1$. The algorithm is illustrated in the
+figure, with the following detailed steps:
 
-![close 路径算法示意图](./figure/ClosePath.svg)
+![Schematic diagram of the close path algorithm](./figure/ClosePath.svg)
 
-第一步，并行做四组有效数字减法，根据 $d=0$（$fp\_a$ 尾数大，$fp\_b$ 尾数大），$d=1$（$fp\_a$ 规格化的指数大，$fp\_b$
-规格化的指数大），组合出有效减法的四种情况。第一个减法器：$fp\_a$ 有效数字 $-$ $fp\_b$ 有效数字；第二个减法器：$fp\_b$ 有效数字
-$-$ $fp\_a$ 有效数字；第三个减法器：$fp\_a$ 有效数字$×2$ $-$ $fp\_b$ 有效数字；第四个减法器：$fp\_b$
-有效数字$×2$ $-$ $fp\_a$ 有效数字。同时根据指数大小关系计算出 $grs$ 位，$d=0$ 时 $grs$ 全为 $0$，$d＝1$ 时只有
-$g$ 可能非 $0$。这四组加法器不能产生所有舍入的结果，增加第五个慢速加法器，指数大的有效数字 $–$ 指数小的有效数字右移一位。
+Step 1: Perform four sets of significand subtractions in parallel. Based on
+$d=0$ ($fp\_a$ significand is larger, $fp\_b$ significand is larger) and $d=1$
+($fp\_a$ normalized exponent is larger, $fp\_b$ normalized exponent is larger),
+combine the four scenarios for effective subtraction. The first subtractor:
+$fp\_a$ significand $-$ $fp\_b$ significand; the second subtractor: $fp\_b$
+significand $-$ $fp\_a$ significand; the third subtractor: $fp\_a$ significand
+$×2$ $-$ $fp\_b$ significand; the fourth subtractor: $fp\_b$ significand $×2$
+$-$ $fp\_a$ significand. Simultaneously, calculate the $grs$ bits based on the
+exponent magnitude relationship. When $d=0$, all $grs$ bits are $0$; when $d=1$,
+only $g$ may be non-zero. These four sets of adders cannot produce all rounding
+results, so a fifth slower adder is added: the significand with the larger
+exponent $–$ the significand with the smaller exponent shifted right by one bit.
 
-第二步，确定选择四组有效数字减法的四个条件，根据 $d$ 的值，加法器结果的最高位，$grs$ 和舍入模式来确定。从四组加法器中选出减法结果后需要对减法结果进行
-$LZD$ $+$ 左移，这里要注意较大指数 $EA$ 的值，左移要受 $LZD$ 和 $EA$ 共同控制，根据 $EA$ 的值产生一个 $mask$
-值（与减法结果位宽相同但最多只有一比特是 $1$），与减法结果或操作后再进行 $LZD+$ 左移即可。
+Step two: Determine the four conditions for selecting the four sets of
+significand subtractions, based on the value of $d$, the most significant bit of
+the adder result, $grs$, and the rounding mode. After selecting the subtraction
+result from the four sets of adders, perform $LZD$ $+$ left shift on the
+subtraction result. Here, attention must be paid to the value of the larger
+exponent $EA$. The left shift is controlled jointly by $LZD$ and $EA$,
+generating a $mask$ value (with the same bit width as the subtraction result but
+with at most one bit set to $1$) based on the value of $EA$. This $mask$ is ORed
+with the subtraction result before performing $LZD+$ left shift.
 
-第三步，确定选择第五个减法器的条件，选择第五个减法器结果时是不需要左移的，所以采用的慢速加法器，最终的尾数结果就可以选择出来了。
+Step 3: Determine the condition for selecting the fifth subtractor. When
+selecting the result of the fifth subtractor, no left shift is required, so a
+slower adder is used, and the final mantissa result can then be selected.
 
-第四步，指数结果和符号位结果，指数位结果需要用 $EA$ 减第二步中的 $LZD$ 的值，如果选择的是第五个减法器作为尾数结果，则指数保持原值。当 $d=1$
-时符号位的取值就是指数较大的操作数的符号，$d=0$ 时要根据尾数大小选择符号位，注意结果为 $0$ 且向下舍入时，符号位为 $1$。
+Step four: exponent and sign bit results. The exponent result requires
+subtracting the $LZD$ value from step two from $EA$. If the fifth subtractor is
+selected as the mantissa result, the exponent remains unchanged. When $d=1$, the
+sign bit is the sign of the operand with the larger exponent. When $d=0$, the
+sign bit is selected based on the mantissa size. Note that when the result is
+$0$ and rounded down, the sign bit is $1$.
 
-#### 向量浮点加法算法
+#### Vector floating-point addition algorithm
 
-向量浮点加法器输出信号宽度为 $64$，支持混合精度，支持 $widening$ 指令，共要支持如下数据格式计算：
+The vector floating-point adder's output signal width is $64$ bits, supporting
+mixed precision and widening instructions. It must support calculations for the
+following data formats:
 
-（1）$1$ 个 $f64$ $= f64 + f64$;
+(1) $1$ $f64$ $= f64 + f64$;
 
-（2）$1$ 个 $f64$ $= f64 + f32$;
+(2) $1$ $f64$ $= f64 + f32$;
 
-（3）$1$ 个 $f64$ $= f32 + f32$;
+(3) 1 $f64$ = $f32$ + $f32$;
 
-（4）$2$ 个 $f32$ $= f32 + f32$;
+(4) $2$ $f32$ values $= f32 + f32$;
 
-（5）$2$ 个 $f32$ $= f32 + f16$;
+(5) $2$ $f32$ $= f32 + f16$;
 
-（6）$2$ 个 $f32$ $= f16 + f16$;
+(6) Two $f32$ $= f16 + f16$;
 
-（7）$4$ 个 $f16$ $= f16 + f16$。
+(7) Four $f16$ = $f16 + f16$.
 
-##### 模块划分
+##### Module partitioning
 
-计算思路是用一个模块计算前三种格式，它们输出的结果都是 $64$ 位，将计算 $f64 = f64 + f64$ 的单精度浮点加法器复用，使之能计算 $f64
-= f64 + f32$ 和 $f64 = f32 + f32$，本文提出一种快速的数据格式转换算法，将 $f32$ 操作数转换为 $f64$ 后就可以进行
-$f64 = f64 + f64$ 计算，得到 $f64$ 的结果格式。
+The computation approach uses one module for the first three formats, all
+outputting 64-bit results. The single-precision floating-point adder for $f64 =
+f64 + f64$ is reused to compute $f64 = f64 + f32$ and $f64 = f32 + f32$. This
+paper proposes a fast data format conversion algorithm to convert $f32$ operands
+to $f64$, enabling $f64 = f64 + f64$ computation and yielding results in $f64$
+format.
 
-对于输出结果是 $f32$ 的计算格式也采取同样的思路进行，因为 $f32$ 的时序压力没那么大，将一个 $f16 = f16 + f16$ 也融入到计算结果为
-$f32$ 的模块节约面积，使它支持：
+The same approach is applied to computation formats where the output is $f32$.
+Since $f32$ has less timing pressure, integrating a $f16 = f16 + f16$ operation
+into the module that computes $f32$ results saves area while supporting:
 
-（1）$1$ 个 $f32 = f32 + f32$;
+(1) One $f32 = f32 + f32$;
 
-（2）$1$ 个 $f32 = f32 + f16$;
+(2) One $f32 = f32 + f16$;
 
-（3）$1$ 个 $f32 = f16 + f16$;
+(3) One $f32 = f16 + f16$;
 
-（4）$1$ 个 $f16 = f16 + f16$。
+(4) One $f16 = f16 + f16$.
 
-显然这个模块需要例化两个，最后还差 $2$ 个 $f16 = f16 + f16$，单独例化两个只计算 $f16 = f16 + f16$
-的单精度浮点加法器，一共四个模块，实现所有向量加法计算格式。
+Clearly, this module needs to be instantiated twice, and there are still two
+$f16 = f16 + f16$ operations missing. Two single-precision floating-point adders
+dedicated to computing $f16 = f16 + f16$ are instantiated separately, totaling
+four modules, to implement all vector addition calculation formats.
 
-##### 快速格式转换算法
+##### Fast format conversion algorithm
 
-以 $f16$ 转换成 $f32$ 为例，介绍快速格式转换算法。
+Taking the conversion from $f16$ to $f32$ as an example, a fast format
+conversion algorithm is introduced.
 
-当 $f16$ 为规格化数时，转换成 $f32$ 也一定是规格化数。对于 $f16$ 指数要偏置到 $f32$ 的指数，因为 $f32$
-的指数范围更大，所以不用担心指数转换之后出现越界的问题，另外 $f16$ 尾数是 $10$ 位的， $f32$ 尾数是 $23$ 位的，只需在 $f16$
-尾数后补 $13$ 个零就可以得到 $f32$ 的尾数，并且这是一个低精度向高精度的转换，结果肯定是精确的。
+When $f16$ is a normalized number, converting it to $f32$ will also result in a
+normalized number. For $f16$ exponents, they are biased to match $f32$
+exponents. Since $f32$ has a larger exponent range, there is no concern about
+exponent overflow after conversion. Additionally, the $f16$ significand is $10$
+bits, while the $f32$ significand is $23$ bits. Simply appending $13$ zeros to
+the $f16$ significand yields the $f32$ significand. This is a conversion from
+lower to higher precision, ensuring the result is exact.
 
-对于规格化的 $f16$ 的指数（位宽是 $5$ ），实际指数 $Ereal = Ef16 – 15$，对于规格化的 $f32$ 的指数（位宽是
-$8$），$Ereal = Ef32 – 127$，所以借助 $Ereal$ 将 $Ef16$ 转换到 $Ef32$，$Ef16 – 15 = Ef32 –
-127$，$Ef32 = Ef16 – 15 + 127$，$Ef32 = Ef16 + 112$，$112$ 的 $8$ 位二进制表示为
-$01110000$，计算 $Ef16 + 112$ 需要一个变量加一个常数的加法器，通过发现规律可以避免这个加法器，规律如下：
+For a normalized $f16$ exponent (5-bit width), the actual exponent $Ereal = Ef16
+– 15$. For a normalized $f32$ exponent (8-bit width), $Ereal = Ef32 – 127$.
+Thus, converting $Ef16$ to $Ef32$ via $Ereal$: $Ef16 – 15 = Ef32 – 127$, $Ef32 =
+Ef16 – 15 + 127$, $Ef32 = Ef16 + 112$. The 8-bit binary representation of $112$
+is $01110000$. Computing $Ef16 + 112$ requires an adder for a variable plus a
+constant, but this adder can be avoided by identifying the following pattern:
 
-当 $Ef16$ 最高位是 $0$ 时，$Ef16 + 112 =（0111，Ef16（3，0））$
+When the highest bit of $Ef16$ is $0$, $Ef16 + 112 = (0111, Ef16(3, 0))$
 
-当 $Ef16$ 最高位是 $1$ 时，$Ef16 + 112 =（1000，Ef16（3，0））$
+When the most significant bit of $Ef16$ is $1$, $Ef16 + 112 = (1000, Ef16(3,
+0))$.
 
-通过这个规律可以用一个 $Mux$ 快速进行 $Ef16$ 到 $Ef32$ 的转换，所以对于规格化数 $f16$ 转换为 $f32$ 是很快的，指数位用一个
-$Mux$，尾数位补 $0$，符号位不变。难点在于当 $f16$ 是非规格化数的时候，此时 $f16$ 指数全为 $0$，而尾数的前导零个数决定了转换成
-$f32$ 的指数，当 $f16$ 的指数位全是零，尾数位只有 $lsb$ 为 $1$ 时，转换成 $f32$ 的指数最小，为 $-15-9=-24$，此时仍在
-$f32$ 规格化数内。所以对于 $f16$ 非规格化数，要进行尾数的前导零检测 $lzd$ 和左移。
+Using this pattern, an $Mux$ can quickly convert $Ef16$ to $Ef32$. Thus, for
+normalized $f16$ to $f32$ conversion, the exponent bits use an $Mux$, the
+significand bits are padded with 0, and the sign bit remains unchanged. The
+challenge arises when $f16$ is denormal. In this case, all exponent bits of
+$f16$ are 0, and the number of leading zeros in the significand determines the
+exponent after conversion to $f32$. When all exponent bits of $f16$ are zero and
+only the $lsb$ of the significand is 1, the converted $f32$ exponent is
+minimized at $-15-9=-24$, which still falls within the range of $f32$ normalized
+numbers. Therefore, for denormal $f16$, leading zero detection ($lzd$) and left
+shifting of the significand are required.
 
-$Chisel$ 自带的优先级编码可以实现 $lzd$ 功能，本文实测比传统使用二分法写的 $lzd$
-综合效果更好。语法为：$PriorityEncoder(Reverse(Cat(in,1.U)))$。$in$ 的位宽为 $5$ 生成的 $verilog$
-代码如下：
+Chisel's built-in priority encoder can implement the $lzd$ function. Tests show
+it synthesizes better than traditional $lzd$ implementations using binary
+search. The syntax is: $PriorityEncoder(Reverse(Cat(in,1.U)))$. For a $5$-bit
+$in$, the generated Verilog code is as follows:
 
 ```verilog
 module LZDPriorityEncoder(
@@ -303,8 +491,10 @@ module LZDPriorityEncoder(
 endmodule
 ```
 
-虽然这段代码看起来使用了很多级联的 $Mux$，但是综合器对于这种代码综合的时序比较好。受此启发，本文设计了一种新型基于优先级的左移算法来加快 $lzd+$
-左移，其 $Chisel$ 代码如下：
+Although this code appears to use many cascaded $Mux$es, the synthesizer
+produces good timing results for such code. Inspired by this, this paper designs
+a novel priority-based left-shift algorithm to accelerate $lzd+$ left-shift,
+with the $Chisel$ code as follows:
 
 ```scala
 def shiftLeftPriorityWithF32EXPResult(srcValue: UInt, priorityShiftValue: UInt): UInt = {
@@ -334,96 +524,147 @@ def shiftLeftPriorityWithF32EXPResult(srcValue: UInt, priorityShiftValue: UInt):
   }
 ```
 
-$srcValue$ 和 $priorityShiftValue$ 都传 $f16$ 的尾数，从尾数最高位开始进行判断，尾数最高位为 $1$ 则返回
-$srcValue$ 原值，同时返回相应的指数（指数是从多个常数中选一个，和尾数中第一个 $1$ 出现的位置有关），如果最高位是 $0$
-，则接着判断下一位是否为 $1$，若为$1$，将 $srcValue$
-左移一位后返回（此处不需要真正的左移，因为不需要保留左移之后高位的结果，所以直接进行截位操作再拼接零即可），同时返回相应的指数，以此类推。这样用一个优先级左移器同时做了
-$lzd+$ 左移两步操作，并且还产生了对应的 $Ef32$，省掉根据 $lzd$ 计算 $Ef32$ 指数，从而实现了 $f16$ 是非规格数的情况下转换成
-$f32$ 的快速算法。$f32$ 转换成 $f64$ 采用的算法类似，不再赘述。
+Both $srcValue$ and $priorityShiftValue$ pass the mantissa of $f16$, starting
+from the most significant bit (MSB) of the mantissa. If the MSB is $1$, the
+original value of $srcValue$ is returned along with the corresponding exponent
+(the exponent is selected from multiple constants and depends on the position of
+the first $1$ in the mantissa). If the MSB is $0$, the next bit is checked for
+$1$. If it is $1$, $srcValue$ is left-shifted by one bit and returned (no actual
+left shift is needed here since the high bits after shifting are not retained;
+truncation and zero-padding suffice), along with the corresponding exponent.
+This process continues iteratively. Thus, a priority left shifter simultaneously
+performs the $lzd$ and left shift operations while also generating the
+corresponding $Ef32$, eliminating the need to calculate the $Ef32$ exponent
+based on $lzd$. This enables a fast algorithm for converting $f16$ denormal
+numbers to $f32$. A similar algorithm is used for converting $f32$ to $f64$,
+which is not elaborated here.
 
-### 向量浮点融合乘加算法
+### Vector Floating-Point Fused Multiply-Add Algorithm
 
-浮点融合乘加计算 $fpa × fp\_b + fp\_c$，中间的乘法计算 $fpa × fp\_b$
-就像没有范围和精度限制一样，不进行舍入，最终只舍入一次到目标格式。FMA通常作采用流水线实现，步骤主要包括乘法、加法、归一化移位和舍入。
-本章介绍向量浮点融合乘加算法，其功能包括：
+Floating-point fused multiply-add computation $fpa × fp\_b + fp\_c$, where the
+intermediate multiplication $fpa × fp\_b$ is performed as if without range and
+precision limitations, without rounding, and only rounded once to the target
+format at the end. FMA is typically implemented using a pipeline, with steps
+including multiplication, addition, normalization shift, and rounding. This
+chapter introduces the vector floating-point fused multiply-add algorithm, whose
+functionalities include:
 
-（1）$1$ 个 $fp64 = fp64 × fp64 + fp64$；
+(1) 1 $fp64 = fp64 × fp64 + fp64$;
 
-（2）$2$ 个 $fp32 = fp32 × fp32 + fp32$；
+(2) $2$ $fp32 = fp32 × fp32 + fp32$;
 
-（3）$4$ 个 $fp16 = fp16 × fp16 + fp16$；
+(3) Four $fp16 = fp16 × fp16 + fp16$;
 
-（4）$2$ 个 $fp32 = fp16 × fp16 + fp32$；
+(4) $2$ $fp32 = fp16 × fp16 + fp32$;
 
-（5）$1$ 个 $fp64 = fp32 × fp32 + fp64$。
+(5) $1$ $fp64 = fp32 × fp32 + fp64$.
 
-（$1$）（$2$）（$3$）中的源操作数和目的操作数都是同一种浮点数格式，（$4$）（$5$）中两个乘数的宽度相同，另一个加数和结果的宽度相同并且是乘数宽度的二倍。
+($1$) ($2$) ($3$) The source and destination operands are in the same
+floating-point format, while in ($4$) ($5$), the two multipliers have the same
+width, and the other addend and the result share the same width, which is twice
+that of the multipliers.
 
-#### 标量单一精度格式算法
+#### Scalar single-precision format algorithm
 
-计算流程是先计算两个浮点数相乘的不舍入的结果，再用这个不舍入的乘积和第三个数相加。算法流程图如图，用公式 $fp\_result = fp\_a × fp\_b
-+ fp\_c$ 表达计算过程，图中 $Sa、Sb、Sc$ 分别是 $fp\_a、fp\_b、fp\_c$ 的有效数字，$Ea、Eb、Ec$ 则是
-$fp\_a、fp\_b、fp\_c$ 的指数：
+The computation flow first calculates the unrounded result of multiplying two
+floating-point numbers, then adds this unrounded product to a third number. The
+algorithm flowchart is illustrated, expressed by the formula $fp\_result = fp\_a
+× fp\_b + fp\_c$, where $Sa$, $Sb$, and $Sc$ are the significands of $fp\_a$,
+$fp\_b$, and $fp\_c$ respectively, and $Ea$, $Eb$, and $Ec$ are their exponents:
 
-![FMA 算法流程图](./figure/FMA.svg)
+![FMA algorithm flowchart](./figure/FMA.svg)
 
-为了下文描述方便，定义一些参数，参数含义及取值如表：
+For ease of description below, some parameters are defined, with their meanings
+and values listed in the table:
 
-Table: 参数含义及不同精度下的取值
+Table: Parameter meanings and values under different precisions
 
-|         参数         | $f16$ | $f32$ | $f64$ |                     含义                      |
-| :----------------: | :---: | :---: | :---: | :-----------------------------------------: |
-| $significandWidth$ | $11$  | $24$  | $53$  |                   有效数字宽度                    |
-|  $exponentWidth$   |  $5$  |  $8$  | $11$  |                    指数宽度                     |
-|   $rshiftBasic$    | $14$  | $27$  | $56$  |         $fp\_c$ 有效数字与乘积有效数字对齐需右移的位数         |
-|    $rshiftMax$     | $37$  | $76$  | $163$ | $fp\_c$ 有效数字最大的右移位数（超过这个值 $g$ 和 $r$ 都是 $0$） |
+|     Parameters     | $f16$ | $f32$ | $f64$ |                                                Meaning                                                 |
+| :----------------: | :---: | :---: | :---: | :----------------------------------------------------------------------------------------------------: |
+| $significandWidth$ | $11$  | $24$  | $53$  |                                        Significant Digit Width                                         |
+|  $exponentWidth$   |  $5$  |  $8$  | $11$  |                                             Exponent width                                             |
+|   $rshiftBasic$    | $14$  | $27$  | $56$  |      Number of right shifts required to align $fp\_c$'s significand with the product significand       |
+|    $rshiftMax$     | $37$  | $76$  | $163$ | $fp\_c$ maximum right shift count for significant digits (beyond this value, $g$ and $r$ are both $0$) |
 
-##### 无符号整数乘法
+##### Unsigned Integer Multiplication
 
-两个浮点数相乘规则是符号位相乘、指数位相加（不是单纯相加，需要考虑偏置）、有效数字（包括隐含位和尾数位）相乘。有效数字乘法实际上是定点数乘法，其和无符号整数乘法原理相同。
+The rule for multiplying two floating-point numbers is to multiply the sign
+bits, add the exponent bits (not simply added, as bias must be considered), and
+multiply the significands (including the implicit bit and mantissa bits). The
+significand multiplication is essentially fixed-point multiplication, which
+follows the same principle as unsigned integer multiplication.
 
-二进制竖式乘法是原始的乘法算法，$n$ 比特 $C=A×B$ 竖式法如图。此过程会产生 $n$ 个部分积，并将这些部分积错位相加。
+Binary vertical multiplication is the original multiplication algorithm, where
+an $n$-bit $C=A×B$ vertical method is illustrated. This process generates $n$
+partial products, which are then added with staggered alignment.
 
-![二进制竖式法计算乘法](./figure/BinaryVerticalMul.svg)
+![Binary vertical method for multiplication](./figure/BinaryVerticalMul.svg)
 
-竖式法的乘法算法延时很大，针对乘法运算的优化，主要集中在两个方面：一是减少部分积的个数（比如 $Booth$ 编码），二是减少加法器带来的延时（比如 $CSA$
-压缩）。
+The multiplication algorithm using the vertical method has significant latency.
+Optimization efforts for multiplication operations primarily focus on two
+aspects: reducing the number of partial products (e.g., $Booth$ encoding) and
+minimizing the latency introduced by adders (e.g., $CSA$ compression).
 
-在计算两个浮点相乘时，会将它们的有效数字相乘，有效数字是无符号位的，所以使用无符号整数乘法就可以计算两个有效数字相乘。无符号整数乘法实现的算法有很多种，下面对比三种算法。
+When computing the multiplication of two floating-point numbers, their
+significands are multiplied. Since significands are unsigned, unsigned integer
+multiplication suffices for this computation. There are many algorithms for
+implementing unsigned integer multiplication, and three of them are compared
+below.
 
-方式一：直接使用乘号 $×$，由综合工具自己决定。
+Method 1: Directly use the multiplication symbol $×$, letting the synthesis tool
+decide.
 
-方式二：使用类似手算十进制乘法的竖式法，两个 $n$ 位数相乘会产生 $n$ 个部分积，再对 $n$ 个部分积进行 $CSA$
-压缩（后面介绍），压缩成两个数相加。
+Method two: Use a vertical multiplication method similar to manual decimal
+multiplication. Multiplying two $n$-bit numbers generates $n$ partial products,
+which are then compressed using $CSA$ (to be introduced later) into two numbers
+for addition.
 
-方式三：使用 $Booth$ 编码，产生 $(n+1)/2$ 向上取整个部分积，再通过 $CSA$ 压缩成两个数相加。
+Method 3: Use $Booth$ encoding to generate $(n+1)/2$ rounded-up partial
+products, then compress them into two numbers for addition using $CSA$.
 
-表中的数据是使用 $TSMC7nm$ 工艺库对两个 $53$ 比特无符号整数相乘（对于 $f64$ ）的结果。目标频率为 $3GHz$，理论每周期时间
-$333.33ps$，但是需要考虑 $clock \quad uncertain$ 和工艺角偏差问题，给后端留设计余量，每周期可用时间约为
-$280ps$，所以显然一周期内做不完乘法，实际中求隐含位还需要一定的时间，所以更加无法在一周期内实现 $53bit$
-相乘。因此虽然方式一面积更小延时更短一些，但是因为方式一无法进行流水线设计，也只能选择方式二或者方式三，方式三相较与方式二延时更短面积更小，所以选方式三作为无符号整数乘法的实现方式。
+The data in the table are the results of multiplying two 53-bit unsigned
+integers (for f64) using the TSMC 7nm process library. The target frequency is
+3GHz, with a theoretical cycle time of 333.33ps. However, considering clock
+uncertainty and process corner variations, a design margin is reserved for the
+backend, leaving approximately 280ps per cycle. Therefore, it is evident that
+multiplication cannot be completed within one cycle. In practice, additional
+time is required to determine the implicit bit, making it even more impossible
+to achieve 53-bit multiplication in a single cycle. Although Method 1 has a
+smaller area and shorter latency, it cannot be pipelined, leaving only Methods 2
+or 3 as viable options. Method 3 offers shorter latency and a smaller area
+compared to Method 2, making it the chosen implementation for unsigned integer
+multiplication.
 
-Table: 无符号整数乘法三种算法比较
+Table: Comparison of Three Algorithms for Unsigned Integer Multiplication
 
-| 算法  | 延时（$ps$） | 面积（$um²$） | 是否可流水 |
-| :-: | :------: | :-------: | :---: |
-| 方式一 | $285.15$ | $1458.95$ |   否   |
-| 方式二 | $320.41$ | $2426.34$ |   是   |
-| 方式三 | $302.19$ | $2042.46$ |   是   |
+|  Algorithm   | Delay ($ps$) | Area ($um²$) | Pipelining feasibility |
+| :----------: | :----------: | :----------: | :--------------------: |
+|  Method one  |   $285.15$   |  $1458.95$   |           No           |
+|  Method two  |   $320.41$   |  $2426.34$   |          Yes           |
+| Method three |   $302.19$   |  $2042.46$   |          Yes           |
 
-##### $Booth$ 编码
+##### $Booth$ encoding
 
-$Booth$ 编码目的是减少乘法器部分积的个数，以二进制无符号数整数乘法 $C=A*B$ 为例推导 $Booth$ 编码算法。
+The purpose of Booth encoding is to reduce the number of partial products in a
+multiplier. Taking the binary unsigned integer multiplication C=A*B as an
+example, the Booth encoding algorithm is derived.
 
-下式是二进制无符号整数通用的表达形式，为了后续变换，在头尾各加上一个 $0$，其值不变。
+The following expression is a general form of unsigned binary integers. To
+facilitate subsequent transformations, a $0$ is added at both the beginning and
+the end, leaving its value unchanged.
 
 $$ B = 2^{n-1}B_{n-1} + 2^{n-2}B_{n-2} + \ldots + 2B_1 + B_0 + B_{-1}, \quad
 B_{-1}=0 $$
 
-等价变换后，相邻两比特 $1$ 会被抵消为 $0$。如果是连续 $1$，则最低位的 $1$ 会变成 $-1$，最高位 $1$ 的上一位由 $0$ 变成
-$1$，其中 $1$ 全部变成 $0$，这种变换就是布斯变换。布斯变换能对连续 $1$ 的数量大于等于 $3$ 起到化简作用，连续 $1$
-的位数越多，化简效果越好。但上述变换并不能在硬件电路中起到优化作用，因为并不能保证某个部分积恒为
-$0$。所以在电路设计中，一般采用改进的布斯编码方式，能真正减少部分积的数量。
+After equivalent transformation, adjacent two bits of $1$ cancel out to $0$. For
+consecutive $1$s, the least significant $1$ becomes $-1$, and the bit above the
+most significant $1$ changes from $0$ to $1$, with all $1$s turning to $0$. This
+transformation is known as Booth transformation. It simplifies sequences of
+three or more consecutive $1$s, with greater simplification for longer
+sequences. However, this transformation does not optimize hardware circuits
+because it does not guarantee any partial product will always be $0$. Therefore,
+modified Booth encoding is typically used in circuit design to effectively
+reduce the number of partial products.
 
 $$ \begin{split} B &= 2^{n-1}B_{n-1} + 2^{n-2}B_{n-2} + \ldots + 2B_1 + B_0 +
 B_{-1} \\
@@ -432,8 +673,11 @@ B_{-1} \\
 &= 2^{n-1}(B_{n-1}+B_{n-2}) + 2^{n-2}(-B_{n-2} + B_{n-3}) + \ldots + 2(-B_1 +
 B_0) + (-B_0 + B_{-1}) \end{split} $$
 
-再次进行等价变换，不过这次对 $n$ 加一些约束，假设 $n$ 为奇数，依旧在最后一位补一个零，补零之后长度变为偶数，再在最高位前面补一个零，将总长度变为
-$n+2$，这样做的目的是方便后面推导。
+Perform an equivalent transformation again, but this time with additional
+constraints on $n$. Assuming $n$ is odd, a zero is still appended at the end,
+increasing the length to an even number. Then, a zero is prepended at the
+highest bit, making the total length $n+2$. This is done to facilitate
+subsequent derivations.
 
 $$ \begin{split} B &= 2^nB_n + 2^{n-1}B_{n-1} + 2^{n-2}B_{n-2} + \ldots + 2B_1 +
 B_0 + B_{-1} \\
@@ -445,16 +689,29 @@ B_0 + B_{-1} \\
 \ldots \\
 &\quad + 2^2(-2B_3 + B_2 + B_1) + (-2B_1 + B_0 + B_{-1}) \end{split} $$
 
-通过等价变形后可以发现，多项表达式的项数变成了$（n+1）/2$（$n$ 为奇数），如果 $n$
-为偶数需要在尾部补一个零，最高位前面补两个零，多项表达式的项数变成了 $n/2+1$（$n$ 为偶数），综合奇偶数的情况，多项表达式的项数为$（n+1）/2$
-向上取整。原二进制数从 $LSB$ 开始，以三位为一组（第一组最低位需补一个附加位 $0$即，最高位根据 $n$ 的奇偶，奇数补一个 $0$，偶数补两个
-$0$，目的是让补完 $0$ 后的长度是奇数），相邻两组之间重叠一位（低位组的最高位与高位组的最低位重叠），构成新的多项式因子，这就是改进的布斯编码方式。
+After equivalent transformation, it can be observed that the number of terms in
+the polynomial expression becomes $(n+1)/2$ (when $n$ is odd). If $n$ is even, a
+zero needs to be appended at the end, and two zeros are prepended before the
+most significant bit, making the number of terms $n/2+1$ (when $n$ is even).
+Combining both odd and even cases, the number of terms in the polynomial
+expression is the ceiling of $(n+1)/2$. Starting from the LSB of the original
+binary number, groups of three bits are formed (the first group's least
+significant bit requires an additional appended bit $0$, and the most
+significant bit is padded with one $0$ if $n$ is odd or two $0$s if $n$ is even,
+ensuring the padded length is odd). Adjacent groups overlap by one bit (the
+highest bit of the lower group overlaps with the lowest bit of the higher
+group), forming new polynomial factors. This is the improved Booth encoding
+method.
 
-两个二进制数相乘，如果对乘数进行改进型布斯编码，则得出的部分积个数可以减少一半。记被乘数为 $A$，乘数为
-$B$，$B_{2i+1}$，$B_{2i}$，$B_{2i-1}$，分别为 $X$ 的连续三位，其中 $i$ 为自然数 $N$，$PP_i$ 为 $i$
-不同取值下对应的部分积，对 $B$ 行改进的布斯变换后再与 $A$ 乘，$Booth$ 编码与 $PP$ 真值表如表中所示。
+When multiplying two binary numbers, modified Booth encoding of the multiplier
+can halve the number of partial products. Let the multiplicand be $A$ and the
+multiplier be $B$, with $B_{2i+1}$, $B_{2i}$, and $B_{2i-1}$ representing three
+consecutive bits of $X$, where $i$ is a natural number $N$. $PP_i$ denotes the
+partial product for each $i$. After applying modified Booth transformation to
+$B$ and multiplying by $A$, the Booth encoding and $PP$ truth table are as
+shown.
 
-Table: $Booth$ 编码与 $PP$ 真值表
+Table: $Booth$ encoding and $PP$ truth table
 
 | $B_{2i+1}$ | $B_{2i}$ | $B_{2i-1}$ | $PP_i$ |
 | :--------: | :------: | :--------: | :----: |
@@ -467,42 +724,77 @@ Table: $Booth$ 编码与 $PP$ 真值表
 |    $1$     |   $1$    |    $0$     |  $-A$  |
 |    $1$     |   $1$    |    $1$     |  $0$   |
 
-根据乘数每连续三位的值，求出其对应的部分积，减少了一半部分积数量，就好像将乘数看作是四进制数进行乘法，因此被称为基 $4$ 布斯编码。采用基 $4$
-布斯编码的乘法相较于传统乘法运算，优化效果很明显且易于实现，可以满足大部分应用要求。
+By evaluating each consecutive three-bit segment of the multiplier, the
+corresponding partial product is derived, halving the number of partial
+products. This approach treats the multiplier as a quaternary number, hence
+termed radix-4 Booth encoding. Multiplication using radix-4 Booth encoding
+offers significant optimization over traditional methods, is straightforward to
+implement, and meets most application requirements.
 
-在 $Booth$ 编码时需要计算五种部分积的情况，$0$、$A$、$2A$、$-A$、$-2A$，$0$ 和 $A$ 无需计算，$2A$
-左移一位即可，$-A$ 和 $-2A$ 需要取反加一的操作，本文介绍一种快速处理取反加一的算法。
+In $Booth$ encoding, five types of partial products need to be calculated: $0$,
+$A$, $2A$, $-A$, $-2A$. $0$ and $A$ require no computation, $2A$ is obtained by
+a one-bit left shift, while $-A$ and $-2A$ require the operation of inversion
+plus one. This paper introduces a fast algorithm for handling inversion plus
+one.
 
-为介绍原理简单，我们假设计算 $f16$，有效数字是 $11$ 位，会生成 $6$ 个部分积，部分积的宽度是 $22$ 位的，如图所示，图中彩色位置宽度是
-$12$ 位的，表示 $A$ 可能乘 $0$ 、乘 $1$ 或者乘 $2$。因为最后一个部分积三比特的编码是
-$0$xx，所以其值不可能是负数，我们假设除了最后一个部分积外其它部分积都是负数，则需要对其余每个部分积取反加一，彩色部分表示的是仅取反后的结果，我们把当前部分积加的一放到下一个部分积对应的位置，这样保证了部分积的和不变，并且避免了对当前部分积加一产生一个进位链的问题，而最后一个部分积是非负的，不需要处理它的加一。
+To simplify the explanation of the principle, we assume computing $f16$ with 11
+significant bits, generating 6 partial products. Each partial product is 22 bits
+wide, as shown in the figure. The colored positions in the figure are 12 bits
+wide, representing $A$ possibly multiplied by $0$, $1$, or $2$. Since the last
+partial product's three-bit encoding is $0$xx, its value cannot be negative.
+Assuming all other partial products are negative, we invert and add one to each
+of them. The colored parts represent the results after inversion only. We place
+the added one for the current partial product into the corresponding position of
+the next partial product, ensuring the sum of partial products remains unchanged
+and avoiding the issue of a carry chain from adding one to the current partial
+product. The last partial product is non-negative and does not require this
+adjustment.
 
-![假设部分积全为负数取反加一示意图](./figure/PartialProduct1.svg)
+![Diagram of assuming all partial products are negative and inverted plus
+one](./figure/PartialProduct1.svg)
 
-上图中的 $1$ 可以先进行求和化简，得到下图的结果。
+The $1$ in the above figure can first be simplified through summation to obtain
+the result shown in the following figure.
 
-![假设部分积全为负数化简后的结果](./figure/PartialProduct2.svg)
+![Result after simplifying assuming all partial products are
+negative](./figure/PartialProduct2.svg)
 
-如果实际部分积的值是正数，那么需要对以上结果进行修正，也就是在彩色左边一比特位置加一，并且把下一个部分积尾部加的一变成零。如图所示，$Si$（$i$ 从 $0$
-计）表示第 $i$ 个部分积的符号位，这样就变成了通用的形式，彩色位置只计算$0$、$A$、$2A$、$\sim A$、$\sim 2A$，加快部分积生成速度。
+If the actual partial product value is positive, the above result needs to be
+corrected by adding one to the bit position immediately to the left of the
+colored bit and setting the next partial product's tail addition to zero. As
+shown in the figure, $Si$ (where $i$ starts from $0$) represents the sign bit of
+the $i$-th partial product, transforming it into a general form where the
+colored position only computes $0$, $A$, $2A$, $\sim A$, or $\sim 2A$, speeding
+up partial product generation.
 
-![部分积为正数时修正结果](./figure/PartialProduct3.svg)
+![Correcting the result when the partial product is
+positive](./figure/PartialProduct3.svg)
 
-这里还有一点需要说明，部分积的和是乘积的结果，但是部分积求和的时候也可能会进位，这个进位对于乘法来说是无意义的，但是当乘积和更宽的数字相加的时候就会错误进位，修正方式是部分积最高位再增加一位，如图所示。
+One additional point to note is that the sum of partial products yields the
+multiplication result, but the summation of partial products may also generate
+carries. These carries are meaningless for multiplication, but they can cause
+erroneous carries when the product is added to a wider number. The correction
+method involves adding an extra bit to the most significant bit of the partial
+product, as illustrated.
 
-![部分积进位修正](./figure/PartialProduct4.svg)
+![Partial Product Carry Correction](./figure/PartialProduct4.svg)
 
-这样就可以保证所有部分积加起来之后进位是正确的，到此 $Booth$ 编码介绍结束，注意是以 $11$ 比特乘法为例介绍的，$f16$ 和 $f64$
-有效数字位数为奇数，但是 $f32$ 有效数字位数为偶数，最高位补零需要稍作区别，其他过程类似，不再赘述。
+This ensures that the carry is correct after summing all partial products. This
+concludes the introduction to Booth encoding. Note that the example uses an
+11-bit multiplication. While $f16$ and $f64$ have an odd number of significant
+digits, $f32$ has an even number, requiring slight differences in zero-padding
+the most significant bit. Other steps are similar and thus omitted.
 
-##### $CSA$ 压缩
+##### $CSA$ Compression
 
-$Carry$-$Save$-$Adder$ 保留进位加法器，作用是将 $n$ 个加数通过某些逻辑压缩成 $m$ 个加数（$m<n$），典型的是 $3\_2$
-压缩和 $4\_2$ 压缩。
+$Carry$-$Save$-$Adder$ is a carry-save adder that compresses $n$ addends into
+$m$ addends ($m
 
-假设计算两个二进制数相加 $A+B$，它们的和与进位真值表，表中 $A[i]+B[i]$ 是十进制结果，也是 $A[i]$、$B[i]$ 中 $1$ 的数量：
+Assuming the calculation of adding two binary numbers $A+B$, the truth table for
+their sum and carry, where $A[i]+B[i]$ is the decimal result and also the count
+of $1$s in $A[i]$ and $B[i]$:
 
-Table: $A+B$ 和与进位真值表
+Table: Truth Table for Sum and Carry of $A+B$
 
 | $A[i]$ | $B[i]$ | $A[i] + B[i]$ | $Sum[i]$ | $Car[i]$ |
 | :----: | :----: | :-----------: | :------: | :------: |
@@ -511,7 +803,7 @@ Table: $A+B$ 和与进位真值表
 |  $1$   |  $0$   |      $1$      |   $1$    |   $0$    |
 |  $1$   |  $1$   |      $2$      |   $0$    |   $1$    |
 
-化简成逻辑表达式如下：
+Simplified into the following logical expression:
 
 $Sum = A$ ^ $B$
 
@@ -519,12 +811,15 @@ $Car = A$ & $B$
 
 $Result = A+B = Sum + (Car << 1)$
 
-三个数相加，和是两个数异或操作，进位是两个数同为 $1$，$(Car << 1)$
-是因为当前比特的进位是进到下一比特去的，这里只是做一下推导方便后面理解，实际中两个加数产生和与进位对加法没有加速效果。
+For three-number addition, the sum is the XOR of two numbers, and the carry
+occurs when both numbers are $1$. $(Car << 1)$ reflects that the current bit's
+carry propagates to the next bit. This derivation is for clarity; in practice,
+generating sum and carry from two addends does not accelerate addition.
 
-假设我们要计算三个数的和 $A+B+C$，$CSA$ 关键是产生和与进位，真值表如表所示：
+Suppose we want to calculate the sum of three numbers $A+B+C$, where the $CSA$
+key is to generate the sum and carry, as shown in the truth table:
 
-Table: $A+B+C$ 和与进位真值表
+Table: Truth Table for Sum and Carry of $A+B+C$
 
 | $A[i]$ | $B[i]$ | $C[i]$ | $A[i] + B[i] + C[i]$ | $Sum[i]$ | $Car[i]$ |
 | :----: | :----: | :----: | :------------------: | :------: | :------: |
@@ -537,8 +832,10 @@ Table: $A+B+C$ 和与进位真值表
 |  $1$   |  $1$   |  $0$   |         $2$          |   $0$    |   $1$    |
 |  $1$   |  $1$   |  $1$   |         $3$          |   $1$    |   $1$    |
 
-从上表中可以看出一些规律，产生 $Sum[i]$ 和 $Car[i]$ 其实只和 $A[i]+B[i]+C[i]$ 的和有关，即
-$A[i]$、$B[i]$、$C[i]$ 中 $1$ 的个数，化简之后的表达式如下：
+From the above table, some patterns can be observed. The generation of $Sum[i]$
+and $Car[i]$ actually depends only on the sum of $A[i]+B[i]+C[i]$, i.e., the
+number of $1$s in $A[i]$, $B[i]$, and $C[i]$. The simplified expression is as
+follows:
 
 $Sum = A$ ^ $B$ ^ $C$
 
@@ -546,16 +843,22 @@ $Car = (A$ & $B) \quad | \quad (A$ & $C) \quad | \quad (B$ & $C)$
 
 $Result = A+B+C = Sum + (Car << 1)$
 
-三个数相加，和是三个数异或操作，进位是至少有两个数为 $1$，$(Car << 1)$
-是因为当前比特的进位是进到下一比特去的。这样通过两级异或门的延迟就可以把三个数相加转化成两个数相加，这种方式节省了很多时间，尤其是在位宽比较长的情况下。
+For three-number addition, the sum is the XOR of the three numbers, and the
+carry occurs when at least two numbers are $1$. $(Car << 1)$ accounts for the
+current bit's carry propagating to the next bit. This method converts
+three-number addition into two-number addition with just two XOR gate delays,
+significantly saving time, especially for longer bit widths.
 
-四个数相加情况复杂一些，因为四个数同时为 $1$ 时，总和为 $4$，需要进位 $2$，我们把其中一个进位叫做 $Cout$，另一个进位叫
-$Car$，然后把当前四比特相加产生的 $Cout$ 传到下一级叫做 $Cin$，$Cin$
-和四个数变成五个数相加，这样操作之后每一比特输入就变成了五个数，$A[i]$、$B[i]$、$C[i]$、$D[i]$、$Cin[i]$，输出三个数
-$Sum[i]$、$Cout[i]$、$Car[i]$，最低位的 $Cin[0]$ 是 $0$，其他位的 $Cin[i]$ 是低一比特的
-$Cout[i-1]$，如表所示。
+Adding four numbers is slightly more complex because when all four are $1$, the
+sum is $4$, requiring a carry of $2$. We designate one carry as $Cout$ and the
+other as $Car$. The $Cout$ generated from the current four-bit addition is
+passed to the next stage as $Cin$. With $Cin$ and the four numbers, the
+operation now involves five inputs: $A[i]$, $B[i]$, $C[i]$, $D[i]$, and
+$Cin[i]$, producing three outputs: $Sum[i]$, $Cout[i]$, and $Car[i]$. The least
+significant bit's $Cin[0]$ is $0$, while other bits' $Cin[i]$ is the $Cout[i-1]$
+from the previous bit, as shown in the table.
 
-Table: $A+B+C+D$ 和与进位真值表
+Table: Truth Table for Sum and Carry of $A+B+C+D$
 
 | $A[i]+B[i]+C[i]+D[i]+Cin[i]$ | $Sum[i]$ | $Cout[i]$ | $Car[i]$ |
 | :--------------------------: | :------: | :-------: | :------: |
@@ -566,11 +869,14 @@ Table: $A+B+C+D$ 和与进位真值表
 |             $4$              |   $0$    |    $1$    |   $1$    |
 |             $5$              |   $1$    |    $1$    |   $1$    |
 
-这个真值表的化简方式有很多种，下面介绍一种可行的方式，$Sum[i]$ 的值容易得出是五个输入的异或，$Sum[i] =
-A[i]$^$B[i]$^$C[i]$^$D[i]$^$Cin[i]$，$Car[i]$ 和 $Cout[i]$ 较复杂，我们规定 $Cout[i]$
-只由前三个数产生，即前三个数的和大于 $1$ 时，$Cout[i] = 1$，表是 $Cout[i]$ 真值表：
+There are many ways to simplify this truth table. One feasible method is
+described below. The value of $Sum[i]$ can be easily derived as the XOR of the
+five inputs: $Sum[i] = A[i]$^$B[i]$^$C[i]$^$D[i]$^$Cin[i]$. $Car[i]$ and
+$Cout[i]$ are more complex. We define $Cout[i]$ to be generated only by the
+first three numbers, i.e., when the sum of the first three numbers is greater
+than $1$, $Cout[i] = 1$. The table shows the truth table for $Cout[i]$:
 
-Table: $A+B+C$ 产生 $Cout$ 真值表
+Table: Truth Table for $Cout$ Generation of $A+B+C$
 
 | $A[i]+B[i]+C[i]$ | $Cout[i]$ |
 | :--------------: | :-------: |
@@ -579,10 +885,11 @@ Table: $A+B+C$ 产生 $Cout$ 真值表
 |       $2$        |    $1$    |
 |       $3$        |    $1$    |
 
-$Cout[i]$ 可表示为：$Cout[i] = (A[i]$^$B[i])?C[i]:A[i]$，$Car[i]$ 则由 $D[i]$、$Cin[i]$
-产生，表是 $Car[i]$ 的真值表。
+$Cout[i]$ can be expressed as: $Cout[i] = (A[i]$^$B[i])?C[i]:A[i]$, while
+$Car[i]$ is generated by $D[i]$ and $Cin[i]$, with the table showing the truth
+table for $Car[i]$.
 
-Table: $A+B+C$ 产生 $Car$ 真值表
+Table: Truth table for $Car$ generation from $A+B+C$
 
 | $A[i]+B[i]+C[i]+D[i]$ | $Car[i]$ |
 | :-------------------: | :------: |
@@ -591,14 +898,16 @@ Table: $A+B+C$ 产生 $Car$ 真值表
 |          $2$          |  $D[i]$  |
 |          $3$          | $Cin[i]$ |
 
-$Car[i]$ 可表示为：$Car[i] = (A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i]) ? Cin[i] : D[i]$，具体来看
-$(A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i]) = 1$时，$A[i]+B[i]+C[i]+D[i] = 1/3$，此时 $Cin[i]
-= 1$ 会产生进位，$(A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i]) = 0$ 时，$A[i]+B[i]+C[i]+D[i] =
-0/4$，此时 $D[i]$ 等于 $0$ 表示 $A[i]+B[i]+C[i]+D[i] = 0$，再加 $Cin$ 也不产生进位，$D[i]$ 等于 $1$
-表示 $A[i]+B[i]+C[i]+D[i] = 4$，再加 $Cin$ 也会产生进位，所以综合以上推导过程, $CSA4\_2$ 的表达式如下：
+$Car[i]$ can be expressed as: $Car[i] = (A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i]) ?
+Cin[i] : D[i]$. Specifically, when $(A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i]) = 1$,
+$A[i]+B[i]+C[i]+D[i] = 1/3$, and $Cin[i] = 1$ will generate a carry. When
+$(A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i]) = 0$, $A[i]+B[i]+C[i]+D[i] = 0/4$. Here,
+$D[i] = 0$ indicates $A[i]+B[i]+C[i]+D[i] = 0$, and adding $Cin$ will not
+produce a carry, while $D[i] = 1$ indicates $A[i]+B[i]+C[i]+D[i] = 4$, and
+adding $Cin$ will generate a carry. Based on the above derivation, the
+expression for $CSA4\_2$ is as follows:
 
-$Sum[i] = A[i]$ ^ $B[i]$ ^ $C[i]$ ^ D[i]$ ^ $Cin[i]，Cin[i] = Cout[i-1]，Cin[0] =
-0$
+Sum[i] = A[i] ^ B[i] ^ C[i] ^ D[i] ^ Cin[i], Cin[i] = Cout[i-1], Cin[0] = 0
 
 $Cout[i] = (A[i]$ ^ $B[i])?C[i]:A[i]$
 
@@ -606,108 +915,143 @@ $Car[i] = (A[i]$ ^ $B[i]$ ^ $C[i]$ ^ $D[i])?Cin[i]:D[i]$
 
 $Result = A+B+C+D = Sum + (Car << 1)$
 
-使用$TSMC7nm$工艺库对不同输入异或门、$CSA3\_2$、$CSA4\_2$ 分别进行综合对比延时和面积，不同输入异或门综合结果见表。
+Using the $TSMC7nm$ process library, a comprehensive comparison of delay and
+area was conducted for different input XOR gates, $CSA3\_2$, and $CSA4\_2$. The
+synthesis results for different input XOR gates are shown in the table.
 
-Table: 不同输入异或门综合结果
+Table: Synthesis Results of Different Input XOR Gates
 
-|      $106bit$       | 延时（$ps$） | 面积（$um²$）  |
-| :-----------------: | :------: | :--------: |
-|       $A$^$B$       | $13.74$  | $38.66880$ |
-|     $A$^$B$^$C$     | $23.01$  | $63.09120$ |
-|   $A$^$B$^$C$^$D$   | $24.69$  | $87.51360$ |
-| $A$^$B$^$C$^$D$^$E$ | $37.21$  | $99.72480$ |
+|     $106$ bits      | Delay ($ps$) | Area ($um²$) |
+| :-----------------: | :----------: | :----------: |
+|       $A$^$B$       |   $13.74$    |  $38.66880$  |
+|     $A$^$B$^$C$     |   $23.01$    |  $63.09120$  |
+|   $A$^$B$^$C$^$D$   |   $24.69$    |  $87.51360$  |
+| $A$^$B$^$C$^$D$^$E$ |   $37.21$    |  $99.72480$  |
 
-$CSA3\_2、CSA4\_2$ 综合结果见表。
+The synthesis results of $CSA3\_2$ and $CSA4\_2$ are shown in the table.
 
-Table: $CSA3\_2、CSA4\_2$ 综合结果
+Table: Synthesis Results of $CSA3\_2$ and $CSA4\_2$
 
-| $106bit$  | 延时（$ps$） |  面积（$um²$）  |
-| :-------: | :------: | :---------: |
-| $CSA3\_2$ | $23.23$  | $104.42880$ |
-| $CSA4\_2$ | $40.63$  | $237.86881$ |
+| $106$ bits | Delay ($ps$) | Area ($um²$) |
+| :--------: | :----------: | :----------: |
+| $CSA3\_2$  |   $23.23$    | $104.42880$  |
+| $CSA4\_2$  |   $40.63$    | $237.86881$  |
 
-可见 $CSA4\_2$ 虽说理论上是三级异或门的延迟，$CSA3\_2$ 理论上是两级异或门的延迟，但是真正物理实现之后，$CSA4\_2$ 只是比两级
-$CSA3\_2$ 快一点点，所以尽量用 $CSA3\_2$，除非一级 $CSA4\_2$ 可以替代两级 $CSA3\_2$ 的情况，比如 $4->2$
-压缩，$8->2$ 压缩。
+It can be seen that although $CSA4\_2$ theoretically has a delay of three XOR
+gates and $CSA3\_2$ theoretically has a delay of two XOR gates, in actual
+physical implementation, $CSA4\_2$ is only slightly faster than two levels of
+$CSA3\_2$. Therefore, $CSA3\_2$ should be used whenever possible, unless one
+level of $CSA4\_2$ can replace two levels of $CSA3\_2$, such as in $4->2$
+compression or $8->2$ compression.
 
-##### $CSAn\_2$
+##### CSAn_2
 
-两个无符号整数乘法使用 $Booth$ 编码产生的部分积数量为 $\frac{n+1}{2}$
-向上取整，因为部分积压缩之后要和位宽更大的数相加，为保证进位正确，部分积位宽拓展一比特，各数据格式部分积数量及位宽见表。
+For two unsigned integer multiplications using Booth encoding, the number of
+partial products is ceil((n+1)/2). To ensure correct carry propagation, the
+partial product bit width is extended by one bit. The number and bit width of
+partial products for each data format are listed in the table.
 
-Table: 不同数据格式部分积数量及位宽
+Table: Partial Product Count and Bit Width for Different Data Formats
 
-|  数据格式  | 有效数字位数 | 部分积数量 | 部分积位宽 |
-| :----: | :----: | :---: | :---: |
-| $fp16$ |  $11$  |  $6$  | $12$  |
-| $fp32$ |  $24$  | $13$  | $25$  |
-| $fp64$ |  $53$  | $27$  | $54$  |
+| Data Format | Number of significant digits | Number of partial products | Partial product bit width |
+| :---------: | :--------------------------: | :------------------------: | :-----------------------: |
+|   $fp16$    |             $11$             |            $6$             |           $12$            |
+|   $fp32$    |             $24$             |            $13$            |           $25$            |
+|   $fp64$    |             $53$             |            $27$            |            54             |
 
-按照尽量用 $CSA3\_2$，除非一级 $CSA4\_2$ 可以替代两级 $CSA3\_2$ 的原则，各数据格式所用 $CSA3\_2、CSA4\_2$
-级数如表。
+Following the principle of prioritizing $CSA3\_2$ unless one level of $CSA4\_2$
+can replace two levels of $CSA3\_2$, the number of $CSA3\_2$ and $CSA4\_2$
+stages used for each data format is listed in the table.
 
-Table: 不同数据格式部分积 $CSA$ 压缩过程
+Table: Partial Product $CSA$ Compression Process for Different Data Formats
 
-|  数据格式  | $CSA3\_2$ 级数 | $CSA4\_2$ 级数 | 过程($->$表示 $CSA3\_2$,$-->$表示 $CSA4\_2$) |
-| :----: | :----------: | :----------: | :------------------------------------: |
-| $fp16$ |     $1$      |     $1$      |               $6->4-->2$               |
-| $fp32$ |     $3$      |     $1$      |           $13->9->6->4-->2$            |
-| $fp64$ |     $3$      |     $2$      |        $27->18->12->8-->4-->2$         |
+| Data Format | Number of $CSA3\_2$ Stages | $CSA4\_2$ Stages | Process ($->$ denotes $CSA3\_2$, $-->$ denotes $CSA4\_2$) |
+| :---------: | :------------------------: | :--------------: | :-------------------------------------------------------: |
+|   $fp16$    |            $1$             |       $1$        |                        $6->4-->2$                         |
+|   $fp32$    |            $3$             |       $1$        |                     $13->9->6->4-->2$                     |
+|   $fp64$    |            $3$             |       $2$        |                  $27->18->12->8-->4-->2$                  |
 
-##### 指数处理和右移
+##### Exponent processing and right shift
 
-如果按照常规做法，$fp\_a$ 和 $fp\_b$ 相乘结果的指数和 $fp\_c$
-的指数结果大小关系未知，那么就像计算浮点加法那样需要对其中指数小的进行右移，那么 $fp\_a$ 和 $fp\_b$ 相乘结果的尾数和 $fp\_c$
-的尾数都可能右移，这样设计会造成使用两个移位器，增大了面积，并且需要等 $fp\_a$ 和 $fp\_b$
-相乘结果计算出来再对它的有效数字右移，增大了电路的延迟，现介绍一种算法避免使用两个移位器，并且可以和 $fp\_a$ 和 $fp\_b$
-相乘并行起来减小电路的延迟。
+Following conventional methods, if the exponent relationship between the product
+of $fp\_a$ and $fp\_b$ and the exponent of $fp\_c$ is unknown, the smaller
+exponent must be right-shifted, similar to floating-point addition. This would
+require both the significand of the $fp\_a$ and $fp\_b$ product and the
+significand of $fp\_c$ to potentially shift right, necessitating two shifters
+and increasing area. Additionally, waiting for the $fp\_a$ and $fp\_b$ product
+to be computed before right-shifting its significand increases circuit latency.
+An alternative algorithm avoids using two shifters and reduces latency by
+parallelizing the computation with the $fp\_a$ and $fp\_b$ product.
 
-首先指数位是当作无符号数处理的，但是它和真实指数之间有一个指数偏置，同时还要考虑 $denormal$ 的情况，记 $E\_fix$ 是处理
-$denormal$ 情况之后的指数位，记 $E\_bit$ 是原始的指数位，当 $E\_bit$ 所有位是 $0$ 时 $E\_fix = 1$，其他情况下
-$E\_fix = E\_bit$。
+The exponent bits are treated as unsigned numbers, but there is an exponent bias
+between them and the actual exponent. Additionally, the $denormal$ case must be
+considered. Let $E\_fix$ denote the exponent bits after handling the $denormal$
+case, and $E\_bit$ denote the original exponent bits. When all bits of $E\_bit$
+are 0, $E\_fix = 1$; otherwise, $E\_fix = E\_bit$.
 
 $$ E\_real = E\_fix - bias, \quad bias = (1 << (exponentWidth - 1)) - 1 $$
 
-上式中真正的指数 $E\_real$ 等于 $E\_fix$ 减去一个偏置值 $bias$，$exponentWidth$ 是 $E\_bit$
-的宽度，$bias$ 的值等于 $E\_bit$ 最高位是 $0$ 其余位全是 $1$。在不考虑有效数字乘积的进位或借位的情况下，$fp\_a$ 和
-$fp\_b$ 相乘的真实指数结果Eab_real如下式所示：
+In the above equation, the true exponent $E\_real$ equals $E\_fix$ minus a bias
+value $bias$, where $exponentWidth$ is the width of $E\_bit$, and $bias$ equals
+the value where the highest bit of $E\_bit$ is $0$ and all other bits are $1$.
+Without considering the carry or borrow of the significand product, the true
+exponent result $Eab\_real$ of multiplying $fp\_a$ and $fp\_b$ is given by:
 
 $$ Ea\_real = Ea\_fix + Eb\_fix - 2 × bias $$
 
-$fp\_a$ 和 $fp\_b$ 相乘的二进制指数结果 $Eab\_bit$ 的计算公式见下式：
+The calculation formula for the binary exponent result $Eab\_bit$ of the
+multiplication of $fp\_a$ and $fp\_b$ is shown below:
 
-$$ Eab\_bit = Cat(0.U, Ea\_fix + \&Eb\_fix).asSInt - bias.S $$
+$$ Eab\_bit = Cat(0.U, Ea\_fix + \&amp;Eb\_fix).asSInt - bias.S $$
 
-其中 $+$& 的操作将 $Ea\_fix+Eb\_fix$
-的结果拓展一位保留进位，保留进位的原因是因为后面还要减去一个偏置值，不保留进位结果就不对了，还要考虑减去偏置值可能出现负数的情况，所以再拓展一位，即在最高位拼一比特
-$0$，最后再减去偏置值 $bias$，这样就得到了在不考虑有效数字乘积的进位或借位的情况下，$fp\_a$ 和 $fp\_b$ 相乘的二进制指数结果
-$Eab\_bit$。 然后我们构造一个指数 $Eab$，其值如下式：
+The operation of $+$& extends the result of $Ea\_fix + Eb\_fix$ by one bit to
+retain the carry. The carry is preserved because a bias value will be subtracted
+later, and without retaining the carry, the result would be incorrect.
+Additionally, subtracting the bias might result in a negative value, so another
+bit is extended by appending a 0 at the highest bit. Finally, the bias $bias$ is
+subtracted, yielding the binary exponent result $Eab\_bit$ for the
+multiplication of $fp\_a$ and $fp\_b$ without considering the carry or borrow
+from the significand product. Then, we construct an exponent $Eab$ with the
+following value:
 
 $$ Eab = Eab\_bit + rshiftBasic.S $$
 
-并且认为 $fp\_a$ 和 $fp\_b$ 相乘的二进制指数结果为 $Eab$，为了保证无损精度的 $fp\_a$ 和 $fp\_b$ 相乘的有效数字和
-$fp\_c$ 的有效数字相加，我们分别将这两个加数拓展位宽，对于 $fp\_c$ 的有效数字拓展成
-$3×significandWidth+4$，位分布情况见图，其中 $g0，r0，g1，r1$ 是用来保存右移过程中 $gound，round$ 位的：
+Assuming the binary exponent result of multiplying $fp\_a$ and $fp\_b$ is $Eab$,
+to ensure lossless precision when adding the significant digits of $fp\_a \times
+fp\_b$ and $fp\_c$, both addends are extended in width. The significant digits
+of $fp\_c$ are extended to $3 \times significandWidth + 4$, with the bit
+distribution shown in the figure. Here, $g0$, $r0$, $g1$, and $r1$ are used to
+preserve the $guard$ and $round$ bits during right-shifting:
 
-![fp_c有效数字扩展位分布情况](./figure/fp_c_Significand.svg)
+![fp_c significant digit extension bit
+distribution](./figure/fp_c_Significand.svg)
 
-如上图所示，$fp\_c$ 有效数字比 $fp\_a$ 和 $fp\_b$ 有效数字乘积高 $significandWidth+2$
-位，因为乘积结果小数点前面有两位，所以按照乘积结果是 $1$.xxx对齐，高 $significandWidth+3$ 位，这就是 $rshiftBasic =
-significandWidth+3$ 的原因。
+As shown above, the significand of $fp\_c$ is $significandWidth+2$ bits wider
+than the product of the significands of $fp\_a$ and $fp\_b$. Since the product
+result has two digits before the decimal point, aligning it as $1$.xxx requires
+$significandWidth+3$ bits, which explains why $rshiftBasic =
+significandWidth+3$.
 
-令 $fp\_c\_significand\_cat0 =
-Cat(fp\_c\_significand,0.U(2×significandWidth+4))$，$fp\_c\_significand$ 为
-$fp\_c$ 的有效数字。如果 $Ec\_fix = Eab = Eab\_bit +
-rshiftBasic.S$，$fp\_c\_significand\_cat0$ 正好比 $Eab\_bit$ 大
-$significandWidth+3$，$fp\_c\_significand\_cat0$ 不用右移就对齐了；如果 $Ec\_fix > Eab$，理论上讲
-$fp\_c\_significand\_cat0$ 需要左移，但是因为中间有 $g0，g1$
-做间隔，并且低比特是不会产生进位的，低比特只会影响舍入结果，所以实际不需要对 $fp\_c\_significand\_cat0$ 左移；如果 $Ec\_fix
-< Eab$，此时就要对 $fp\_c\_significand\_cat0$ 进行右移了，右移的位数 $rshift\_value = Eab -
-Cat(0.U,Ec\_fix).asSInt$。$rshift\_value$ 的是来自多个数的加法，所以最低位先计算好，所以再右移时要先用
-$rshift\_value$ 最低位当作 $Mux$ 的选择信号，再依次用高位当作 $Mux$ 的选择信号，右移过程需要计算
-$gound、round、sticky$（简称 $grs$），对于 $gound$ 和 $round$，已经在拓展位宽时保留了该位置，无需额外计算，对于
-$sticky$ 有两种方法，方法一是再拓展一些位宽用来存放右移出去的位，等全部右移结束之后再进行求 $sticky$，方法二是在右移过程中根据 $Mux$
-选择信号的值同时计算出 $sticky$，方法二比方法一延时更小。下面是方法二的设计代码：
+Let $fp\_c\_significand\_cat0 = Cat(fp\_c\_significand, 0.U(2 \times
+significandWidth + 4))$, where $fp\_c\_significand$ is the significand of
+$fp\_c$. If $Ec\_fix = Eab = Eab\_bit + rshiftBasic.S$,
+$fp\_c\_significand\_cat0$ is exactly $significandWidth + 3$ larger than
+$Eab\_bit$, so no right shift is needed for alignment. If $Ec\_fix > Eab$,
+theoretically $fp\_c\_significand\_cat0$ would require a left shift, but due to
+the presence of $g0$ and $g1$ as buffers and the fact that lower bits cannot
+generate carry (only affecting rounding), no actual left shift is needed. If
+$Ec\_fix < Eab$, $fp\_c\_significand\_cat0$ must be right-shifted by
+$rshift\_value = Eab - Cat(0.U, Ec\_fix).asSInt$. Since $rshift\_value$ is
+derived from the addition of multiple numbers, its LSB is computed first. Thus,
+during right-shifting, the LSB of $rshift\_value$ is first used as the Mux
+select signal, followed by higher bits. The shifting process must compute
+$guard$, $round$, and $sticky$ (collectively $grs$). For $guard$ and $round$,
+these positions are already preserved during bit-width extension, requiring no
+additional computation. For $sticky$, two methods exist: (1) Extend the
+bit-width further to store shifted-out bits and compute $sticky$ after all
+shifts, or (2) Compute $sticky$ during shifting based on Mux select signals.
+Method 2 offers lower latency than Method 1. Below is the design code for Method
+2:
 
 ```scala
 /**
@@ -728,249 +1072,407 @@ def shiftRightWithMuxSticky(srcValue: UInt, shiftValue: UInt): UInt = {
 }
 ```
 
-在右移的时候还有一个加快速度的方法，$rshift\_value$ 的位宽是 $exponentWidth+1$，而
-$fp\_c\_significand\_cat0$ 宽度是$3*significandWidth+4$，$rshift\_value$
-中可能会有溢出的位宽，比如用一个位宽是 $5$ 的数去右移一个宽是 $7$ 的数，$a(6,0) >> b(4,0)$，$b$ 中的第三位最大值是
-$7$，已经够了 $a$ 的位宽，所以 $b$ 的高两位只要有非零数，$a$ 的右移结果就是零，右移结果可简化为 $Mux(b(4,3).orR,0.U,
-a(6,0) >> b(2,0))$，下表列出三种浮点数据格式使用的 $rshift\_value$ 位宽。
+There is another method to speed up the right shift. The bit width of
+$rshift\_value$ is $exponentWidth+1$, while the width of
+$fp\_c\_significand\_cat0$ is $3*significandWidth+4$. There may be overflow bits
+in $rshift\_value$. For example, using a 5-bit number to right-shift a 7-bit
+number, $a(6,0) >> b(4,0)$, the maximum value of the third bit in $b$ is $7$,
+which is sufficient for the bit width of $a$. Therefore, if the upper two bits
+of $b$ contain any non-zero value, the right-shift result of $a$ will be zero.
+The right-shift result can be simplified to $Mux(b(4,3).orR,0.U, a(6,0) >>
+b(2,0))$. The table below lists the bit widths of $rshift\_value$ used for three
+floating-point data formats.
 
-Table: 不同浮点格式使用的 $rshift\_value$ 位宽
+Table: Bit Width of $rshift\_value$ Used for Different Floating-Point Formats
 
-| 数据格式  | $fp\_c\_significand\_cat0$ 位宽 | $rshift\_value$ 位宽 | 使用的位宽 |
-| :---: | :---------------------------: | :----------------: | :---: |
-| $f16$ |             $37$              |        $6$         |  $6$  |
-| $f32$ |             $76$              |        $9$         |  $7$  |
-| $f64$ |             $163$             |        $12$        |  $8$  |
+| Data Format | $fp\_c\_significand\_cat0$ bit width | Bit Width of $rshift\_value$ | Bit width used |
+| :---------: | :----------------------------------: | :--------------------------: | :------------: |
+|    $f16$    |                 $37$                 |             $6$              |      $6$       |
+|    $f32$    |                 $76$                 |             $9$              |      $7$       |
+|    $f64$    |                $163$                 |             $12$             |      $8$       |
 
-根据 $rshift\_value$ 的值分为三种情况，$rshift\_value <= 0$ 此时不需要右移，$sticky$ 结果是
-$0$；$rshift\_value > rshiftMax$，右移结果是 $0$，$sticky$ 结果是
-$fp\_c\_significand\_cat0$ 或缩减；$0 < rshift\_value <= rshiftMax$，右移结果和 $sticky$ 是
-$shiftRightWithMuxSticky$ 计算的结果。
+There are three cases based on the value of $rshift\_value$: $rshift\_value <=
+0$ means no right shift is needed, and the $sticky$ result is $0$;
+$rshift\_value > rshiftMax$ means the right shift result is $0$, and the
+$sticky$ result is $fp\_c\_significand\_cat0$ or reduced; $0 < rshift\_value <=
+rshiftMax$ means the right shift result and $sticky$ are calculated by
+$shiftRightWithMuxSticky$.
 
-至此，本小节介绍了指数处理的方法，右移器设计，右移过程中 $grs$ 的处理。
+Thus, this section has covered the methods for exponent processing, the design
+of the right shifter, and the handling of $grs$ during the right-shift
+operation.
 
-##### 有效数字相加
+##### Significand addition
 
-$fp\_c$ 有效数字右移之后的结果 $rshift\_result$ 要和 $CSAn\_2$ 压缩的两个结果进行相加，由于 $fp\_c$ 和
-$fp\_a$ 乘以 $fp\_b$
-的符号可能相反，当相反时要做减法，并且减法结果可能是负数，为了判断正负需要再补充一位符号位，$fp\_c\_rshiftValue\_inv$
-根据符号是否相反选择 $rshift\_result$（符号位补 $0$）或者 $rshift\_result$ 取反（符号位补 $1$），所以要用
-$fp\_c\_rshiftValue\_inv$ 要 $CSAn\_2$ 压缩的两个结果进行相加，不过在做减法的时候
-$fp\_c\_rshiftValue\_inv$ 只是对 $rshift\_result$ 取反，还需要在右移 $grs$ 都为 $0$ 的情况下对最低位
-$+1$，把这一个 $+1$ 放到 $CSAn\_2$ 压缩的两个结果中的 $carry$ 位，因为 $carry$ 位恒为
-$0$，直接放到这一位可以节省加法器的使用，节省面积。这三个数位宽不同，$fp\_c$ 有效数字右移之后的结果位宽
-$3×significandWidth+4$，$CSAn\_2$ 压缩的两个结果位宽是$2×significandWidth+1$，$+1$
-的原因是之前提到的部分积要拓展一位保证进位正确。计算三个不同位宽的和的策略是，先将 $CSAn\_2$ 压缩的两个结果的低
-$2×significandWidth+1$ 位和 $rshift\_result$ 低 $2×significandWidth$ 位（最高位拼一比特 $0$
-凑成 $2×significandWidth+1$ 位）进行一次 $CSA3\_2$ 压缩之后，再对 $CSA3\_2$ 压缩的两个结果相加，记作
-$adder\_low\_bits$，同时计算 $rshift\_result$ 高 $significandWidth+4$ 位 $+1$，然后根据低
-$2×significandWidth+1$ 位相加的结果最高位是否为 $1$ 来选择 $fp\_c\_rshiftValue\_inv$ 高
-$significandWidth+4$ 位或者 $fp\_c\_rshiftValue\_inv$ 高 $significandWidth+4$ 位
-$+1$，记作 $adder\_high\_bits$。
+The $rshift\_result$ of the significand of $fp\_c$ after right-shifting must be
+added to the two results compressed by $CSAn\_2$. Since the signs of $fp\_c$ and
+$fp\_a \times fp\_b$ may differ, subtraction is performed when they are
+opposite, and the result may be negative. To determine the sign, an additional
+sign bit is appended. $fp\_c\_rshiftValue\_inv$ selects either $rshift\_result$
+(with a $0$ sign bit) or its negation (with a $1$ sign bit) based on whether the
+signs differ. Thus, $fp\_c\_rshiftValue\_inv$ is added to the two results
+compressed by $CSAn\_2$. However, during subtraction, $fp\_c\_rshiftValue\_inv$
+only negates $rshift\_result$, and a $+1$ is required at the least significant
+bit when all right-shifted $grs$ bits are $0$. This $+1$ is placed in the
+$carry$ bit of the two results compressed by $CSAn\_2$, as the $carry$ bit is
+always $0$, saving adder usage and area. The three numbers have different bit
+widths: the right-shifted significand of $fp\_c$ has a width of $3 \times
+significandWidth + 4$, while the two results compressed by $CSAn\_2$ have a
+width of $2 \times significandWidth + 1$ (the $+1$ accounts for the partial
+product extension to ensure correct carry). The strategy for summing these three
+numbers involves first compressing the lower $2 \times significandWidth + 1$
+bits of the $CSAn\_2$ results and the lower $2 \times significandWidth$ bits of
+$rshift\_result$ (with a $0$ appended to form $2 \times significandWidth + 1$
+bits) using $CSA3\_2$ compression. The two compressed results are then summed,
+denoted as $adder\_low\_bits$. Simultaneously, the higher $significandWidth + 4$
+bits of $rshift\_result$ are incremented by $1$. The final result selects either
+the higher $significandWidth + 4$ bits of $fp\_c\_rshiftValue\_inv$ or its
+incremented version based on whether the highest bit of the lower $2 \times
+significandWidth + 1$ sum is $1$, denoted as $adder\_high\_bits$.
 
-还需要考虑减法时对右移 $grs$ 取反加一，最终有效数字的加法结果 $adder$（含右移
-$grs$）构成是：$adder\_high\_bits$、$adder\_low\_bits$、右移 $grs$（减法时取反加一）。因为 $adder$
-可能是负数，拓展了 $1bit$ 仅用于 $adder$ 的符号判断, 之后不需要使用，$adder\_inv$ 在 $adder$
-是负数时进行取反并且去掉了该符号判断位。
+Additionally, consider the inversion and increment by one of the right-shifted
+$grs$ during subtraction. The final significand addition result $adder$
+(including the right-shifted $grs$) consists of: $adder\_high\_bits$,
+$adder\_low\_bits$, and the right-shifted $grs$ (inverted and incremented by one
+for subtraction). Since $adder$ may be negative, an extra $1$-bit is extended
+solely for sign determination of $adder$, which is later discarded. $adder\_inv$
+inverts $adder$ when it is negative and removes this sign bit.
 
-##### $LZD$、左移、舍入与未舍入尾数结果
+##### $LZD$, left shift, rounded and unrounded mantissa results
 
-在计算完 $adder\_inv$ 后，需要对 $adder\_inv$ 进行前导零检测，以确定需要左移的位数，进而对尾数结果规格化和舍入。
+After computing $adder\_inv$, a leading-zero detection must be performed on
+$adder\_inv$ to determine the number of left shifts required, thereby
+normalizing and rounding the mantissa result.
 
-对 $adder\_inv$ 求 $LZD$ 时有一个指数限位的问题，记 $E\_greater$ 为 $Eab$（$fp\_a$ 与 $fp\_b$
-相乘的指数结果），左移的值不能比 $E\_greater$ 更大，因为等于 $E\_greater$ 时，指数结果已经全为 $0$
-了。为了解决这个问题，同浮点加法器一样在左移时使用 $mask$ 进行限位。
+When performing LZD on $adder\_inv$, there is an issue of exponent limitation.
+Let $E\_greater$ be $Eab$ (the exponent result from multiplying $fp\_a$ and
+$fp\_b$). The left shift amount cannot exceed $E\_greater$ because the exponent
+result would already be all zeros at that point. To address this, similar to the
+floating-point adder, a $mask$ is used during left shift to limit the shift
+amount.
 
-对于 $adder$ 是负数的情况，$-adder$ 应该是 $adder$ 取反 $+1$，由于 $+1$ 会产生长进位链，只做取反操作，然后计算
-$adder\_inv$ 的 $LZD$，此时可能会出现一位的偏差，当 $adder$ 取反之后末尾全是连续 $1$ 时，此时再加 $1$ 最高位的 $1$
-就要产生进位了，解决一比特偏差的方法是对 $adder$ 做一个尾随零检测（$TZD$），当 $LZD + TZD = adder$ 的宽度时，$adder$
-取反之后末尾全是连续 $1$，这种情况下需要对左移结果修正。左移修正之后得到未舍入的结果，对未舍入的结果 $+1$ 得到舍入后的结果。
+For cases where $adder$ is negative, $-adder$ should be the inversion of $adder$
+plus $1$. Since adding $1$ would create a long carry chain, only the inversion
+is performed, and then the $LZD$ of $adder\_inv$ is calculated. This may result
+in a one-bit deviation. When the inversion of $adder$ ends with consecutive
+$1$s, adding $1$ would cause a carry at the highest bit. To resolve this one-bit
+deviation, a trailing zero detection ($TZD$) is performed on $adder$. If $LZD +
+TZD$ equals the width of $adder$, the inversion of $adder$ ends with consecutive
+$1$s, requiring a correction to the left-shift result. After the left-shift
+correction, the unrounded result is obtained, and adding $1$ to it yields the
+rounded result.
 
-##### 最终结果
+##### Final result
 
-根据 $adder$ 的正负得到符号位结果，$grs$ 的计算需要同时结合第五步右移和第七步左移过程。舍入策略采用 $after \quad
-rounding$，为了判断 $underflow$，需要再使用一组专门用来判断 $underflow$ 的 $grs$。根据舍入模式和 $grs$
-得到是否需要舍入，选择出尾数结果，指数结果根据舍入情况得到。
+The sign bit result is determined based on the sign of $adder$, while the
+calculation of $grs$ requires combining both the right-shift process in step
+five and the left-shift process in step seven. The rounding strategy employs
+$after \quad rounding$. To detect $underflow$, an additional set of $grs$
+specifically for $underflow$ checking is used. Based on the rounding mode and
+$grs$, the necessity of rounding is determined, selecting the final mantissa
+result. The exponent result is derived according to the rounding outcome.
 
-输入操作数含特殊值，如
-$NaN$，无穷，零时，结果单独计算，并根据实际输入数的情况从特殊结果和正常结果中选择一个，标志位结果除了除零标志位外，其他四种都可产生。
+When input operands contain special values such as $NaN$, infinity, or zero, the
+result is calculated separately. Depending on the actual input values, either
+the special result or the normal result is selected. Except for the
+divide-by-zero flag, all four other flag results can be generated.
 
-#### 向量单一精度格式算法
+#### Vector single-precision format algorithm
 
-向量操作主要设计思路是在时序满足要求的情况下共用硬件。
+The main design principle for vector operations is to share hardware where
+timing requirements are met.
 
-在 $Booth$ 编码过程中，$f16$ 产生 $6$ 个 $pp$，$f32$ 产生 $13$ 个 $pp$，$f64$ 产生 $27$ 个 $pp$，所以
-$Booth$ 编码时 $f64$ 产生的 $27$ 个 $pp$ 的位置可以放两个 $f32$ 产生的 $13$ 个 $pp$，同理 $f32$ 产生的
-$13$ 个 $pp$ 的位置可以放两个 $f16$ 产生的 $6$ 个 $pp$，这样就可以继续共用一套 $CSA\_27to2$ 压缩，向量共用
-$Booth$ 编码见图。
+During Booth encoding, $f16$ generates 6 partial products (pp), $f32$ generates
+13 pp, and $f64$ generates 27 pp. Thus, the 27 pp positions generated by $f64$
+during Booth encoding can accommodate two sets of 13 pp from $f32$, and
+similarly, the 13 pp positions from $f32$ can hold two sets of 6 pp from $f16$.
+This allows continued sharing of a single $CSA\_27to2$ compression unit. The
+vector shared Booth encoding is illustrated in the figure.
 
-![向量共用Booth编码示意图](./figure/VectorBooth.svg)
+![Vector Shared Booth Encoding Diagram](./figure/VectorBooth.svg)
 
-在 $fp\_c$ 尾数右移时，$f64$ 和 $f32$ 中的其中一个尾数右移可以共用一个右移器，其他的右移器都是独立的。
+During the right shift of the $fp\_c$ mantissa, one of the right shifts for the
+mantissas in $f64$ and $f32$ can share a single shifter, while the other
+shifters remain independent.
 
-$CSA\_3to2$ 也是公用的，第三个操作数来自 $fp\_c$ 尾数右移的结果，将 $2$ 个 $f32$ 或 $4$ 个 $f16$
-尾数右移的结果拼接起来，和共用的 $Booth$ 编码压缩之后的两个操作数一起进行 $3\_2$ 压缩。
+The $CSA\_3to2$ is also shared, with the third operand derived from the
+right-shifted result of the $fp\_c$ mantissa. The right-shifted results of two
+$f32$ or four $f16$ mantissas are concatenated and then compressed with the two
+operands from the shared $Booth$ encoding for $3\_2$ compression.
 
-压缩完之后的加法器也是共用的，通过不同格式分配不同的位，并按位隔开使低位进位不影响高位结果。
+The adder after compression is also shared. Different formats are assigned
+different bits, and the bits are separated to prevent low-bit carries from
+affecting high-bit results.
 
-$LZD，TZD$，左移器共用思路同右移器，$f64$ 和 $f32$ 中的一个是公用的，其他独立。
+The shared logic for $LZD$, $TZD$, and the left shifter is similar to the right
+shifter, with $f64$ and $f32$ sharing one unit while others remain independent.
 
-#### 向量混合精度格式算法
+#### Vector Mixed-Precision Format Algorithm
 
-向量混合精度格式计算有两种：
+There are two types of vector mixed-precision format calculations:
 
-(1) $2$ 个 $fp32 = fp16 × fp16 + fp32$;
+(1) $2$ instances of $fp32 = fp16 × fp16 + fp32$;
 
-(2) $1$ 个 $fp64 = fp32 × fp32 + fp64$。
+(2) One $fp64 = fp32 × fp32 + fp64$.
 
-对于两个相同宽度的乘数，本质还是指数相加有效数字相乘，不用向浮点加法那样先把它们格式转换成和结果相同的格式，只需简单拓展位宽即可，指数高位补零，尾数低位补零，和高精度的浮点操作数对齐。对齐后，按照单一精度格式进行计算即可。
+For two multipliers of the same width, the essence is still adding exponents and
+multiplying significant bits. Unlike floating-point addition, there's no need to
+first convert their formats to match the result's format. Simply extending the
+bit width suffices—padding the exponent's high bits with zeros and the
+mantissa's low bits with zeros to align with high-precision floating-point
+operands. After alignment, computation proceeds according to the
+single-precision format.
 
-### 向量浮点除法算法
+### Vector floating-point division algorithm
 
-除法是现代处理器中最具代表性的浮点函数之一。在硬件中计算除法存在两个主要的算法：具有线性收敛性并基于减法的数字迭代算法，以及基于乘法并具有二次收敛性的乘法算法，基于减法的数字迭代算法能效更高，所需面积更小。本文后续的数字迭代都是指基于减法的数字迭代。对于常用的浮点精度，双精度、单精度和半精度、数字迭代方法要快得多。在数字迭代除法中，最关键的一点是商数位的选择，每次迭代，获得商的一位数。要实现独立于除数的简单
-$Radix-4$ 选择函数，除数需要调整到足够接近1的值。该缩放在数字迭代之前执行。
+Division is one of the most representative floating-point functions in modern
+processors. There are two main algorithms for computing division in hardware:
+digit iteration algorithms based on subtraction with linear convergence, and
+multiplicative algorithms based on multiplication with quadratic convergence.
+The subtraction-based digit iteration algorithms are more energy-efficient and
+require less area. Subsequent references to digit iteration in this paper refer
+to subtraction-based digit iteration. For common floating-point
+precisions—double, single, and half—digit iteration methods are significantly
+faster. In digit iteration division, the most critical aspect is the selection
+of quotient bits, where each iteration yields one bit of the quotient. To
+implement a simple $Radix-4$ selection function independent of the divisor, the
+divisor must be adjusted to a value sufficiently close to 1. This scaling is
+performed before digit iteration.
 
-数字迭代算法由于在性能、面积和功耗方面具有很好的折衷性而被广泛应用于的高性能处理器中，本文基于 $SRT$
-除法（$Sweeney-Robertson-Tocher Division$），采用 $Radix-64$ 的浮点除法算法，每周期计算 $6$
-比特商。为了减小开销，每次 $Radix-64$ 迭代由三次 $Radix-4$ 迭代组成；在连续的 $Radix-4$ 迭代之间使用推测算法减少延时。
+Digital iterative algorithms are widely used in high-performance processors due
+to their excellent trade-offs in performance, area, and power consumption. This
+paper is based on the $SRT$ division ($Sweeney-Robertson-Tocher Division$),
+employing a $Radix-64$ floating-point division algorithm that computes $6$
+quotient bits per cycle. To reduce overhead, each $Radix-64$ iteration consists
+of three $Radix-4$ iterations. Speculative algorithms are used between
+consecutive $Radix-4$ iterations to reduce latency.
 
-#### 标量浮点除法算法
+#### Scalar floating-point division algorithm
 
-本文实现的 $Radix-64$ 标量浮点除法算法，当输入操作数和结果都是规格化数时，对于双精度、单精度、半精度浮点除法，有较低的延迟，分别为 $11、6、4$
-周期延迟，这些延迟包括缩放和舍入的周期。在输入操作数或结果中有非规格化数的情况下，需要一个或两个额外的规格化周期。
+The $Radix-64$ scalar floating-point division algorithm implemented in this
+paper has low latency for double-precision, single-precision, and half-precision
+floating-point division when both input operands and results are normalized
+numbers, with latencies of $11$, $6$, and $4$ cycles, respectively, including
+scaling and rounding cycles. In cases where input operands or results include
+denormalized numbers, one or two additional normalization cycles are required.
 
-指数结果很容易就能得出，重点是有效数字的除法，有效数字除法器执行被除数有效数字 $x$ 和除数有效数字 $d$ 的浮点除法，以获得有效数字的商 $q =
-x/d$。两个操作数需要是规格化数，$x，d ∈ [1，2）$，非规格化的操作数也是允许的，在数字迭代之前，对非正规化操作数进行规格化。如果两个操作数在
-$[1，2）$ 中规格化，则结果在 $[0. 5，2）$中；这样，需要商的最低有效位（$LSB$）右边的两位用于舍入，即保护位和舍入位。
+The exponent result can be easily derived, with the focus being on the division
+of significands. The significand divider performs floating-point division of the
+dividend significand $x$ by the divisor significand $d$ to obtain the
+significand quotient $q = x/d$. Both operands need to be normalized numbers, $x,
+d ∈ [1, 2)$. Denormalized operands are also permitted, with normalization
+applied before the digital iteration. If both operands are normalized within
+$[1, 2)$, the result lies within $[0.5, 2)$. Thus, two bits to the right of the
+least significant bit ($LSB$) of the quotient are required for rounding, namely
+the guard bit and the rounding bit.
 
-当结果被归一化时，保护位用于舍入，$q ∈ [1，2）$，当结果未被归一化时，舍入位用于舍入，$q ∈ [0.5，1）$。在后一种情况下，结果左移 $1$
-位，保护位和舍入位分别成为归一化结果的 $LSB$ 和保护位。为了简化舍入，结果被强制为 $q ∈ [1，2）$。注意只有当 $x＜d$ 时
-$q＜1$。这种情况在早期被检测到，并将被除数左移 $1$ 位，使得 $q =2× x/d$ 且 $q ∈ [1，2）$，注意此时指数结果要进行相应调整。
+When the result is normalized, the guard bit is used for rounding, with $q ∈ [1,
+2)$. When the result is unnormalized, the rounding bit is used for rounding,
+with $q ∈ [0.5, 1)$. In the latter case, the result is left-shifted by $1$ bit,
+and the guard and rounding bits become the $LSB$ and guard bit of the normalized
+result, respectively. To simplify rounding, the result is forced to $q ∈ [1,
+2)$. Note that $q < 1$ only occurs when $x < d$. This condition is detected
+early, and the dividend is left-shifted by $1$ bit, making $q = 2 × x/d$ and $q
+∈ [1, 2)$. Note that the exponent result must be adjusted accordingly.
 
-用于除法的算法是 $Radix-4$ 数字迭代算法，每个循环三次迭代，商的符号数字表示为数字集 {$−2，−1，0，+1，+2$}；即基数 $r =4$，数据集
-$a =2$。每次迭代，通过选择函数获得商的一个数字。为了具有独立于除数的商位选择函数，除数必须缩放到接近
-$1$。当然，为了保持结果的正确性，被除数需要按与除数相同的倍数缩放。
+The algorithm used for division is the $Radix-4$ digit iteration algorithm, with
+three iterations per cycle. The quotient's signed-digit representation uses the
+digit set {$−2, −1, 0, +1, +2$}, meaning the radix $r = 4$ and the digit set $a
+= 2$. In each iteration, a digit of the quotient is obtained through a selection
+function. To have a quotient digit selection function independent of the
+divisor, the divisor must be scaled to be close to $1$. Naturally, to maintain
+result correctness, the dividend must be scaled by the same factor as the
+divisor.
 
-利用基$-4$ 算法，每次迭代获得商的 $2$ 比特。由于每个时钟周期执行三次基$-4$ 迭代，因此每个周期获得 $6$ 位商，这等效于 $Radix-64$
-除法器。另外，注意到作为结果的整数位的第一商数位只能取值{$+1，+2$}，并且其计算比其余数位的计算简单得多。把它和操作数预缩放并行计算，节省了一次单精度浮点数的迭代。另一方面，对于异常操作数有一种提前终止模式。当任何操作数为
-$NaN$、无穷大或零时，或者在两个操作数均归一化的情况下除以 $2$
-的次幂的情况下，引发提前终止。在后一种情况下，仅通过减小被除数的指数来获得结果。$Radix-64$ 除法器的主要特征如下：
+Using the radix$-4$ algorithm, each iteration yields 2 bits of the quotient.
+Since three radix$-4$ iterations are performed per clock cycle, 6 quotient bits
+are obtained per cycle, equivalent to a $Radix-64$ divider. Additionally, note
+that the first quotient bit of the integer result can only take values {$+1,
++2$}, and its computation is much simpler than that of the remaining bits. By
+computing it in parallel with operand prescaling, one single-precision
+floating-point iteration is saved. On the other hand, there is an early
+termination mode for exceptional operands. Early termination is triggered when
+any operand is $NaN$, infinity, or zero, or when dividing by a power of 2 with
+both operands normalized. In the latter case, the result is obtained simply by
+reducing the exponent of the dividend. The main features of the $Radix-64$
+divider are as follows:
 
-(1) 除数和被除数的预缩放。
+(1) Pre-scaling of divisor and dividend.
 
-(2) 第一个商数位与预缩放并行执行。
+(2) The first quotient digit is executed in parallel with pre-scaling.
 
-(3) 比较缩放后的被除数和除数，并将被除数左移，以得到$[1，2）$的结果。
+(3) Compare the scaled dividend and divisor, and left-shift the dividend to
+obtain a result in the range $[1, 2)$.
 
-(4) 每个周期三次 $Radix-4$ 迭代，每个周期 $6$ 位。
+(4) Three $Radix-4$ iterations per cycle, processing $6$ bits each cycle.
 
-(5) 支持半精度、单精度和双精度。
+(5) Supports half-precision, single-precision, and double-precision.
 
-(6) 非规格化数支持，迭代前需要额外一周期将非规格化数规格化。
+(6) Denormal number support requires an additional cycle for normalization
+before iteration.
 
-(7) 异常操作数提前终止。
+(7) Early termination for exceptional operands.
 
-##### 数字迭代除法算法
+##### Digit-Recurrence Division Algorithm
 
-数字迭代除法是一种迭代算法，每次迭代计算一个 $radix-r$ 商数字 $q_{i+1}$ 和一个余数。余数 $rem[i]$ 用于获得下一个
-$radix-r$ 的数字。为了快速迭代，余数被保存在有符号数冗余表示的进位保存加法器中，本文选择了 $radix-2$
-的有符号数表示余数，其中包含一个正数和一个负数。对于基数 $r =4$，下式是第 $i$ 位迭代之前的部分商的表达式
+Digit-recurrence division is an iterative algorithm where each iteration
+computes a $radix-r$ quotient digit $q_{i+1}$ and a remainder. The remainder
+$rem[i]$ is used to obtain the next $radix-r$ digit. For fast iteration, the
+remainder is stored in a carry-save adder using a signed-digit redundant
+representation. This paper selects a $radix-2$ signed-digit representation for
+the remainder, consisting of a positive and a negative number. For radix $r =4$,
+the following expression represents the partial quotient before the $i$-th
+iteration:
 
 $$ Q[i] = \sum_{j=0}^i q_j × 4^{-j} $$
 
-除数缩放到 $1$ 附近之后的 $radix-4$ 算法，商和余数由下式描述：
+After scaling the divisor to around 1, the $radix-4$ algorithm describes the
+quotient and remainder as follows:
 
 $$ q_{i+1} = SEL(\widehat{rem}[i]) $$
 
 $$ rem[i + 1] = 4 × rem[i] - d × q_{i+1} $$
 
-其中 $\widehat{rem}[i]$ 是只具有几个比特的余数 $rem[i]$ 的估计值。对于此算法，已确定仅需要余数的 $6$
-个最高有效位（$MSB$），即 $3$ 个整数位和 $3$ 个小数位。然后，每次迭代从当前余数中获得商位，并为下一次迭代计算新的余数。那么，下式是迭代次数
-$it$ 计算公式：
+Here, $\widehat{rem}[i]$ is an estimate of the remainder $rem[i]$, which
+consists of only a few bits. For this algorithm, it has been determined that
+only the 6 most significant bits (MSB) of the remainder are needed, i.e., 3
+integer bits and 3 fractional bits. Then, each iteration extracts a quotient bit
+from the current remainder and computes a new remainder for the next iteration.
+The formula below calculates the number of iterations $it$:
 
 $$ it = [n/log_2(4)] $$
 
-其中 $n$ 是结果的位数，包括舍入所需的位。除法的延迟，即周期数，与迭代次数直接相关。它还取决于每个周期执行的迭代次数。每个周期已经实现三次迭代以获得每个周期
-$6$ 位，这等效于 $Radix-64$ 除法。那么规格化浮点数所需周期 $cycles$
-由下式确定，除了迭代所需的($it/3$)个周期之外，有两个额外的周期用于操作数预缩放和舍入。
+Here, $n$ is the number of bits in the result, including those needed for
+rounding. The division latency, i.e., the number of cycles, is directly related
+to the number of iterations. It also depends on the number of iterations
+performed per cycle. Three iterations per cycle have been implemented to achieve
+$6$ bits per cycle, equivalent to $Radix-64$ division. The cycles ($cycles$)
+required for normalized floating-point numbers are determined by the following
+formula. In addition to the ($it/3$) cycles needed for iterations, there are two
+extra cycles for operand pre-scaling and rounding.
 
 $$ cycles = [it/3] + 2 $$
 
-数字迭代除法的一些实例，包括 $Radix-4$
-算法，可以在[$38$]中找到。简单的实现如图所示。注意，只有余数的最高有效位用于选择商数位。余数使用进位保存加法器（$CSA$）更新并存储在冗余表示中。然后，商数位选择需要余数的
-$t$
-个最高有效位在进位传播加法器（$CPA$）中相加以获得其非冗余表示。但是这种实现太慢了，为了加速迭代的循环，需要使用迭代之间的余数计算和商数位选择中的推测算法。
+Some examples of digital iterative division, including the $Radix-4$ algorithm,
+can be found in [$38$]. A simple implementation is shown in the figure. Note
+that only the most significant bit of the remainder is used to select the
+quotient bit. The remainder is updated using a carry-save adder ($CSA$) and
+stored in a redundant representation. The quotient bit selection then requires
+the $t$ most significant bits of the remainder to be summed in a carry-propagate
+adder ($CPA$) to obtain its non-redundant representation. However, this
+implementation is too slow. To accelerate the iteration loop, speculative
+algorithms must be employed for both the remainder computation between
+iterations and the quotient bit selection.
 
-![三次radix-4组成radix-64的简单实现](./figure/Radix-64.svg)
+![Simple Implementation of Radix-64 Composed of Three Radix-4
+Stages](./figure/Radix-64.svg)
 
-##### 操作数预缩放
+##### Operand pre-scaling
 
-在预缩放期间，除数被缩放到接近 $1$ 的值，使得商数位的选择与除数无关。对于 $radix-4$ 算法，缩放除数在 $[1 − 1/64，1+1/8]$
-范围内就足够了。如表预缩放因子真值表所示，仅三比特确定比例因子。注意预缩放时，除数应该被扩大 $1-2$ 倍。被除数也应该缩放相同的比例因子。
+During prescaling, the divisor is scaled to a value close to 1, making the
+selection of quotient digits independent of the divisor. For the $radix-4$
+algorithm, scaling the divisor to the range $[1 − 1/64, 1+1/8]$ is sufficient.
+As shown in the prescaling factor truth table, only three bits determine the
+scaling factor. Note that during prescaling, the divisor should be scaled by a
+factor of $1-2$. The dividend should also be scaled by the same factor.
 
-Table: 预缩放因子真值表
+Table: Truth Table of Pre-Scaling Factor
 
-| $0.1$xxx |    预缩放因子    |
-| :------: | :---------: |
-|  $000$   | $1+1/2+1/2$ |
-|  $001$   | $1+1/4+1/2$ |
-|  $010$   | $1+1/2+1/8$ |
-|  $011$   |  $1+1/2+0$  |
-|  $100$   | $1+1/4+1/8$ |
-|  $101$   |  $1+1/4+0$  |
-|  $110$   |  $1+0+1/8$  |
-|  $111$   |  $1+0+1/8$  |
+| $0.1$xxx | Pre-scaling factor |
+| :------: | :----------------: |
+|  $000$   |    $1+1/2+1/2$     |
+|  $001$   |    $1+1/4+1/2$     |
+|   010    |    $1+1/2+1/8$     |
+|  $011$   |     $1+1/2+0$      |
+|  $100$   |    $1+1/4+1/8$     |
+|  $101$   |     $1+1/4+0$      |
+|  $110$   |     $1+0+1/8$      |
+|  $111$   |     $1+0+1/8$      |
 
-##### 整数位商计算
+##### Integer Quotient Calculation
 
-整数位商计算的同时，为数字迭代步骤（每个数字迭代执行三个 $radix-4$，对应 $s0，s1，s2$ 三个阶段）提供以下数据：
+While computing the integer quotient, the following data is provided for the
+digit iteration steps (each digit iteration performs three $radix-4$ operations,
+corresponding to the $s0$, $s1$, and $s2$ stages):
 
-（1）冗余余数的进位保存表示：$f\_r\_s，f\_r\_c$。
+(1) Redundant remainder in carry-save representation: $f\_r\_s$, $f\_r\_c$.
 
-（2）预缩放后的除数：$divisor$。
+(2) Pre-scaled divisor: $divisor$.
 
-（3）为第一次数字迭代中 $s0$ 阶段商选择提供 $6$ 比特余数结果。
+(3) Provides a 6-bit remainder result for the quotient selection in the $s0$
+stage of the first digital iteration.
 
-（4）为第一次数字迭代中 $s1$ 阶段商选择提供 $7$ 比特余数结果。
+(4) Provides a 7-bit remainder result for the quotient selection in the $s1$
+stage of the first digit iteration.
 
-###### 数字迭代
+###### Digital iteration
 
-浮点除法器的实际实现需要每个周期执行三次 $radix-4$ 迭代，常规顺序迭代三次速度太慢，无法满足时序要求，对逻辑进行了优化。图示出了数字迭代循环的框图。
+The actual implementation of the floating-point divider requires executing three
+$radix-4$ iterations per cycle. Conventional sequential iteration three times is
+too slow to meet timing requirements, so the logic has been optimized. The
+figure illustrates the block diagram of the digit-recurrence loop.
 
-![数字迭代优化算法](./figure/DigitalIterativeOptimizationAlgorithm.svg)
+![Digit Iteration Optimization
+Algorithm](./figure/DigitalIterativeOptimizationAlgorithm.svg)
 
-（1）对除数进行处理，得到五种可能的商选择结果需要用到的除数倍数（商为负数时只取反）。
+(1) Process the divisor to obtain five possible quotient selection results,
+requiring the use of divisor multiples (only negate when the quotient is
+negative).
 
-（2）$s0$ 阶段，使用四个 $CSA$ 模块（商为 $0$ 时不需要），并行在 $s0$ 预测性的计算出 $s1$ 阶段需要的 $5$ 个余数冗余表示。
+(2) In the $s0$ stage, four $CSA$ modules are used (not required when the
+quotient is $0$) to predictively compute the five remainder redundant
+representations needed for the $s1$ stage in parallel during $s0$.
 
-（3）$s0$ 阶段，使用第二步中计算出的 $5$ 个余数冗余表示，为 $s2$ 阶段预测性的计算 $5$ 个 $7$ 比特余数结果。
+(3) In the $s0$ stage, using the five remainder redundant representations
+calculated in the second step, predictively compute five 7-bit remainder results
+for the $s2$ stage.
 
-（4）$s0$ 阶段，根据输入信号中 $6$ 比特余数结果，选择出 $s0$ 阶段的商，商使用 $5$ 比特独热码表示。
+(4) In the $s0$ stage, the quotient for the $s0$ stage is selected based on the
+6-bit remainder result in the input signal. The quotient is represented using a
+5-bit one-hot code.
 
-（5）根据 $s0$ 阶段的商，选择出 $s1$ 阶段需要使用的冗余余数表示，同时从第三步为 $s2$ 阶段预测性的计算 $5$ 个 $7$
-比特余数结果中选择出一个。
+(5) Based on the quotient from stage $s0$, select the redundant remainder
+representation needed for stage $s1$, and predictively choose one of the five
+7-bit remainder results calculated in step three for stage $s2$.
 
-（6）$s1$ 阶段，使用四个 $CSA$ 模块（商为 $0$ 时不需要），并行在 $s1$ 预测性的计算出 $s2$ 阶段需要的 $5$ 个余数冗余表示。
+(6) In the $s1$ stage, four $CSA$ modules are used (not required when the
+quotient is $0$), and the five remainder redundant representations needed for
+the $s2$ stage are predictively calculated in parallel.
 
-（7）$s1$ 阶段，根据输入信号中 $7$ 比特余数结果、$5$ 种商选择结果用到的的除数倍数、$s0$ 阶段的商，预测性的进行 $s1$ 阶段的商选择。
+(7) In the $s1$ stage, predictively perform the quotient selection for the $s1$
+stage based on the $7$-bit remainder result from the input signal, the divisor
+multiples used for the five quotient selection results, and the quotient from
+the $s0$ stage.
 
-（8）根据 $s1$ 阶段的商，选择出 $s2$ 阶段需要使用的冗余余数表示。
+(8) Based on the quotient from stage $s1$, select the redundant remainder
+representation required for stage $s2$.
 
-（9）$s2$ 阶段，使用四个 $CSA$ 模块（商为 $0$ 时不需要），并行在 $s2$ 预测性的计算出下一个数字迭代 $s0$ 阶段需要的 $5$
-个余数冗余表示。
+(9) In the $s2$ stage, four $CSA$ modules are used (not required when the
+quotient is $0$) to predictively compute the five redundant remainder
+representations needed for the next digit iteration in the $s0$ stage in
+parallel.
 
-（10）$s2$ 阶段，分别为下一次数字迭代中 $s0$ 阶段需要的 $6$ 比特余数结果和 $s1$ 阶段需要的 $7$ 比特余数结果预测性的计算 $5$
-种可能的结果。
+(10) In the s2 stage, predictively compute five possible results for the 6-bit
+remainder required in the s0 stage and the 7-bit remainder required in the s1
+stage of the next digit iteration.
 
-（11）$s2$ 阶段，根据第五步中为 $s2$ 阶段选出的的 $7$ 比特余数结果、$5$ 种商选择结果用到的的除数倍数、$s1$ 阶段的商，预测性的进行
-$s2$ 阶段的商选择。
+(11) In the $s2$ stage, based on the $7$-bit remainder result selected for the
+$s2$ stage in the fifth step, the divisor multiples used for the five quotient
+selection results, and the quotient from the $s1$ stage, the quotient for the
+$s2$ stage is predictively selected.
 
-（12）根据 $s2$ 阶段的商选择结果，为下一次数字迭代选择出：冗余余数的进位保存表示，$s0$ 阶段需要的 $6$ 比特余数结果，$s1$ 阶段需要的
-$7$ 比特余数结果。
+(12) Based on the quotient selection result from the $s2$ stage, the following
+are selected for the next digit iteration: the carry-save representation of the
+redundant remainder, the 6-bit remainder result required for the $s0$ stage, and
+the 7-bit remainder result required for the $s1$ stage.
 
-由于第一步中对除数的倍数只取反，没有 $+1$，导致余数计算时会有偏差，在商选择过程中添加修正逻辑来修正，下表是标准的商选择函数，下表是逻辑修正后的商选择函数。
+Since the divisor's multiple is only inverted in the first step without $+1$,
+there will be a deviation in the remainder calculation. Correction logic is
+added during the quotient selection process to rectify this. The table below
+shows the standard quotient selection function, and the subsequent table
+presents the quotient selection function after logical correction.
 
-Table: 标准商选择函数
+Table: Standard Quotient Selection Function
 
 |  $4 × rem[i]$   | $q_{i+1}$ |
 | :-------------: | :-------: |
@@ -980,352 +1482,526 @@ Table: 标准商选择函数
 | $[-12/8,-4/8]$  |   $-1$    |
 | $[-32/8,-13/8]$ |   $-2$    |
 
-Table: 逻辑修正后的商选择函数
+Table: Quotient Selection Function After Logical Correction
 
-|  $4 × rem[i]$  | $carry$ | $q_{i+1}$ |
-| :------------: | :-----: | :-------: |
-|     $31/8$     |   $1$   |   $+2$    |
-| $[13/8,30/8]$  |    -    |   $+2$    |
-|     $12/8$     |   $0$   |   $+2$    |
-|     $12/8$     |   $1$   |   $+1$    |
-|  $[4/8,11/8]$  |    -    |   $+1$    |
-|     $3/8$      |   $0$   |   $+1$    |
-|     $3/8$      |   $1$   |    $0$    |
-|  $[-3/8,2/8]$  |    -    |    $0$    |
-|     $-4/8$     |   $0$   |    $0$    |
-|     $-4/8$     |   $1$   |   $-1$    |
-| $[-12/8,-5/8]$ |    -    |   $-1$    |
-|    $-13/8$     |   $0$   |   $-1$    |
-|    $-13/8$     |   $1$   |   $-2$    |
-| $[-32/8,14/8]$ |    -    |   $-2$    |
+|  $4 × rem[i]$   | $carry$ | $q_{i+1}$ |
+| :-------------: | :-----: | :-------: |
+|     $31/8$      |   $1$   |   $+2$    |
+|  $[13/8,30/8]$  |    -    |   $+2$    |
+|     $12/8$      |   $0$   |   $+2$    |
+|     $12/8$      |   $1$   |   $+1$    |
+|  $[4/8,11/8]$   |    -    |   $+1$    |
+|      $3/8$      |   $0$   |   $+1$    |
+|      $3/8$      |   $1$   |    $0$    |
+|  $[-3/8,2/8]$   |    -    |    $0$    |
+|     $-4/8$      |   $0$   |    $0$    |
+|     $-4/8$      |   $1$   |   $-1$    |
+| $[-12/8, -5/8]$ |    -    |   $-1$    |
+|     $-13/8$     |   $0$   |   $-1$    |
+|     $-13/8$     |   $1$   |   $-2$    |
+| $[-32/8,14/8]$  |    -    |   $-2$    |
 
-将数字迭代输出的冗余余数表示恢复成标准余数，通过 $On$ $the$ $Fly$ $Conversion$ 将商和商减一计算出来，为商和商减一计算两套
-$grs$ 和是否需要向上舍入一位，计算选商或商减一的选择信号并选出正确的商结果，最后用正确的商结果和对应的是否需要向上舍入一位信号进行舍入。
+Convert the redundant remainder representation of the iteratively output digits
+back to a standard remainder. Use $On$ $the$ $Fly$ $Conversion$ to compute both
+the quotient and quotient minus one, calculate two sets of $grs$ and the signal
+for whether rounding up is needed, determine the selection signal for choosing
+between the quotient or quotient minus one, and finally select the correct
+quotient result. Perform rounding using the correct quotient result and its
+corresponding rounding-up signal.
 
-###### 非规格化数和提前终止
+###### Denormal numbers and early termination
 
-（1）输入含有非规格化数，非规格化数的有效数字小于
-$1$，无法和规格化数一起进行预缩放，为此多增加一个周期将非规格化数的有效数字进行规格化，并同时调整非规格化数的指数。
+(1) The input contains denormal numbers. The significand of a denormal number is
+less than $1$ and cannot be pre-scaled together with normal numbers. Therefore,
+an additional cycle is added to normalize the significand of denormal numbers
+while simultaneously adjusting their exponents.
 
-（2）结果是非规格化数，数字迭代后的商结果是大于 $1$ 的，不符合非规格化有效数字范围，需要多增加一个周期对商结果右移来规格化。
+(2) The result is a denormal number. The quotient result after digit iteration
+is greater than 1, which does not meet the denormal significand range. An
+additional cycle is required to right-shift the quotient result for
+normalization.
 
-（3）提前终止，有两种情况：当结果是 $NaN$、无穷、精确 $0$
-的时候，提前终止计算输出结果，因为在第一周期就能得到这个信息，第二周期就可以输出除法结果；当除数是 $2$ 的次幂时，其有效数字
-$=1$，除法只需对被除数的指数处理，可跳过数字迭代阶段，最快也可第二周期输出除法结果，但是当被除数或结果是非规格化数时，同样也需要额外的周期去处理。
+(3) Early termination occurs in two scenarios: when the result is $NaN$,
+infinity, or exact $0$, computation can terminate early and output the result
+since this information is available in the first cycle, allowing the division
+result to be output in the second cycle; when the divisor is a power of $2$, its
+significand $=1$, and division only requires processing the exponent of the
+dividend, skipping the digit iteration phase, enabling the division result to be
+output as early as the second cycle. However, additional cycles are still needed
+if the dividend or result is a denormal number.
 
-#### 向量浮点除法算法
+#### Vector floating-point division algorithm
 
-对于向量浮点除法，$RISC-V$ 向量指令集拓展没有混合精度的浮点除法，以此只需支持：
+For vector floating-point division, the RISC-V vector instruction set extension
+does not support mixed-precision floating-point division, thus only the
+following needs to be supported:
 
-（1）$1$ 个 $f64 = f64 + f64$;
+(1) 1 f64 = f64 + f64;
 
-（2）$2$ 个 $f32 = f32 + f32$;
+(2) $2$ $f32 = f32 + f32$;
 
-（3）$4$ 个 $f16 = f16 + f16$。
+(3) $4$ $f16 = f16 + f16$.
 
-考虑到向量除法计算中同时有多组除法计算，而提前终止功能会导致多组数据结果输出不同步，除非都是相同情况的提前终止，所以对于向量除法取消提前终止的机制，如果发生了提前终止的情况，让结果在内部暂存，和其他除法结果同时输出。
+Considering that vector division involves multiple division computations
+simultaneously, and early termination can cause asynchronous output of results
+unless all cases terminate early under the same conditions, the early
+termination mechanism is disabled for vector division. If early termination
+occurs, the result is temporarily stored internally and output simultaneously
+with other division results.
 
-为了统一时序，将除法器的周期数统一规定为最差情况下的周期数，即输入含有非规格化数，输出也含有非规格化数的情况，其他原本可以更快输出结果的情况都进行内部数据暂存，等到规定的周期数后输出结果。
+To unify timing, the divider's cycle count is standardized to the worst-case
+scenario, i.e., when the input contains denormal numbers and the output also
+contains denormal numbers. Other cases that could produce results faster are
+internally buffered until the standardized cycle count is reached before
+outputting the result.
 
-主体采用资源复用的方式进行设计，在非数字迭代模块进行如下数据复用：
+The main design employs resource reuse, with the following data reuse in the
+non-numeric iteration module:
 
-（1）$1$ 个 $f64/f32/f16 = f64/f32/f16 + f64/f32/f16$;
+(1) $1$ $f64/f32/f16 = f64/f32/f16 + f64/f32/f16$;
 
-（2）$1$ 个 $f32/f16 = f32/f16 + f32/f16$;
+(2) 1 $f32/f16 = f32/f16 + f32/f16$;
 
-（3）$2$ 个 $f16 = f16 + f16$。
+(3) $2$ $f16$ values $= f16 + f16$.
 
-共使用 $4$ 组信号完成 $7$ 组除法的功能。
+A total of 4 signal groups are used to achieve the functionality of 7 division
+groups.
 
-由于数字迭代模块是关键路径，时序压力比较大，不能实现向非数字迭代模块部分的高度复用，否则时序不满足要求，为此对数字迭代模块进行部分复用设计：
+Since the digital iteration module is a critical path with significant timing
+pressure, achieving high reuse with non-digital iteration modules is not
+feasible without compromising timing requirements. Therefore, a partial reuse
+design is implemented for the digital iteration module:
 
-（1）接口是 $4$ 组商和冗余余数。
+(1) The interface consists of four sets of quotients and redundant remainders.
 
-（2）$s0$ 阶段采用 $7$ 组 $CSA$ 和 $7$ 组预测，$4$ 组商选择。
+(2) The $s0$ stage uses $7$ sets of $CSA$ and $7$ sets of prediction, with $4$
+sets of quotient selection.
 
-（3）$s1，s2$ 阶段使用 $4$ 组 $CSA$，$4$ 组预测，$4$ 组商选择。
+(3) Stages $s1$ and $s2$ utilize $4$ sets of $CSA$, $4$ sets of prediction, and
+$4$ sets of quotient selection.
 
-对于寄存器也采用资源复用的方式，对于除数，冗余余数，商等寄存器，按照 $max$（$4$ 个 $f16$，$2$ 个 $f32$，$1$ 个
-$f64$）所需的比特数分配大小。
+Registers also adopt resource reuse. For divisor, redundant remainder, quotient,
+and other registers, the bit width is allocated based on the maximum required by
+$4$ $f16$, $2$ $f32$, or $1$ $f64$.
 
-## 硬件设计
+## Hardware Design
 
-### 向量浮点加法器
+### Vector Floating-Point Adder
 
-#### 标量单一精度浮点加法器
+#### Scalar single-precision floating-point adder
 
-根据改进的双通路浮点加法算法设计标量单一精度浮点加法器，其硬件实现架构如图所示。
+A scalar single-precision floating-point adder is designed based on the improved
+dual-path floating-point addition algorithm, with its hardware implementation
+architecture shown in the figure.
 
-![标量单一精度浮点加法器架构图](./figure/ScalarSinglePrecisionFloating-pointAdder.svg)
+![Scalar Single-Precision Floating-Point Adder Architecture
+Diagram](./figure/ScalarSinglePrecisionFloating-pointAdder.svg)
 
-左侧两个输入操作数 $fp\_a$ 和 $fp\_b$，右侧 $fp\_c$ 表示加法结果，$fflags$ 是 $5$ 比特异常标志位，$rm$
-是舍入模式，共五种舍入模式，使用 $3$ 比特来表示，$is\_sub$ 为 $0$ 时计算 $fp\_c = fp\_a + fp\_b$，$is\_sub$
-为 $1$ 时计算 $fp\_c = fp\_a - fp\_b$，浮点加法与浮点减法的区别只在于 $fp\_b$ 的符号位，所以只需要对 $fp\_b$
-的符号位稍作处理就可以将浮点加法器同时支持浮点减法的计算。整体由三部分组成：$far$ 通路、$close$ 通路、异常通路。
+The two input operands on the left are $fp\_a$ and $fp\_b$, while $fp\_c$ on the
+right represents the addition result. $fflags$ is a 5-bit exception flag, and
+$rm$ is the rounding mode, with five modes represented by 3 bits. When $is\_sub$
+is 0, $fp\_c = fp\_a + fp\_b$ is computed; when $is\_sub$ is 1, $fp\_c = fp\_a -
+fp\_b$ is computed. The difference between floating-point addition and
+subtraction lies only in the sign bit of $fp\_b$, so minor adjustments to
+$fp\_b$'s sign bit enable the floating-point adder to support both operations.
+The overall design consists of three parts: the $far$ path, the $close$ path,
+and the exception path.
 
-$far$ 通路先并行做两个规格化指数减法有效数字右移，分别处理 $Efp\_a ≥ Efp\_b$ 和 $Efp\_b ≥ Efp\_a$ 的情况，根据
-$Efp\_a$ 和 $Efp\_b$ 大小关系选出正确的右移结果，送入 $FS0$ 和 $FS1$ 两个有效数字加法器。$far$ 通路对于减法时 $EA$
-是大的指数减一，加法时 $EA$ 是大的指数，这样有效数字加法结果的值域就在 $[1,4)$ 之间，右移时计算两套 $grs$：$grs\_normal$
-用于值域在 $[1,2)$ 之间的舍入，$grs\_overflow$ 用于值域在 $[2,4)$ 之间的舍入。最后根据 $FS0$ 的结果和舍入模式来选择
-$FS0$ 或 $FS1$ 作为尾数结果，同时根据舍入情况选择 $EA$ 或 $EA+1$ 作为指数结果，符号位结果则根据指数大小情况就能得到，标志结果根据
-$EA+1$ 是否为全 $1$ 判断是否上溢，根据 $grs$ 判断是否不精确，$far$ 通路不会产生除零，无效操作，下溢标志位。
+The far path first performs two parallel normalized exponent subtractions with
+significand right shifts, handling the cases where Efp_a ≥ Efp_b and Efp_b ≥
+Efp_a separately. The correct right-shift result is selected based on the
+magnitude relationship between Efp_a and Efp_b and sent to the FS0 and FS1
+significand adders. For subtraction, the far path sets EA as the larger exponent
+minus one, while for addition, EA is the larger exponent. This ensures the
+significand addition result falls within the range [1,4). During the right
+shift, two sets of grs are computed: grs_normal for rounding when the value is
+in [1,2), and grs_overflow for rounding when the value is in [2,4). Finally,
+based on the FS0 result and rounding mode, either FS0 or FS1 is selected as the
+significand result, and either EA or EA+1 is chosen as the exponent result. The
+sign bit result is determined by the exponent magnitude. The flag results
+indicate overflow if EA+1 is all ones and inexactness based on grs. The far path
+does not generate divide-by-zero, invalid operation, or underflow flags.
 
-$close$ 通路使用 $CS0、CS1、CS2、CS3$ 四个有效数字加法器处理 $Efp\_a = Efp\_b$，$Efp\_a = Efp\_b +
-1$, $Efp\_a = Efp\_b – 1$ 三种情况下的有效数字减法，然后根据 $CS0$ 结果和 $grs$ 产生四个独热选择信号
-$sel\_CS0$、$sel\_CS1$、$sel\_CS2$、$sel\_CS3$，使用一个四输入独热码多路选择器 $Mux1H$，选出一个结果和左移
-$mask$ 进行或操作，然后使用的优先级左移器进行尾数规格化，左移的同时输出 $lzd$ 的值，指数结果为 $EA –
-lzd$，尾数结果则需要在尾数规格化后和 $CS4$ 之间选择一个作为尾数结果，$CS4$ 是补充的舍入结果，不需要进行左移规格化。符号结果则由指数差和
-$CS0$ 的结果计算得到，标志结果只会产生不精确，其他异常标志位均不会产生。
+The $close$ path uses four significant-digit adders, $CS0$, $CS1$, $CS2$, and
+$CS3$, to handle significant-digit subtraction for the cases where $Efp\_a =
+Efp\_b$, $Efp\_a = Efp\_b + 1$, and $Efp\_a = Efp\_b – 1$. Based on the $CS0$
+result and $grs$, four one-hot selection signals, $sel\_CS0$, $sel\_CS1$,
+$sel\_CS2$, and $sel\_CS3$, are generated. A four-input one-hot multiplexer
+($Mux1H$) selects one result, which is ORed with the left-shifted $mask$. A
+priority left shifter then normalizes the mantissa, outputting the $lzd$ value
+during the shift. The exponent result is $EA – lzd$, and the mantissa result is
+chosen between the normalized mantissa and $CS4$, where $CS4$ is a supplementary
+rounding result that does not require left-shift normalization. The sign result
+is derived from the exponent difference and the $CS0$ result. The flag result
+only indicates imprecision; no other exception flags are generated.
 
-异常通路是用来判断是否为无效操作，结果是否为 $NaN$，结果是否为无穷，当这三种情况均为否时，进行正常计算，产生选择信号，选择 $far$ 通路或
-$close$ 通路中的结果和标志位作为输出。
+The exception path is used to determine whether the operation is invalid,
+whether the result is $NaN$, or whether the result is infinite. When none of
+these conditions are met, normal computation proceeds, generating a selection
+signal to choose the result and flags from either the $far$ path or the $close$
+path as output.
 
-#### 标量混合精度浮点加法器
+#### Scalar mixed-precision floating-point adder
 
-在标量单一精度浮点加法器基础上进行混合精度硬件设计，主要区别是支持混合精度的计算，以结果为 $f32$ 为例，下表是 $res\_widen$ 和
-$opb\_widen$ 对应操作的真值表。
+Building upon the scalar single-precision floating-point adder, a
+mixed-precision hardware design is implemented. The main difference lies in
+supporting mixed-precision computation. Taking the result as $f32$ as an
+example, the table below shows the truth table for the operations corresponding
+to $res\_widen$ and $opb\_widen$.
 
-Table: 结果为 $f32$ 混合精度格式表
+Table: Mixed-precision format table for $f32$ results
 
 | $res\_widen$ | $opb\_widen$ |       $f32$       |
 | :----------: | :----------: | :---------------: |
 |     $0$      |     $0$      | $f32 = f32 + f32$ |
 |     $1$      |     $0$      | $f32 = f16 + f16$ |
 |     $1$      |     $1$      | $f32 = f16 + f32$ |
-|     $0$      |     $1$      |        不允许        |
+|     $0$      |     $1$      |    Not allowed    |
 
-下图是标量混合精度浮点加法器架构图，其中最主要的区别是在数据输入端加一个快速格式转换模块，根据操作类型将操作数统一转换成结果的数据格式后，和单一精度浮点加法计算流程相同。
+The figure below shows the architecture of a scalar mixed-precision
+floating-point adder. The main difference is the addition of a fast format
+conversion module at the data input. Based on the operation type, this module
+converts the operands into the result's data format before processing, after
+which the computation flow is identical to that of a single-precision
+floating-point adder.
 
-![标量混合精度浮点加法器架构图](./figure/ScalarMixedPrecisionFloating-pointAdder.svg)
+![Scalar Mixed-Precision Floating-Point Adder Architecture
+Diagram](./figure/ScalarMixedPrecisionFloating-pointAdder.svg)
 
-#### 向量浮点加法器
+#### Vector Floating-Point Adder
 
-下图是向量浮点加法器架构图，为了满足时序要求，采用四个模块组合而成，$FloatAdderF64Widen$ 计算所有输出结果为 $64$
-位的操作，$FloatAdderF32WidenF16$ 计算所有输出结果为 $16$ 位或 $32$ 位的操作，$FloatAdderF16$
-只计算输出结果为 $16$ 位的操作。
+The diagram below shows the architecture of the vector floating-point adder. To
+meet timing requirements, it is composed of four modules: $FloatAdderF64Widen$
+handles all operations with 64-bit output results, $FloatAdderF32WidenF16$
+handles all operations with 16-bit or 32-bit output results, and $FloatAdderF16$
+handles only operations with 16-bit output results.
 
-其中 $fp\_format$ 为 $2$ 比特结果格式控制信号，$00$ 表示结果格式是 $f16$，$01$ 表示结果格式是 $f32$，$10$
-表示结果格式是 $f64$，输出的标志位为 $20$ 比特，低有效排列，当结果格式是 $f16$ 时，$20$ 比特全部有效，当结果格式是 $f32$ 时，低
-$10$ 比特有效，当结果格式是 $f64$ 时，低 $5$ 比特有效。
+Here, $fp\_format$ is a 2-bit result format control signal: $00$ indicates the
+result format is $f16$, $01$ indicates $f32$, and $10$ indicates $f64$. The
+output flags are 20 bits, arranged with lower bits being significant. When the
+result format is $f16$, all 20 bits are valid; for $f32$, the lower 10 bits are
+valid; and for $f64$, the lower 5 bits are valid.
 
-![向量浮点加法器架构图](./figure/VectorFloating-pointAdder.svg)
+![Vector Floating-Point Adder Architecture
+Diagram](./figure/VectorFloating-pointAdder.svg)
 
-向量浮点加法器采用两周期的流水线设计，为了实现快速唤醒，使加法结果 $1.5$
-周期左右计算好。流水线划分在每个子模块内部进行，只需插入一级寄存器，下面介绍图中三种模块的流水线划分。
+The vector floating-point adder employs a two-stage pipeline design. To achieve
+rapid wake-up, the addition result is computed in approximately 1.5 cycles.
+Pipeline partitioning is performed within each submodule, requiring only the
+insertion of a single register level. Below is an explanation of the pipeline
+partitioning for the three modules shown in the diagram.
 
-下图是 $FloatAdderF64Widen$ 模块的流水线划分，$far$ 通路在有效数字右移之后插入寄存器，$close$ 通路在 $Mux1H$
-后插入寄存器。
+The diagram below illustrates the pipeline partitioning of the
+$FloatAdderF64Widen$ module. The $far$ path inserts registers after the
+significand right shift, while the $close$ path inserts registers after the
+$Mux1H$.
 
-![FloatAdderF64Widen 流水线划分](./figure/FloatAdderF64WidenPipeline.svg)
+![FloatAdderF64Widen Pipeline Stages](./figure/FloatAdderF64WidenPipeline.svg)
 
-下图是 $FloatAdderF32WidenF16$ 模块的流水线划分，该模块包括两种不同输出格式的计算，第二周期的选择逻辑比较复杂，所以在 $far$
-通路种寄存器插在加法器之中，第一周期进行低 $18$ 位的加法和高位部分的加法，第二周期将第一周期的低 $18$
-位加法的进位和高位部分相加得到最终结果，$close$ 通路也是在 $Mux1H$ 后插入寄存器。
+The figure below shows the pipeline division of the $FloatAdderF32WidenF16$
+module, which includes calculations for two different output formats. The
+selection logic in the second cycle is complex, so registers are inserted within
+the adder in the $far$ path. The first cycle performs the addition of the lower
+$18$ bits and the higher bits, while the second cycle combines the carry from
+the lower $18$-bit addition of the first cycle with the higher bits to obtain
+the final result. The $close$ path also inserts registers after $Mux1H$.
 
-![FloatAdderF32WidenF16 流水线划分](./figure/FloatAdderF32WidenF16Pipeline.svg)
+![Pipeline Division of
+FloatAdderF32WidenF16](./figure/FloatAdderF32WidenF16Pipeline.svg)
 
-下图是 $FloatAdderF16$ 模块的流水线划分，该模块时序压力最小，采用 $far$ 通路在有效数字右移之后插入寄存器，$close$ 通路在
-$Mux1H$ 后插入寄存器的划分方式。
+The following diagram shows the pipeline partitioning of the $FloatAdderF16$
+module. This module has minimal timing pressure and adopts a partitioning method
+where the $far$ path inserts registers after the right shift of significant
+bits, and the $close$ path inserts registers after $Mux1H$.
 
-![FloatAdderF16 流水线划分](./figure/FloatAdderF16Pipeline.svg)
+![FloatAdderF16 Pipeline Partitioning](./figure/FloatAdderF16Pipeline.svg)
 
-#### 接口说明
+#### Interface Description
 
-之前介绍的向量浮点加法器宽度是 $64$ 位的，输入数据要求两个操作数都是向量的形式，但是 $RVV$
-不仅规定了两个操作数都是向量形式（$vector-vector$，缩写$vv$），还规定了一个操作数是向量另一个操作数是标量的形式（$vector-scalar$缩写$vf$），另外在
-$widening$ 指令下，源操作数的排列也不仅仅只有低有效的情况，当源寄存器宽度是目的寄存器宽度的一半时，数据来源可能是低半部分也可能是高半部分。
+The previously introduced vector floating-point adder has a width of $64$ bits,
+requiring both operands to be in vector form. However, $RVV$ not only specifies
+that both operands are in vector form ($vector-vector$, abbreviated as $vv$) but
+also allows one operand to be a vector and the other a scalar ($vector-scalar$,
+abbreviated as $vf$). Additionally, under $widening$ instructions, the
+arrangement of source operands is not limited to the lower significant part.
+When the source register width is half of the destination register width, the
+data source may come from either the lower or upper half.
 
-为了实现 $RVV$ 中所有浮点指令的计算操作，并且可进行 $VLEN$
-拓展，在向量浮点加法器的基础上增加其他简单指令的计算，把它作为一个向量浮点"$ALU$"，称作 $VFALU$。
+To implement all floating-point instruction calculations in $RVV$ and support
+$VLEN$ extension, simple instruction computations are added to the vector
+floating-point adder, transforming it into a vector floating-point "$ALU$",
+referred to as $VFALU$.
 
-因此需要对向量浮点加法器进行改造来适配 $RVV$ 的特性。改造分为两部分，一部分是功能改造，一部分是接口改造。
+Therefore, the vector floating-point adder needs to be modified to adapt to the
+features of $RVV$. The modifications consist of two parts: functional
+modifications and interface modifications.
 
-下表是 $VFALU$ 支持的操作码，共 $16$ 种操作，($w$)表示含有 $widen$ 操作。$vfmerge、vfmove、vfclass$
-操作数形式比较特殊：$vfmerge.vfm$ 源操作数有三个：一个向量寄存器，一个浮点寄存器，一个 $mask$ 寄存器；$vfmove.v.f$
-源操作数只有一个浮点寄存器；$vfclass$ 源操作数只有一个向量寄存器。
+The table below lists the opcodes supported by $VFALU$, totaling $16$
+operations, where ($w$) indicates operations involving $widen$. The operand
+formats for $vfmerge$, $vfmove$, and $vfclass$ are special: $vfmerge.vfm$ has
+three source operands—a vector register, a floating-point register, and a $mask$
+register; $vfmove.v.f$ has only one floating-point register as the source
+operand; $vfclass$ has only one vector register as the source operand.
 
-Table: $VFALU$操作码
+Table: $VFALU$ Opcode
 
-| $op\_code$ |    对应指令    |  操作数形式  |   含义   |
-| :--------: | :--------: | :-----: | :----: |
-|    $0$     | $vf(w)add$ | $vv,vf$ |   加法   |
-|    $1$     | $vf(w)sub$ | $vv,vf$ |   减法   |
-|    $2$     |  $vfmin$   | $vv,vf$ |  求最小值  |
-|    $3$     |  $vfmax$   | $vv,vf$ |  求最大值  |
-|    $4$     | $vfmerge$  |  $vfm$  |  数据合并  |
-|    $5$     |  $vfmove$  |  $v.f$  |  数据移动  |
-|    $6$     |  $vfsgnj$  | $vv,vf$ |  符号注入  |
-|    $7$     | $vfsgnjn$  | $vv,vf$ | 反符号注入  |
-|    $8$     | $vfsgnjx$  | $vv,vf$ | 异或符号注入 |
-|    $9$     |  $vmfeq$   | $vv,vf$ |  是否相等  |
-|    $10$    |  $vmfnq$   | $vv,vf$ |  是否不等  |
-|    $11$    |  $vmflt$   | $vv,vf$ |  是否小于  |
-|    $12$    |  $vmfle$   | $vv,vf$ | 是否小于等于 |
-|    $13$    |  $vmfgt$   |  $vf$   |  是否大于  |
-|    $14$    |  $vmfge$   |  $vf$   | 是否大于等于 |
-|    $15$    | $vfclass$  |   $v$   |   分类   |
+| $op\_code$ | Corresponding instruction | Operand format |           Meaning           |
+| :--------: | :-----------------------: | :------------: | :-------------------------: |
+|    $0$     |        $vf(w)add$         |    $vv,vf$     |          Addition           |
+|    $1$     |        $vf(w)sub$         |    $vv,vf$     |         Subtraction         |
+|    $2$     |          $vfmin$          |    $vv,vf$     |   Find the minimum value    |
+|    $3$     |          $vfmax$          |    $vv,vf$     |        Find Maximum         |
+|    $4$     |         $vfmerge$         |     $vfm$      |        Data merging         |
+|    $5$     |         $vfmove$          |     $v.f$      |        Data movement        |
+|    $6$     |         $vfsgnj$          |    $vv,vf$     |       Sign Injection        |
+|    $7$     |         $vfsgnjn$         |    $vv,vf$     |  Sign inversion injection   |
+|    $8$     |         $vfsgnjx$         |    $vv,vf$     |     XOR sign injection      |
+|    $9$     |          $vmfeq$          |    $vv,vf$     |        Whether equal        |
+|    $10$    |          $vmfnq$          |    $vv,vf$     |          Not Equal          |
+|    $11$    |          $vmflt$          |    $vv,vf$     |   Whether it is less than   |
+|    $12$    |          $vmfle$          |    $vv,vf$     |    Less than or equal to    |
+|    $13$    |          $vmfgt$          |      $vf$      |    Whether greater than     |
+|    $14$    |          $vmfge$          |      $vf$      | Is greater than or equal to |
+|     15     |         $vfclass$         |      $v$       |       Classification        |
 
-下表是 $VFALU$ 接口定义，相比于向量浮点加法器，增加了 $widen\_a$、$widen\_b$
-两个混合精度数据来源，当源操作数和目的操作数格式相同时，数据来自 $fp\_a、fp\_b$，否则来自 $widen\_a、widen\_b$，并且
-$uop\_idx=0$ 时取自低半部分， $uop\_idx=1$ 时取自高半部分。$is\_frs1=1$ 时源操作数 $vs1$ 来自浮点寄存器
-$frs1$，需要复制成向量寄存器后参与计算， $mask$ 参与 $merge$ 指令的计算，$op\_code$ 是操作码，表示进行的操作。
+The table below defines the $VFALU$ interface. Compared to the vector
+floating-point adder, it adds two mixed-precision data sources, $widen\_a$ and
+$widen\_b$. When the source and destination operand formats are the same, the
+data comes from $fp\_a$ and $fp\_b$; otherwise, it comes from $widen\_a$ and
+$widen\_b$. When $uop\_idx=0$, the lower half is taken, and when $uop\_idx=1$,
+the upper half is taken. When $is\_frs1=1$, the source operand $vs1$ comes from
+the floating-point register $frs1$, which needs to be replicated into a vector
+register for computation. $mask$ participates in the calculation of the $merge$
+instruction, and $op\_code$ is the operation code indicating the operation to be
+performed.
 
-Table: $VFALU$ 接口和含义
+Table: $VFALU$ interface and meanings
 
-|       接口        |    方向    |  位宽  |         含义         |
-| :-------------: | :------: | :--: | :----------------: |
-|     $fp\_a$     | $input$  | $64$ |     源操作数$vs2$      |
-|     $fp\_b$     | $input$  | $64$ |     源操作数$vs1$      |
-|   $widen\_a$    | $input$  | $64$ |    $widen\_vs2$    |
-|   $widen\_b$    | $input$  | $64$ |    $widen\_vs1$    |
-|     $frs1$      | $input$  | $64$ |      浮点寄存器数据       |
-|   $is\_frs1$    | $input$  | $64$ |    加数来自浮点寄存器数据     |
-|     $mask$      | $input$  | $4$  |   参与$merge$ 指令计算   |
-|   $uop\_idx$    | $input$  | $1$  | $widen$ 时选择高/低半部分  |
-|  $round\_mode$  | $input$  | $3$  |        舍入模式        |
-|  $fp\_format$   | $input$  | $2$  |        浮点格式        |
-| $res\_widening$ | $input$  | $1$  |     $widen$ 指令     |
-| $opb\_widening$ | $input$  | $1$  | 源操作数$vs1$是否和结果格式相同 |
-|   $op\_code$    | $input$  | $5$  |        操作码         |
-|  $fp\_result$   | $output$ | $64$ |        计算结果        |
-|    $fflags$     | $output$ | $20$ |        标志位         |
+|    Interface    | Direction | Bit Width |                            Meaning                            |
+| :-------------: | :-------: | :-------: | :-----------------------------------------------------------: |
+|      fp_a       |  $input$  |   $64$    |                     Source operand $vs2$                      |
+|     $fp\_b$     |  $input$  |   $64$    |                     Source operand $vs1$                      |
+|   $widen\_a$    |  $input$  |   $64$    |                         $widen\_vs2$                          |
+|   $widen\_b$    |  $input$  |   $64$    |                         $widen\_vs1$                          |
+|     $frs1$      |  $input$  |   $64$    |                 Floating-Point Register Data                  |
+|   $is\_frs1$    |  $input$  |   $64$    |       Addend sourced from floating-point register data        |
+|     $mask$      |  $input$  |    $4$    |        Participate in $merge$ instruction computation         |
+|   $uop\_idx$    |  $input$  |    $1$    |             Select upper/lower half when $widen$              |
+|  $round\_mode$  |  $input$  |    $3$    |                         Rounding mode                         |
+|  $fp\_format$   |  $input$  |    $2$    |                     Floating-point format                     |
+| $res\_widening$ |  $input$  |    $1$    |                      $widen$ instruction                      |
+| $opb\_widening$ |  $input$  |    $1$    | Is the source operand $vs1$ in the same format as the result? |
+|   $op\_code$    |  $input$  |    $5$    |                            Opcode                             |
+|    fp_result    | $output$  |   $64$    |                      Computation result                       |
+|    $fflags$     | $output$  |   $20$    |                           Flag bits                           |
 
-### 向量浮点融合乘加器
+### Vector Floating-Point Fused Multiply-Add Unit
 
-#### 流水线划分
+#### Pipeline Partitioning
 
-向量浮点融合乘加器采用四周期的流水线设计，为了实现快速唤醒，使乘加结果在 $3.5$ 周期左右计算好。向量器的延迟为 $3.5$
-周期，下图是向量浮点融合乘加器架构图，图中 $reg\_0$ 表示第一级寄存器，$reg\_1$ 表示第二级寄存器，$reg\_2$
-表示第三级寄存器，向量浮点融合乘加器也支持 $widen$ 功能，但是它的 $widen$ 功能只有 $f32 = f16 × f16 + f32$，$f64
-= f32 × f32 + f64$ 两种情况，所以输出格式确定的情况下，只需一比特 $widen$ 信号控制即可。输出的 $fflags$ 也是 $20$
-比特的，和向量浮点加法器的表示方式一样。
+The vector floating-point fused multiply-adder adopts a four-stage pipeline
+design to achieve rapid wake-up, ensuring the multiply-add result is computed in
+approximately $3.5$ cycles. The vector unit's latency is $3.5$ cycles. The
+diagram below illustrates the architecture of the vector floating-point fused
+multiply-adder, where $reg\_0$ denotes the first-stage register, $reg\_1$ the
+second-stage, and $reg\_2$ the third-stage. The vector floating-point fused
+multiply-adder also supports $widen$ functionality, limited to $f32 = f16 × f16
++ f32$ and $f64 = f32 × f32 + f64$ cases. Thus, only a single-bit $widen$ signal
+is needed for control when the output format is fixed. The output $fflags$ is
+also $20$ bits, consistent with the representation in the vector floating-point
+adder.
 
-![向量浮点融合乘加器架构图](./figure/VFMA.svg)
+![Vector Floating-Point Fused Multiply-Add Architecture
+Diagram](./figure/VFMA.svg)
 
-为了在满足时序约束的情况下节省面积，采用资源复用的实现方式，所有数据格式的计算通过同一个向量 $Booth$ 编码器和 $CSA$
-压缩，通过间隔摆放，$107$ 比特加法器也实现了资源复用。
+To save area while meeting timing constraints, a resource-sharing implementation
+is adopted. Calculations for all data formats use the same vector Booth encoder
+and CSA compression. By interleaving the layout, the 107-bit adder also achieves
+resource sharing.
 
-第一周期进行七组指数处理，得到七个右移值，根据计算格式选择对应的右移值，右移器方面将 $f64$ 的右移器与一个 $f32$ 共用，另外单独设置 $1$ 个
-$f32$、$4$ 个 $f16$ 右移器，如果做减法 $fp\_c$ 尾数右移结果要取反后输入到第一级寄存器。第一周期同时进行向量 $Booth$ 编码，生成
-$27$ 个部分积，使用 $CSA$ 压缩成 $4$ 个部分积后寄存。
+In the first cycle, seven sets of exponent processing are performed to obtain
+seven right-shift values. The corresponding right-shift value is selected based
+on the computation format. For the right shifters, the $f64$ right shifter is
+shared with one $f32$, while a separate $f32$ and four $f16$ right shifters are
+dedicated. If subtraction is performed, the right-shifted result of $fp\_c$'s
+mantissa is inverted before being fed into the first-stage register.
+Simultaneously, vector $Booth$ encoding is performed in the first cycle,
+generating 27 partial products, which are compressed into 4 partial products
+using $CSA$ and then registered.
 
-第二周期对剩余 $4$ 个部分积进行 $CSA4\_2$ 压缩后和第一周期计算的有效数字右移结果进行 $CSA3\_2$ 压缩，然后进行 $107$
-比特加法，寄存到第二级寄存器。
+In the second cycle, compress the remaining 4 partial products using $CSA4\_2$,
+then compress the result with the first cycle's right-shifted significand using
+$CSA3\_2$. Perform a 107-bit addition and register the result in the
+second-stage register.
 
-第三周期对第二周期的求和结果做 $lzd$ 和 $tzd$ ，然后进行带 $mask$ 限位的左移，左移结果存到第三级寄存器。
+In the third cycle, the sum result from the second cycle undergoes $lzd$ and
+$tzd$, followed by a left shift with $mask$ limitation. The shifted result is
+stored in the third-stage register.
 
-第四周期进行舍入得到尾数结果，根据第三周期左移情况计算出指数结果，符号位可由第二周期的 $107$
-比特加法器得到，标志结果可以产生上溢、下溢、无效操作、不精确四种标志位。注意下溢的检测方式，$IEEE-754$ 规定了两种检测下溢的方式，$before
-\quad rounding$ 和 $after \quad rounding$，本设计使用 $RISC-V$ 选取的 $after \quad
-rounding$ 方式检测下溢。
+In the fourth cycle, rounding is performed to obtain the mantissa result. The
+exponent result is calculated based on the left shift condition in the third
+cycle. The sign bit can be obtained from the $107$-bit adder in the second
+cycle. The flag results can generate four types of flags: overflow, underflow,
+invalid operation, and inexact. Note the method for detecting underflow.
+$IEEE-754$ specifies two methods for detecting underflow: $before \quad
+rounding$ and $after \quad rounding$. This design uses the $after \quad
+rounding$ method selected by $RISC-V$ to detect underflow.
 
-#### 接口说明
+#### Interface Description
 
-根据 $RVV$ 的指令定义，可以使用向量浮点融合乘加器复用来计算乘法，由 $op\_code$
-控制，当计算乘法时内部将加数置零，同时，$RVV$规定了一系列浮点融合乘加指令，主要是符号位和操作数顺序的区别。将向量浮点融合乘加器改造为支持所有相关指令的
-$VFMA$，增加 $op\_code$ 和接口。下表是 $VFMA$ 操作码，共 $9$ 种操作，都支持 $vv$ 和 $vf$ 两种操作数形式，当 $vf$
-时 $vs1[i]$ 替换成浮点寄存器 $frs1$。
+According to the $RVV$ instruction definitions, vector floating-point fused
+multiply-add units can be reused for multiplication calculations, controlled by
+$op\_code$. When performing multiplication, the internal adder is set to zero.
+Additionally, $RVV$ defines a series of floating-point fused multiply-add
+instructions, primarily differing in sign bits and operand order. The vector
+floating-point fused multiply-add unit is modified to support all related
+instructions as $VFMA$, with added $op\_code$ and interfaces. The following
+table lists the $VFMA$ opcodes, totaling $9$ operations, all supporting $vv$ and
+$vf$ operand forms. For $vf$, $vs1[i]$ is replaced by the floating-point
+register $frs1$.
 
-Table: $VFMA$ 操作码
+Table: $VFMA$ Opcode
 
-| $op\_code$ | 对应指令         | 操作数形式   | 含义                                   |
-| ---------- | ------------ | ------- | ------------------------------------ |
-| $0$        | $vf(w)mul$   | $vv,vf$ | $vd[i] = vs[2] × vs1[i]$             |
-| $1$        | $vf(w)macc$  | $vv,vf$ | $vd[i] = +(vs1[i] × vs2[i]) + vd[i]$ |
-| $2$        | $vf(w)nmacc$ | $vv,vf$ | $vd[i] = -(vs1[i] × vs2[i]) - vd[i]$ |
-| $3$        | $vf(w)msac$  | $vv,vf$ | $vd[i] = +(vs1[i] × vs2[i]) - vd[i]$ |
-| $4$        | $vf(w)nmsac$ | $vv,vf$ | $vd[i] = -(vs1[i] × vs2[i]) + vd[i]$ |
-| $5$        | $vfmadd$     | $vv,vf$ | $vd[i] = +(vs1[i] × vd[i]) + vs2[i]$ |
-| $6$        | $vfnamdd$    | $vv,vf$ | $vd[i] = -(vs1[i] × vd[i]) - vs2[i]$ |
-| $7$        | $vfmsub$     | $vv,vf$ | $vd[i] = +(vs1[i] × vd[i]) - vs2[i]$ |
-| $8$        | $vfnmsub$    | $vv,vf$ | $vd[i] = -(vs1[i] × vd[i]) + vs2[i]$ |
+| $op\_code$ | Corresponding instruction | Operand format | Meaning                              |
+| ---------- | ------------------------- | -------------- | ------------------------------------ |
+| $0$        | $vf(w)mul$                | $vv,vf$        | $vd[i] = vs[2] × vs1[i]$             |
+| $1$        | $vf(w)macc$               | $vv,vf$        | $vd[i] = +(vs1[i] × vs2[i]) + vd[i]$ |
+| $2$        | $vf(w)nmacc$              | $vv,vf$        | $vd[i] = -(vs1[i] × vs2[i]) - vd[i]$ |
+| $3$        | $vf(w)msac$               | $vv,vf$        | $vd[i] = +(vs1[i] × vs2[i]) - vd[i]$ |
+| $4$        | $vf(w)nmsac$              | $vv,vf$        | $vd[i] = -(vs1[i] × vs2[i]) + vd[i]$ |
+| $5$        | $vfmadd$                  | $vv,vf$        | $vd[i] = +(vs1[i] × vd[i]) + vs2[i]$ |
+| $6$        | $vfnamdd$                 | $vv,vf$        | $vd[i] = -(vs1[i] × vd[i]) - vs2[i]$ |
+| $7$        | $vfmsub$                  | $vv,vf$        | $vd[i] = +(vs1[i] × vd[i]) - vs2[i]$ |
+| $8$        | $vfnmsub$                 | $vv,vf$        | $vd[i] = -(vs1[i] × vd[i]) + vs2[i]$ |
 
-下表是 $VFMA$ 接口，为了简化控制逻辑的复杂度，送给 $VFMA$ 三个操作数顺序固定为 $vs2、vs1、vd$，由功能单元内部根据
-$op\_code$ 调换顺序，因为 $fma$ 指令在 $widen$ 时加数固定为目标格式，所以只需要增加 $widen\_a$ 和
-$widen\_b$，$uop\_idx$ 同样用来控制选 $widen\_a$ 和 $widen\_b$ 的高或低半部分，$frs1$ 和
-$is\_frs1$ 用来支持 $vf$ 指令。
+The table below shows the $VFMA$ interface. To simplify control logic
+complexity, the three operands sent to $VFMA$ are fixed in the order $vs2$,
+$vs1$, $vd$. The functional unit internally adjusts the order based on
+$op\_code$. Since the $fma$ instruction uses a fixed target format for the
+addend during $widen$, only $widen\_a$ and $widen\_b$ need to be added.
+$uop\_idx$ is similarly used to select the upper or lower half of $widen\_a$ and
+$widen\_b$. $frs1$ and $is\_frs1$ are used to support $vf$ instructions.
 
-Table: $VFMA$接口和含义
+Table: $VFMA$ Interface and Meanings
 
-|       接口        |    方向    |  位宽  |        含义         |
-| :-------------: | :------: | :--: | :---------------: |
-|     $fp\_a$     | $input$  | $64$ |     源操作数$vs2$     |
-|     $fp\_b$     | $input$  | $64$ |     源操作数$vs1$     |
-|     $fp\_c$     | $input$  | $64$ |     源操作数$vd$      |
-|   $widen\_a$    | $input$  | $64$ |   $widen\_vs2$    |
-|   $widen\_b$    | $input$  | $64$ |   $widen\_vs1$    |
-|     $frs1$      | $input$  | $64$ |      浮点寄存器数据      |
-|   $is\_frs1$    | $input$  | $64$ |    加数来自浮点寄存器数据    |
-|   $uop\_idx$    | $input$  | $1$  | $widen$ 时选择高/低半部分 |
-|  $round\_mode$  | $input$  | $3$  |       舍入模式        |
-|  $fp\_format$   | $input$  | $2$  |       浮点格式        |
-| $res\_widening$ | $input$  | $1$  |    $widen$ 指令     |
-|   $op\_code$    | $input$  | $5$  |        操作码        |
-|  $fp\_result$   | $output$ | $64$ |       计算结果        |
-|    $fflags$     | $output$ | $20$ |        标志位        |
+|    Interface    | Direction | Bit Width |                     Meaning                      |
+| :-------------: | :-------: | :-------: | :----------------------------------------------: |
+|      fp_a       |  $input$  |   $64$    |               Source operand $vs2$               |
+|     $fp\_b$     |  $input$  |   $64$    |               Source operand $vs1$               |
+|     $fp\_c$     |  $input$  |   $64$    |               Source operand $vd$                |
+|   $widen\_a$    |  $input$  |   $64$    |                   $widen\_vs2$                   |
+|   $widen\_b$    |  $input$  |   $64$    |                   $widen\_vs1$                   |
+|     $frs1$      |  $input$  |   $64$    |           Floating-Point Register Data           |
+|   $is\_frs1$    |  $input$  |   $64$    | Addend sourced from floating-point register data |
+|   $uop\_idx$    |  $input$  |    $1$    |       Select upper/lower half when $widen$       |
+|  $round\_mode$  |  $input$  |    $3$    |                  Rounding mode                   |
+|  $fp\_format$   |  $input$  |    $2$    |              Floating-point format               |
+| $res\_widening$ |  $input$  |    $1$    |               $widen$ instruction                |
+|   $op\_code$    |  $input$  |    $5$    |                      Opcode                      |
+|    fp_result    | $output$  |   $64$    |                Computation result                |
+|    $fflags$     | $output$  |   $20$    |                    Flag bits                     |
 
-### 向量浮点除法器
+### Vector floating-point divider
 
-#### 标量浮点除法器
+#### Scalar Floating-Point Divider
 
-标量浮点除法器支持三种格式的计算：$1$ 个 $f16 = f16 / f16$、$1$ 个 $f32 = f32 / f32$、$1$ 个 $f64 =
-f64 / f64$。除法器采用 $Radix-64$ 算法，迭代模块每周期进行三次 $Radix-4$ 迭代来实现
-$Radix-64$，下图是标量浮点除法器的架构图，除法器是阻塞执行的，计算过程中不能接受下一次除法操作，因此需要握手信号来控制，本设计采用$start-vaild$握手信号，由于
-$CPU$ 中会出现分支预测失败要 $flush$ 掉流水线的状态，所以专门设置了 $flush$
-信号用来清空除法器内部的状态，使之下周期立刻可以开始进行新的除法计算。
+The scalar floating-point divider supports computations in three formats: $1$
+$f16 = f16 / f16$, $1$ $f32 = f32 / f32$, and $1$ $f64 = f64 / f64$. The divider
+employs a $Radix-64$ algorithm, where the iterative module performs three
+$Radix-4$ iterations per cycle to achieve $Radix-64$. The figure below shows the
+architecture of the scalar floating-point divider. The divider operates in a
+blocking manner and cannot accept the next division operation during
+computation, requiring handshake signals for control. This design uses
+$start-valid$ handshake signals. Since the $CPU$ may encounter branch prediction
+failures that flush pipeline states, a dedicated $flush$ signal is included to
+clear the divider's internal state, allowing it to immediately start a new
+division operation in the next cycle.
 
-![标量浮点除法器架构图](./figure/FDiv.svg)
+![Scalar Floating-Point Divider Architecture Diagram](./figure/FDiv.svg)
 
-对于输入数据分为三种情况：都是规格化数（不含除数是 $2$ 的次幂）、至少有一个是非规格化数、提前终止（输入含有 $NaN$，无穷，零，或者除数是 $2$
-的次幂）。结果分为两种情况：结果是规格化数、结果是非规格化数。
+Input data falls into three categories: both are normalized numbers (excluding
+divisors that are powers of $2$), at least one is a denormal number, and early
+termination (input contains $NaN$, infinity, zero, or the divisor is a power of
+$2$). Results fall into two categories: the result is a normalized number, or
+the result is a denormal number.
 
-当输入都是规格化数（不含除数是 $2$
-的次幂）时，尾数都是规格化的，此时直接进入预缩放阶段；当输入至少有一个是非规格化数时，相比于输入都是规格化数，在预缩放之前，要再加一个周期进行尾数规格化。
+When the inputs are all normalized numbers (excluding divisors that are powers
+of 2), the mantissas are normalized, and the process directly proceeds to the
+pre-scaling stage. When at least one input is a denormalized number, compared to
+the case where all inputs are normalized, an additional cycle is required for
+mantissa normalization before pre-scaling.
 
-预缩放阶段为一个周期，接着进行整数商选择，将两比特整数商结果选择出来，并为 $Radix-4$
-迭代提供预缩放后的除数被除数以及余数的保留进位冗余表示。$Radix-4$ 迭代模块每周期计算 $6$ 比特商，$f16$ 除法需要 $2$ 周期
-$Radix-4$ 迭代，$f32$ 除法需要 $6$ 周期 $Radix-4$ 迭代，$f64$ 除法需要 $9$ 周期 $Radix-4$
-迭代。$Radix-4$ 迭代完成后，得到尾数商的结果的范围为$(1,
-2)$。当结果是规格化数时，只需要一个周期进行舍入和指数结果的计算，就可以得到最终的除法结果；当结果是非规格化数时，在舍入之前需要再加一个周期将商的结果进行非规格化。
+The prescaling stage takes one cycle, followed by integer quotient selection,
+where the two-bit integer quotient result is selected, and the prescaled
+divisor, dividend, and remainder's carry-save redundant representation are
+provided for the $Radix-4$ iteration. The $Radix-4$ iteration module calculates
+6 bits of the quotient per cycle. $f16$ division requires 2 cycles of $Radix-4$
+iteration, $f32$ division requires 6 cycles, and $f64$ division requires 9
+cycles. After $Radix-4$ iteration, the resulting mantissa quotient ranges
+between $(1, 2)$. When the result is a normalized number, only one cycle is
+needed for rounding and exponent result calculation to obtain the final division
+result. When the result is a denormal number, an additional cycle is required to
+denormalize the quotient before rounding.
 
-提前终止分为两种情况：当输入操作数含有 $NaN$，无穷，零的时候，不需要进行除法计算，第二个周期就可将结果输出；当除数是 $2$
-的次幂时，第一个周期可求得指数结果，如果结果不需要非规格化步骤，第二周期可将结果输出；如果结果需要非规格化步骤，再加一个周期，第三个周期将结果输出。
+Early termination is divided into two scenarios: (1) When the input operands
+contain NaN, infinity, or zero, division computation is unnecessary, and the
+result can be output in the second cycle. (2) When the divisor is a power of 2,
+the exponent result can be obtained in the first cycle. If the result does not
+require denormalization steps, it can be output in the second cycle; if
+denormalization is needed, an additional cycle is required, and the result is
+output in the third cycle.
 
-下表是不同数据格式情况下标量除法器所需计算周期，$+1$ 表示除法结果是非规格化数时再加一个周期进行后处理。提前终止情况下，只需 $1$ ~ $2$
-个周期完成所有数据格式除法操作，在非提前终止情况下，$f16$ 除法需要 $5$ ~ $7$ 个周期完成除法，$f32$ 除法需要 $7$ ~ $9$
-个周期完成除法，$f64$ 除法需要 $12$ ~ $14$ 个周期完成除法.
+The table below shows the required computation cycles for scalar dividers under
+different data formats, where $+1$ indicates an additional cycle for
+post-processing when the division result is denormalized. In early termination
+cases, division operations for all data formats can be completed in just $1$ to
+$2$ cycles. Without early termination, $f16$ division requires $5$ to $7$
+cycles, $f32$ division requires $7$ to $9$ cycles, and $f64$ division requires
+$12$ to $14$ cycles.
 
-Table: 标量除法器计算周期
+Table: Scalar Divider Calculation Cycles
 
-| 数据格式  |  规格化数  | 非规格化数  | 提前终止  |
-| :---: | :----: | :----: | :---: |
-| $f16$ | $5+1$  | $6+1$  | $1+1$ |
-| $f32$ | $7+1$  | $8+1$  | $1+1$ |
-| $f64$ | $12+1$ | $13+1$ | $1+1$ |
+| Data Format | Normalized Number | Denormal number | Early termination |
+| :---------: | :---------------: | :-------------: | :---------------: |
+|    $f16$    |       $5+1$       |      $6+1$      |       $1+1$       |
+|    $f32$    |       $7+1$       |      $8+1$      |       $1+1$       |
+|    $f64$    |      $12+1$       |     $13+1$      |       $1+1$       |
 
-#### 向量浮点除法器
+#### Vector floating-point divider
 
-下图是向量浮点除法器架构图，相比与标量浮点除法器，考虑到向量除法计算同时计算多组除法，所有结果计算完才能需要统一写回到寄存器堆，因此单个除法的提前终止对向量除法加速意义不大，所有取消了输出结果延迟不确定的特性，任何情况下，根据输入的数据格式，向量浮点除法器的延迟数是确定的，如下表所示。
+The figure below shows the architecture of the vector floating-point divider.
+Compared to the scalar floating-point divider, since vector division computes
+multiple divisions simultaneously and all results must be written back to the
+register file together, early termination of a single division offers little
+benefit for vector division acceleration. Thus, the feature of variable output
+latency is removed. In all cases, the latency of the vector floating-point
+divider is fixed based on the input data format, as shown in the table below.
 
-![向量浮点除法器架构图](./figure/VFDiv.svg)
+![Vector Floating-Point Divider Architecture Diagram](./figure/VFDiv.svg)
 
-Table: 向量除法器计算周期
+Table: Vector Divider Calculation Cycles
 
-| 数据格式  | 计算周期 |
-| :---: | :--: |
-| $f16$ | $7$  |
-| $f32$ | $11$ |
-| $f64$ | $14$ |
+| Data Format | Calculation Cycle |
+| :---------: | :---------------: |
+|    $f16$    |        $7$        |
+|    $f32$    |       $11$        |
+|    $f64$    |       $14$        |
 
-在硬件设计上，除了 $Radix-64$ 迭代模块，向量浮点除法器采用逻辑复用方式，使用四组信号进行计算和控制：第一组用于计算 $f64\_0$ 或
-$f32\_0$ 或 $f16\_0$，第二组用于计算 $f32\_1$，$f16\_1$，第三组用于计算 $f16\_2$，第四组用于计算
-$f16\_3$。寄存器方面也采用复用的方式来存储中间结果，寄存器位宽按照 $max$（$1$ 个 $f64$，$2$ 个 $f32$，$4$ 个
-$f16$），满足最大要求。而 $Radix-64$ 迭代模块是关键路径，也在满足时序要求下尽量节省面积，第一次 $Radix-4$ 迭代使用 $7$ 组独立的
-$CSA$ 和商选择，第二、三次 $Radix-4$ 迭代使用 $4$ 组复用的 $CSA$ 和商选择。
+In hardware design, aside from the $Radix-64$ iteration module, the vector
+floating-point divider employs logic reuse, utilizing four signal groups for
+computation and control: the first group computes $f64\_0$, $f32\_0$, or
+$f16\_0$; the second computes $f32\_1$ or $f16\_1$; the third computes $f16\_2$;
+and the fourth computes $f16\_3$. Registers are also reused to store
+intermediate results, with widths sized to $max$ (1 $f64$, 2 $f32$, or 4 $f16$)
+to meet maximum requirements. The $Radix-64$ iteration module is the critical
+path, optimized for timing while minimizing area. The first $Radix-4$ iteration
+uses 7 independent $CSA$ and quotient selection units, while the second and
+third iterations reuse 4 $CSA$ and quotient selection units.
 
-#### 接口说明
+#### Interface Description
 
-$RVV$ 规定的向量浮点除法指令有三个：
+The $RVV$ specification defines three vector floating-point division
+instructions:
 
 ① $vfdiv.vv \quad vd[i] = vs2[i]/vs1[i]$
 
@@ -1333,75 +2009,96 @@ $RVV$ 规定的向量浮点除法指令有三个：
 
 ③ $vfrdiv.vf \quad vd[i] = f[rs1]/vs2[i]$
 
-其中③比较特殊，它操作数的顺序和①②不同，对于向量除法单元，第一个操作数由控制逻辑传 $vs2[i]/f[rs1]$，第二个操作数传 $vs1[i]/
-f[rs1]/vs2[i]$，所以功能单元看到的被除数是向量或标量形式，除数也是向量或标量形式，因此需要增加两个标量数据接口，增加接口后模块命名为
-$VFDIV$，接口如下表所示。
+Case ③ is special as the operand order differs from cases ① and ②. For the
+vector division unit, the first operand is passed by the control logic as
+$vs2[i]/f[rs1]$, and the second operand is passed as $vs1[i]/f[rs1]/vs2[i]$.
+Thus, the functional unit sees the dividend in either vector or scalar form, and
+the divisor is also in vector or scalar form. Therefore, two additional scalar
+data interfaces are required. After adding these interfaces, the module is named
+$VFDIV$, with the interfaces as shown in the table below.
 
-Table: $VFDIV$ 接口和含义
+Table: $VFDIV$ Interface and Meanings
 
-| 接口                 | 方向       | 位宽   | 含义           |
-| ------------------ | -------- | ---- | ------------ |
-| $start\_valid\_i$  | $input$  | $1$  | 握手信号         |
-| $finish\_ready\_i$ | $input$  | $1$  | 握手信号         |
-| $flush\_i$         | $input$  | $1$  | 冲刷信号         |
-| $fp\_format\_i$    | $input$  | $2$  | 浮点格式         |
-| $opa\_i$           | $input$  | $64$ | 被除数          |
-| $opb\_i$           | $input$  | $64$ | 除数           |
-| $frs2\_i$          | $input$  | $64$ | 被除数来自浮点寄存器数据 |
-| $frs1\_i$          | $input$  | $64$ | 除数来自浮点寄存器数据  |
-| $is\_frs2\_i$      | $input$  | $1$  | 被除数来自浮点寄存器   |
-| $is\_frs1\_i$      | $input$  | $1$  | 除数来自浮点寄存器    |
-| $rm\_i$            | $input$  | $3$  | 舍入模式         |
-| $start\_ready\_o$  | $output$ | $1$  | 握手信号         |
-| $finish\_valid\_o$ | $output$ | $1$  | 握手信号         |
-| $fpdiv\_res\_o$    | $output$ | $64$ | 计算结果         |
-| $fflags\_o$        | $output$ | $20$ | 标志位          |
+| Interface          | Direction | Bit Width | Meaning                                            |
+| ------------------ | --------- | --------- | -------------------------------------------------- |
+| $start\_valid\_i$  | $input$   | $1$       | Handshake signal                                   |
+| $finish\_ready\_i$ | $input$   | $1$       | Handshake signal                                   |
+| $flush\_i$         | $input$   | $1$       | Flush signal                                       |
+| $fp\_format\_i$    | $input$   | $2$       | Floating-point format                              |
+| $opa\_i$           | $input$   | $64$      | Dividend                                           |
+| $opb\_i$           | $input$   | $64$      | Divisor                                            |
+| $frs2\_i$          | $input$   | $64$      | Dividend comes from floating-point register data   |
+| $frs1\_i$          | $input$   | $64$      | Divisor sourced from floating-point register data  |
+| $is\_frs2\_i$      | $input$   | $1$       | Dividend sourced from floating-point register      |
+| $is\_frs1\_i$      | $input$   | $1$       | The divisor comes from the floating-point register |
+| $rm\_i$            | $input$   | $3$       | Rounding mode                                      |
+| $start\_ready\_o$  | $output$  | $1$       | Handshake signal                                   |
+| $finish\_valid\_o$ | $output$  | $1$       | Handshake signal                                   |
+| $fpdiv\_res\_o$    | $output$  | $64$      | Computation result                                 |
+| $fflags\_o$        | $output$  | $20$      | Flag bits                                          |
 
-### 向量格式转换模块 $VCVT$
+### Vector format conversion module $VCVT$
 
-$VCVT$ 模块是一个三级流水的向量浮点的格式转换模块。其例化 $2$ 个具有 $64bits$ 数据处理的子模块 $VectorCvt$，每个
-$VectorCvt$ 分别包含一个 $cvt64$，一个 $cvt32$，两个 $cvt16$ 模块。其中 $cvt64$ 支持
-$64，32，16，8bits$ 浮点/整数格式的处理，$cvt32$ 支持 $32，16，8bits$ 浮点/整数格式的处理，$cvt16$ 支持
-$16，8bits$ 浮点/整数格式的处理。即 $vectorCvt$ 能同时处理 $1$ 个 $64bits$（或者 $2$ 个 $32bits$，或者
-$4$ 个 16bits$，或者 $4$ 个 $8bits$ ）浮点/整数格式输入数据的转换。
+The $VCVT$ module is a three-stage pipelined vector floating-point format
+conversion module. It instantiates two $VectorCvt$ submodules capable of
+processing $64$-bit data. Each $VectorCvt$ contains one $cvt64$, one $cvt32$,
+and two $cvt16$ modules. The $cvt64$ supports processing floating-point/integer
+formats of $64$, $32$, $16$, and $8$ bits. The $cvt32$ supports $32$, $16$, and
+$8$-bit floating-point/integer formats, while the $cvt16$ supports $16$ and
+$8$-bit floating-point/integer formats. Thus, $VectorCvt$ can simultaneously
+process one $64$-bit (or two $32$-bit, or four $16$-bit, or four $8$-bit)
+floating-point/integer format input data for conversion.
 
-#### 总体设计
+#### Overall design
 
-![VCVT总体设计](./figure/VCVT.svg)
+![VCVT Overall Design](./figure/VCVT.svg)
 
-#### 模块设计
+#### Module Design
 
-$CVT$ 模块包含单宽度浮点/整型类型转换指令、加宽浮点/整型类型转换指令、缩小浮点/整型类型转换指令、向量浮点倒数平方根估计指令及向量浮点倒数估计指令。
+The $CVT$ module includes single-width floating-point/integer type conversion
+instructions, widening floating-point/integer type conversion instructions,
+narrowing floating-point/integer type conversion instructions, vector
+floating-point reciprocal square root estimation instructions, and vector
+floating-point reciprocal estimation instructions.
 
-根据 $width$ 选择不同的 $cvt$ 模块调用，$cvt$ 模块的设计思路为根据指令类型分为 $4$
-种，$fp2int，int2fp，fp2fp，vfr$ 分别实现。$fcvt64$ 的整体设计思路，把输入的 $64bit$ 数据进行格式统一：
+Select different $cvt$ module calls based on $width$. The design approach for
+the $cvt$ module is divided into four types based on instruction type: $fp2int$,
+$int2fp$, $fp2fp$, and $vfr$. The overall design approach for $fcvt64$ is to
+unify the format of the input $64bit$ data:
 
-$different \quad width \quad unsigned/signed \quad int -> 65 \quad signed \quad
-int$
+different width unsigned/signed int -> 65 signed int
 
-$f16/f32/f64 -> 65bit（f64 \#\# false.B）$
+$f16/f32/f64 -> 65bit (f64 \#\# false.B)$
 
-格式统一之后在转换过程中在一定程度上就不需要区分到底来的是哪种数据以及它们的位宽和字段的位置。
+After standardizing the format, there is no longer a need to distinguish between
+different types of data, their bit widths, or field positions during the
+conversion process to a certain extent.
 
-在此基础上，$VFCVT64$ 分为 $5$ 类：$int -> fp，fp -> fp widen，fp -> fp
-narrow，estimate7(rsqrt7$ & $rec7)，fp -> int$。
+Building on this, $VFCVT64$ is divided into 5 categories: $int -> fp$, $fp ->
+fp$ widen, $fp -> fp$ narrow, estimate7 ($rsqrt7$ & $rec7$), and $fp -> int$.
 
-#### $FuopType$ 译码逻辑
+#### $FuopType$ decoding logic
 
-对于 $cvt$ 指令来说：其 $fuopType$ 共 $9$ 位，每一位所表示的信息如下：
+For the $cvt$ instruction: its $fuopType$ consists of $9$ bits, with each bit
+representing the following information:
 
-其中 $[5:0]$ 是从手册里得到的，$[8:6]$ 是为了方便生成控制信号设计时额外添加的。
+Here, $[5:0]$ is obtained from the manual, and $[8:6]$ is additionally added
+during the design of control signal generation for convenience.
 
-$[8]：1$ 表示其是 $move$ 指令，$0$ 表示 $cvt$ 指令或者 $vfrsqrt7$ 和 $vfrec7$ 这两条估计指令。
+$[8]:1$ indicates it is a $move$ instruction, $0$ represents $cvt$ instruction
+or the two estimation instructions $vfrsqrt7$ and $vfrec7$.
 
-$[7]：1$ 表示其输入是 $fp$，$0$ 表示输入是 $int$。
+$[7]: 1$ indicates the input is $fp$, $0$ indicates the input is $int$.
 
-$[6]：1$ 表示其输出是 $fp$，$0$ 表示输出是 $int$。
+$[6]$: $1$ indicates the output is $fp$, $0$ indicates the output is $int$.
 
-$[5]：1$ 表示其是 $vfrsqrt7$ 和 $vfrec7$ 这两条估计指令，否则是 $cvt$ 指令；当其为 $1$ 时，$[0]$ 用以区分其是
-$vfrsqrt7$ 还是 $vfrec7$。
+$[5]:1$ indicates it is one of the two estimation instructions, $vfrsqrt7$ or
+$vfrec7$; otherwise, it is a $cvt$ instruction. When it is $1$, $[0]$
+distinguishes between $vfrsqrt7$ and $vfrec7$.
 
-$[4:3]：00$ 表示 $single$ 类型，$01$ 表示 $widen$，$10$ 表示 $narrow$。
+$[4:3]: 00$ denotes $single$ type, $01$ denotes $widen$, $10$ denotes $narrow$.
 
-$[2:0]$：对于不同的指令有不同的作用：对于浮点跟整数之间的转换，$[0]$ 用以区分整数是有符号数还是无符号数；其他情况下，$[2:1]=11$ 表示其是
-$rtz$ 类型指令，$[2:0]=101$ 表示是 $rod（vfncvt_rod_ffw）$。
+$[2:0]$: For different instructions, it serves different purposes: For
+conversions between floating-point and integer, $[0]$ distinguishes whether the
+integer is signed or unsigned; in other cases, $[2:1]=11$ indicates it is an
+$rtz$ type instruction, and $[2:0]=101$ indicates it is $rod$ (vfncvt_rod_ffw).

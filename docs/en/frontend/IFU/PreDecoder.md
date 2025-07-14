@@ -1,100 +1,156 @@
-# IFU 子模块 PreDecoder
+# IFU Submodule PreDecoder
 
-## 功能描述
+## Functional Description
 
-### 功能概述
+### Functional Overview
 
-预译码器 PreDeocoder 接受初始指令码并进行指令码生成，每个指令码查询预译码表产生预译码信息，预译码信息包括该位置是否是有效指令开始、CFI
-指令类型、是否是 RVC 指令、是否是 Call 指令以及是否是 Ret 指令。预译码器会产生两种有效指令开始的向量，一种是默认第 1
-个二字节必为有效指令开始，另一种是默认第 2 个二字节必为有效指令的开始，最终的选择在 IFU 端做。
+The PreDecoder receives the initial instruction code and performs instruction
+code generation. Each instruction code queries the pre-decoding table to produce
+pre-decoding information, including whether the position is the start of a valid
+instruction, the CFI instruction type, whether it is an RVC instruction, whether
+it is a Call instruction, and whether it is a Ret instruction. The pre-decoder
+generates two types of valid instruction start vectors: one defaults the 1st
+2-byte as the start of a valid instruction, and the other defaults the 2nd
+2-byte as the start. The final selection is made at the IFU side.
 
-### 分特性描述
+### Feature Descriptions
 
-#### 特性 1：指令码生成(instr\_gen)
+#### Feature 1: Instruction Code Generation (instr_gen)
 
-预译码器产生接受来自 IFU 完成指令切分的 17×2 字节的初始指令码，并以 4 字节为窗口，2 字节为步进长度，从第 1 个 2 字节开始，直到第 16 个
-2 字节，选出总共 16 个 4 字节的指令码。
+The pre-decoder receives the initial instruction code of 17×2 bytes from the IFU
+after instruction segmentation and selects a total of 16 4-byte instruction
+codes using a 4-byte window and a 2-byte step length, starting from the 1st
+2-byte up to the 16th 2-byte.
 
-#### 特性 2：有效指令开始向量生成(vec\_gen)
+#### Feature 2: Valid Instruction Start Vector Generation (vec_gen)
 
-预译码器在生成初始指令码的同时，生成 16bit 有效指令开始向量，这个向量每 bit 标识此位置的指令是一条有效指令的开始。生成逻辑为：
+While generating the initial instruction code, the pre-decoder also produces a
+16-bit valid instruction start vector, where each bit indicates whether the
+corresponding position is the start of a valid instruction. The generation logic
+is as follows:
 
-- 正常模式：默认第一个 2 字节为第一条指令开始。如果第 n-1 个 2 字节是有效指令开始且是 RVC 指令，或者第 n-1 个 2
-  字节不是有效指令开始（肯定是一条 4 字节指令的结尾 2 字节），那么第 n 个 2 字节即为有效指令开始。
-- 非正常模式：默认第一个 2 字节为一条 4 字节指令的后半段，第一条有效指令从第二个 2 字节开始，后续生成逻辑和正常模式一样。
+- Normal Mode: By default, the first 2 bytes are considered the start of the
+  first instruction. If the (n-1)th 2-byte segment is the start of a valid
+  instruction and is an RVC instruction, or if the (n-1)th 2-byte segment is not
+  the start of a valid instruction (definitely the last 2 bytes of a 4-byte
+  instruction), then the nth 2-byte segment is the start of a valid instruction.
+- Abnormal Mode: By default, the first 2 bytes are considered the latter half of
+  a 4-byte instruction, with the first valid instruction starting from the
+  second 2-byte segment. Subsequent generation logic follows the same rules as
+  the normal mode.
 
-两种模式并行生成，最终由 IFU 内部是否有跨缓存行的 RVI 指令进行结果的选择。
+Both modes generate results in parallel, with the final selection determined by
+whether there is a cross-cache-line RVI instruction within the IFU.
 
-#### 特性 3：预译码信息生成(decoder)
+#### Feature 3: Pre-Decoding Information Generation (decoder)
 
-预译码器根据指令码产生预译码信息，主要包括：是否是 RVC 指令、是否是 CFI 指令、CFI
-指令类型（branch/jal/jalr/call/ret）、CFI 指令的目标地址计算偏移。CFI 指令类型如表 1.2 所示。
+The pre-decoder generates pre-decoding information based on the instruction
+code, including: whether it is an RVC instruction, whether it is a CFI
+instruction, the type of CFI instruction (branch/jal/jalr/call/ret), and the
+target address calculation offset for CFI instructions. The CFI instruction
+types are shown in Table 1.2.
 
-## 整体框图
+## Overall Block Diagram
 
-![PreDecoder结构](../figure/IFU/PreDecoder/PreDecoder_structure.png)
+![PreDecoder Structure](../figure/IFU/PreDecoder/PreDecoder_structure.png)
 
-## 接口时序
+## Interface timing
 
-![PreDecode接口时序](../figure/IFU/PreDecoder/PreDecoder_port.png)
+![PreDecode Interface Timing](../figure/IFU/PreDecoder/PreDecoder_port.png)
 
-由于 PreDecode 模块均为组合逻辑，因此输入和输出都在同一个时钟周期内
+Since the PreDecode module consists entirely of combinational logic, both inputs
+and outputs are processed within the same clock cycle.
 
-# IFU 子模块 PredChecker
+# IFU Submodule PredChecker
 
-## 功能描述
+## Functional Description
 
-### 功能概述
+### Functional Overview
 
-分支预测检查器 PredChecker 接收来自 IFU 的预测块信息（包括预测跳转指令在预测块的位置、预测的跳转目标、预译码得到的指令信息、指令 PC
-以及预译码得到的跳转目标偏移等），在模块内部检查五种类型的分支预测错误。模块内部分为两个流水线 stage，分别输出信息，第一个 stage 输出给 f3
-阶段，用于修正预测块的指令范围和预测结果。第二个 stage 输出给 wb 阶段，用于在发现分支预测错误时产生前端重定向以及写回给 FTQ 正确的预测信息。
+The branch prediction checker PredChecker receives prediction block information
+from the IFU (including the position of the predicted jump instruction within
+the block, the predicted jump target, pre-decoded instruction information,
+instruction PC, and pre-decoded jump target offsets). It internally checks for
+five types of branch prediction errors. The module is divided into two pipeline
+stages, each outputting information. The first stage outputs to the F3 stage to
+correct the instruction range and prediction results of the prediction block.
+The second stage outputs to the WB stage to generate frontend redirection upon
+detecting branch prediction errors and to write back correct prediction
+information to the FTQ.
 
-### 分特性描述
+### Feature Descriptions
 
-#### 特性 1：Jal 指令预测错误检查
+#### Feature 1: Jal Instruction Misprediction Check
 
-jal 指令预测错误的条件是，预测块中有一条 jal 指令（由预译码信息给出），但是要么这个预测块没有预测跳转，要么找个预测块预测跳转的指令在这条 jal
-指令之后（即这条 jal 指令没有被预测跳转）。
+The condition for a jal instruction prediction error is when there is a jal
+instruction in the prediction block (indicated by pre-decode information), but
+either the prediction block does not predict a jump, or the predicted jump
+instruction in the block occurs after this jal instruction (i.e., this jal
+instruction was not predicted to jump).
 
-#### 特性 2：Ret 指令预测错误检查
+#### Feature 2: Ret Instruction Prediction Error Check
 
-ret 指令预测错误的条件是，预测块中有一条 ret 指令（由预译码信息给出），但是要么这个预测块没有预测跳转，要么找个预测块预测跳转的指令在这条 ret
-指令之后（即这条 ret 指令没有被预测跳转）。
+The condition for a ret instruction misprediction is that the prediction block
+contains a ret instruction (provided by pre-decoding information), but either
+the prediction block has no predicted jump, or the predicted jump instruction in
+this prediction block is after the ret instruction (i.e., this ret instruction
+is not predicted to jump).
 
-#### 特性 6：重新生成指令有效范围向量
+#### Feature 6: Regenerate Instruction Valid Range Vector
 
-PredChecker 在检查出 Jal/Ret 指令预测错误时，需要重新生成指令有效范围向量，有效范围截取到 Jal/Ret 指令的位置，之后的 bit
-全部置为 0。需要注意的是，jal 和 ret 指令的错误检查都会导致指令有效范围的缩短，所以需要重新生成指令有效范伟
-fixedRange，同时修复预测结果（即将原来的预测结果取消，把找个指令块的预测结果根据 jal 指令的位置重新生成）
+When PredChecker detects a Jal/Ret instruction misprediction, it needs to
+regenerate the instruction valid range vector, truncating the valid range to the
+position of the Jal/Ret instruction and setting all subsequent bits to 0. Note
+that both jal and ret instruction mispredictions will shorten the instruction
+valid range, so the fixedRange must be regenerated, and the prediction result
+must be corrected (i.e., canceling the original prediction and regenerating the
+prediction result for this instruction block based on the jal instruction's
+position).
 
-#### 特性 3：非 CFI 预测错误检查
+#### Feature 3: Non-CFI Prediction Error Check
 
-非 CFI 预测错误的条件是被预测跳转的指令根据预译码信息显示不是一条 CFI 指令。
+The condition for a non-CFI misprediction is that the predicted jump
+instruction, according to pre-decoding information, is not a CFI instruction.
 
-#### 特性 4：无效指令预测错误检查
+#### Feature 4: Invalid Instruction Prediction Error Check
 
-无效指令预测错误的条件是被预测的指令的位置根据预译码信息中的指令有效向量显示不是一条有效指令的开始。
+The condition for an invalid instruction prediction error is when the predicted
+instruction's position, according to the instruction valid vector in the
+pre-decode information, does not indicate the start of a valid instruction.
 
-#### 特性 5：目标地址预测错误检查
+#### Feature 5: Target Address Prediction Error Check
 
-目标地址预测错误的条件是，被预测的是一条有效的 jal 或者 branch 指令，同时预测的跳转目标地址和由指令码计算得到的跳转目标不一致。
+The condition for a target address prediction error is when the predicted
+instruction is a valid jal or branch instruction, but the predicted jump target
+address does not match the jump target calculated from the instruction code.
 
-#### 特性 5：分级输出检查结果
+#### Feature 5: Hierarchical Output Check Results
 
-以上 PredChecker 检查结果会分为两级分别输出，前面已经提到，Jal/Ret
-指令由于需要重新生成指令有效范围向量和重新指定预测位置，所以需要在错误产生的当拍（F3）直接输出结果到 Ibuffer
-用于及时更正进入后端的指令。而由于时序的考虑，其他错误信息（比如五种错误的错误位置、正确的跳转地址等）则是等到下一拍（WB）阶段才返回给 IFU 做前端重定向。
+The PredChecker results are output in two stages. As previously mentioned,
+Jal/Ret instructions require regenerating the instruction valid range vector and
+reassigning the predicted position, so their error results must be output
+directly to the Ibuffer in the same cycle (F3) to correct instructions entering
+the backend promptly. Due to timing considerations, other error information
+(such as the error positions of the five types of errors and the correct jump
+addresses) is returned to the IFU in the next cycle (WB) for frontend
+redirection.
 
-#### 整体框图
+#### Overall Block Diagram
 
-![PredChecker结构](../figure/IFU/PreDecoder/PredChecker_structure.png)
+![PredChecker Structure](../figure/IFU/PreDecoder/PredChecker_structure.png)
 
-#### 接口时序
+#### Interface timing
 
-![PredChecker接口时序](../figure/IFU/PreDecoder/PredChecker_port.png)
+![PredChecker Interface Timing](../figure/IFU/PreDecoder/PredChecker_port.png)
 
-如图，黄色代表同一个预测块在 PredChecker 里的检查过程，这个预测块的第 6 个字节位置被预测为跳转，改预测块原本的有效指令范围为 h7f（即
-0000000001111111），指令有效向量为 hbfeb（即 1011111111101011），但是检查器发现该预测块第 1 个字节的位置（从 0
-开始计数）是一条 jal 指令（brType 值为 b10），所以检查器首先在 stage1 将有效指令范围修改为 h3，预测字节位置为 1 给 F3 来进行
-Ibuffer 指令入队选择，同时在 WB 阶段将目标地址修正为 h80002120，同时标记误预测位置为 6，通知 WB 阶段做重定向
+As shown in the figure, yellow represents the checking process of the same
+prediction block in PredChecker. The 6th byte position of this prediction block
+is predicted as a jump, and the original valid instruction range of the
+prediction block is h7f (i.e., 0000000001111111), with the instruction valid
+vector being hbfeb (i.e., 1011111111101011). However, the checker identifies
+that the 1st byte position (counting from 0) is a jal instruction (brType value
+is b10). Therefore, the checker first modifies the valid instruction range to h3
+in stage1, sets the predicted byte position to 1 for F3 to perform Ibuffer
+instruction enqueue selection, and corrects the target address to h80002120 in
+the WB stage while marking the misprediction position as 6, notifying the WB
+stage to perform redirection.

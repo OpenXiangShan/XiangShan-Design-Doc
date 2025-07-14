@@ -7,144 +7,248 @@
 
 ## Glossary of Terms
 
-Table: 术语说明
+Table: Terminology Explanation
 
-| 缩写  | 全称         | Descrption |
-| --- | ---------- | ---------- |
-| IQ  | IssueQueue | 发射队列       |
+| Abbreviation | Full name  | Descrption  |
+| ------------ | ---------- | ----------- |
+| IQ           | IssueQueue | Issue Queue |
 
 
-## 设计规格
+## Design specifications
 
-- 支持三类发射队列项：EnqEntry、SimpleEntry和ComplexEntry
-- 支持双端口读写
-- 支持写回唤醒和推测唤醒
-- 支持EnqEntry直接出队
-- 支持Entry间指令转移
-- 支持唤醒取消反馈
+- Supports three types of issue queue entries: EnqEntry, SimpleEntry, and
+  ComplexEntry.
+- Supports dual-port read/write.
+- Supports writeback wakeup and speculative wakeup.
+- Supports direct dequeue of EnqEntry.
+- Supports instruction transfer between entries.
+- Supports Wake-up, Cancellation, and Feedback
 
-## 功能
+## Function
 
-### 总体功能
+### Overall Functionality
 
-Entries 是发射队列中存放 uop 的模块，它内部有多个 entry 模块，每个 entry 可以存放一条 uop。这些 entry
-可以分为两大类：与发射队列入队端口对应的 EnqEntry，以及数量较多的 OthersEntry。 Entries 整合所有 entry
-的发射和状态信息，传给发射队列控制逻辑；接收控制逻辑的选择结果，输出要发射 uop 的全部信息。 Entries 接受来自 IQ（自身 IQ 或其它 IQ
-的快速唤醒）和 WriteBack（写回唤醒）的唤醒信号、来自 datapath 等的取消信号（og0Cancel、og1Cancel
-等），接受并整合发射后的反馈信号，送给每个 entry。 Entries 还负责 entry 之间的转移逻辑。EnqEntry 接收 IQ 入口的 uop，如果
-OthersEntry 就绪，它会以一定规则转移到 OthersEntry 中，EnqEntry 支持当拍同时转移出上一个 uop 并入队下一个
-uop，实现无缝衔接。 在高级的发射队列配置中，OthersEntry 又分为两类：SimpleEntry 与 ComplexEntry。Entries
-也负责控制从 SimpleEntry 到 ComplexEntry 的转移策略。
+Entries is the module within the issue queue that stores uops. It contains
+multiple entry modules, each capable of holding one uop. These entries are
+divided into two main categories: EnqEntry, which corresponds to the enqueue
+port of the issue queue, and OthersEntry, which are more numerous. \
+\
+Entries consolidates the issue and status information from all entries and
+passes it to the issue queue control logic. It also receives selection results
+from the control logic and outputs the complete information of the uop to be
+issued. \
+\
+Entries accepts wake-up signals from the IQ (either its own IQ or fast wake-ups
+from other IQs) and WriteBack (write-back wake-ups), cancellation signals from
+the datapath (e.g., og0Cancel, og1Cancel), and feedback signals post-issue,
+which are aggregated and forwarded to each entry. \
+\
+Entries also manages the transfer logic between entries. EnqEntry receives uops
+from the IQ input. If OthersEntry is ready, the uop is transferred to
+OthersEntry according to certain rules. EnqEntry supports transferring out the
+previous uop and enqueuing the next uop in the same cycle, enabling seamless
+transitions. \
+\
+In advanced issue queue configurations, OthersEntry is further divided into
+SimpleEntry and ComplexEntry. Entries also controls the transfer strategy from
+SimpleEntry to ComplexEntry.
 
-### 转移策略
-ComplexEntry 是最终的项，不可转移；SimpleEntry 可向 ComplexEntry 转移；EnqEntry 可向 ComplexEntry
-也可向 SimpleEntry 转移。
-只有没有被发射过的项才可被转移，如果发射过的项反馈发射失败了，会清掉发射过的标记，就变成可被转移的项；如果发射过的项反馈发射成功了，该项会变成无效项，不需要再转移了。
-EnqEntry 到 OthersEntry 的转移逻辑。EnqEntry 优先转移到 ComplexEntry，其次转移到
-SimpleEntry。转移只能是全或者零，要么全部转移到 ComplexEntry，要么全部转移到 SimpleEntry，要么就不转移。EnqEntry
-转移到ComplexEntry 的条件是，ComplexEntry 里有足够的空闲项，同时 SimpleEntry 全空；否则只能向 SimpleEntry
-转移。 SimpleEntry 到 ComplexEntry 的转移逻辑。每个周期，SimpleEntry 可至多转移
-num_enq（相当于EnqEntry数量）项到 ComplexEntry，只要 ComplexEntry
-每有一个空位，就可以转移过去一条。SimpleEntry 转移的优先级比 EnqEntry 更高。SimpleEntry
-转移次序有强要求，更老的项更优先转移。各项年龄次序通过查询 IQ 中的年龄矩阵得到。
+### Transfer Strategy
+ComplexEntry is the final entry type and cannot be transferred. SimpleEntry can
+transfer to ComplexEntry, while EnqEntry can transfer to either ComplexEntry or
+SimpleEntry. Only entries that have not been issued can be transferred. If an
+issued entry fails, its issued flag is cleared, making it transferable again. If
+an issued entry succeeds, it becomes invalid and no longer needs transfer.
+EnqEntry-to-OthersEntry transfer logic: EnqEntry prioritizes transfer to
+ComplexEntry, then to SimpleEntry. Transfers are all-or-nothing—either fully to
+ComplexEntry, fully to SimpleEntry, or no transfer. EnqEntry transfers to
+ComplexEntry only if there are enough free ComplexEntries and all SimpleEntries
+are empty; otherwise, it transfers to SimpleEntry. SimpleEntry-to-ComplexEntry
+transfer logic: Each cycle, up to num_enq (equivalent to the number of
+EnqEntries) SimpleEntries can transfer to ComplexEntry, with one transfer per
+free ComplexEntry slot. SimpleEntry transfers take priority over EnqEntry.
+Transfer order for SimpleEntries is strictly age-based, with older entries
+prioritized, determined by querying the age matrix in IQ.
 
-![示意图](./figure/Entires_trans.svg)
+![Schematic diagram](./figure/Entires_trans.svg)
 
-### 发射与出队
-Entries 收集各个 entry 的 valid 与 canIssue 信号，传递给 IQ，IQ 返回各个出队口选择出要出队的 entry 位置
-deqSelOH，以及各个出口能否接受的 deqReady 信号，现在 deqReady 是常数值，一直拉高。两者同时有效时，认为该 entry 将出队，把
-deqSel 信号传给该 entry。 收到 deqSel 后 entry
-还不能清空，只是标记为已发射状态，记录发射的端口和发射后经过的周期，之后还要看发射后后续返回的 resp 信号，只有收到发射成功的 resp 后才能清空。
-Entries 负责汇总各个 resp，将对应的 resp 传给 entry。非访存 IQ 的 entry 的 resp 只有 og0resp 和
-og1resp，根据各 entry 的出队端口和发射后经过的周期来选择 resp。Entry 和 robIdx 和 resp 的 robIdx
-一致时，选择对应的 resp 传给 entry。 访存 IQ 的 resp 较多，不同访存 IQ 的 resp 也有所区别，需要比对 lqidx 和 sqidx
-来选择 resp。 发射时还要将选中 entry 的 uop 信息传给 IQ，因为时序原因不直接使用 deqSelOH 来选择。deqSelOH
-的各bit形成时间差别较大，为了能减少延迟，IQ 会传进各阶段选择结果，包括
-enqEntryOldest、simpEntryOldest、compEntryOldest 的结果。用三组信号分别选出对应的出队 uop，再按
-comp、simp、enq 的优先级选出最终出队 uop。
+### Issue and Dequeue
+Entries collect the valid and canIssue signals from each entry and pass them to
+the IQ. The IQ returns the deqSelOH signal, which selects the entry positions to
+dequeue, and the deqReady signals indicating whether each exit can accept the
+dequeue (currently, deqReady is a constant high signal). When both are valid,
+the entry is considered dequeued, and the deqSel signal is sent to that entry. \
+\
+After receiving deqSel, the entry is not immediately cleared but is marked as
+issued, recording the issue port and the cycles elapsed since issue. It must
+then wait for the subsequent resp signal indicating successful issue before
+being cleared. \
+\
+Entries are responsible for aggregating all resp signals and forwarding the
+corresponding resp to the entry. For non-memory IQ entries, the resp signals are
+only og0resp and og1resp, selected based on the entry's dequeue port and the
+cycles elapsed since issue. The entry and robIdx must match the resp's robIdx
+for the resp to be forwarded. \
+\
+Memory IQs have more resp signals, varying by IQ type, and require comparing
+lqidx and sqidx to select the correct resp. \
+\
+During issue, the selected entry's uop information is also sent to the IQ. Due
+to timing constraints, deqSelOH is not used directly for selection. Instead, the
+IQ provides staged selection results, including enqEntryOldest, simpEntryOldest,
+and compEntryOldest. These signals are used to select the corresponding dequeued
+uops, which are then prioritized (comp > simp > enq) to determine the final
+dequeued uop.
 
-### 唤醒与取消
-Entries 不处理唤醒逻辑，只将唤醒和取消信号传入所有 entry。由于时序原因，Entries
-也负责处理当拍的取消逻辑。取消的来源延迟较长，如果正常经过唤醒、取消，再给 IQ 进行出队选择，时序就太差了。因此我们将只经过当拍唤醒的结果给 IQ
-进行出队选择，然后由 Entries 单独计算当拍取消，最后再对各个出口选出要出队的 uop 进行取消判断。
+### Wakeup and Cancellation
+Entries do not handle wakeup logic; they only pass wakeup and cancellation
+signals to all entries. Due to timing constraints, Entries also manage
+same-cycle cancellation logic. Cancellation sources have long latency, and if
+wakeup and cancellation were processed normally before IQ dequeues, timing would
+suffer. Thus, IQ dequeues based on same-cycle wakeup results, while Entries
+separately compute same-cycle cancellations before finally determining which
+uops to cancel among the dequeued candidates.
 
-## 整体框图
+## Overall Block Diagram
 
-![示意图](./figure/Entires_top.svg)
+![Schematic diagram](./figure/Entires_top.svg)
 
-## 接口时序
+## Interface timing
 
-![示意图](./figure/Entires_signal.png)
+![Schematic diagram](./figure/Entires_signal.png)
 
-io_* 信号组为 IQ 入队指令，每拍至多两条，同时伴随着可能的唤醒信号。 基于时序考虑，对入队指令被同时唤醒这种情况的处理，选择将 wakeup
-打一拍，见图中 enqDelay_wakeup，为了对上拍，这部分唤醒会类似推测唤醒的 bypass 时序，影响 srcStateNext，即影响
-canIssueBypass，类似 ComplexEntry 的当拍唤醒当拍发射。
+The io_* signal group is for IQ instruction enqueue, with a maximum of two
+instructions per cycle, accompanied by potential wakeup signals. Due to timing
+considerations, handling cases where enqueued instructions are simultaneously
+woken is addressed by delaying wakeup by one cycle (see enqDelay_wakeup in the
+diagram). To align timing, this portion of wakeup follows a bypass timing
+similar to speculative wakeup, affecting srcStateNext—thus impacting
+canIssueBypass—akin to ComplexEntry's same-cycle wakeup and issue.
 
-## 二级模块 EnqEntry & OthersEntry
+## Secondary Modules: EnqEntry & OthersEntry
 
-### 功能
+### Function
 
-EnqEntry 和 OthersEntry 功能基本一致，EnqEntry 因为直接对接入队端口，会多一层入队唤醒的处理，其余功能一致，因此放到一起描述。
-Entry 有这几个最重要功能：valid、canIssue、issued、status。 Valid 表示 entry 是否有效，有 uop 进入 entry
-时，将 enq 中的 uop 信息写入寄存器，将 valid 置为有效。 当 flush、tranSel 有效或者 issueResp
-表示发射成功这三个条件之一成立时，entry 清空，valid 置无效。 Issued 记录 uop 是否发射，当 deqSel 有效时记为已发射；收到
-issueResp 失败或者有操作数被 cancel 而不再就绪时，记为未发射。 当所有源操作数就绪，且是未发射状态，将 canIssue 输出为有效。
-Status 是描述源操作数状态的一系列信息，包括操作数类型 srcType、状态 srcState、数据来源 dataSources、唤醒该操作数的 load
-信息 srcLoadDependency、唤醒该操作数的 exu 信息 srcWakeUpL1ExuOH、唤醒后周期计数器 srcTimer。
-wakeUpFromWB 和 wakeUpFromIQ 传递要唤醒的 pdest 和寄存器类型 xp、fp、vp，如果 pdest 号与 entry
-操作数的寄存器号一致，寄存器类型也一致，该操作数被唤醒，记为就绪状态。 og0Cancel、og1Cancel 传递要取消的 exu 号。对于
-og*Cancel 如果要取消的 exu 与唤醒该操作数的 exu 一致，且 srcTimer 对应发出的流水级延迟，则取消该操作数。对于
-ldCancel，如果要取消的 ld 流水级与 srcLoadDependency 一致，取消该操作数。 当同一操作数唤醒和取消同时达到时，取消的优先级更高。
-Entry
-向外输出的源操作数状态信息有立刻和延迟两种，对应快速和慢速唤醒。立刻指源操作数状态信息从寄存器获取后，经过上述唤醒与取消更新状态之后当拍立刻输出；延迟指源操作数状态信息经过上述唤醒与取消更新状态之后，写回寄存器，下一拍才能从寄存器输出。
-WB 唤醒总是慢速的，而 IQ 唤醒可配置快速和慢速。配置为快速的称为 ComplexEntry，配置为慢速的称为 SimpleEntry。EnqEntry
-理论上也可配置，但实际中总是快速的。 EnqEntry 区别于 OthersEntry 的地方在于要多一次入队唤醒。入队时的唤醒与取消因为时序原因不好在写入
-EnqEntry 前做，因此延迟到写入 EnqEntry
-下拍开头，先使用延迟的唤醒与取消信号（enqDelay*）更新寄存器直出的状态，再进行正常的唤醒与取消。注意入队唤醒只在 uop 进入 EnqEntry
-的第一拍进行，此后都是直接使用寄存器直出的状态。
+The functionalities of EnqEntry and OthersEntry are essentially the same.
+EnqEntry, being directly connected to the enqueue port, includes an additional
+layer of enqueue wake-up handling, while the rest of the features are identical.
+Hence, they are described together. The most critical functions of an Entry
+include: valid, canIssue, issued, and status. \
+\
+**Valid** indicates whether the entry is active. When a uop enters the entry,
+the uop information from the enqueue is written into the registers, and valid is
+set to active. The entry is cleared and valid is set to inactive under any of
+the following conditions: flush, tranSel being active, or issueResp indicating a
+successful issue. \
+\
+**Issued** records whether the uop has been issued. It is marked as issued when
+deqSel is active; it is marked as unissued if issueResp fails or if an operand
+is canceled and is no longer ready. \
+\
+When all source operands are ready and the state is unissued, **canIssue** is
+output as active. \
+\
+**Status** is a series of information describing the state of the source
+operands, including operand type (srcType), state (srcState), data sources
+(dataSources), load information for waking the operand (srcLoadDependency), EXU
+information for waking the operand (srcWakeUpL1ExuOH), and the post-wake-up
+cycle counter (srcTimer). \
+\
+wakeUpFromWB and wakeUpFromIQ transmit the pdest and register types (xp, fp, vp)
+to be woken. If the pdest number matches the register number of the entry's
+operand and the register types also match, the operand is woken and marked as
+ready. \
+\
+og0Cancel and og1Cancel transmit the EXU numbers to be canceled. For og*Cancel,
+if the EXU to be canceled matches the EXU that woke the operand and the srcTimer
+corresponds to the issued pipeline delay, the operand is canceled. For ldCancel,
+if the load pipeline stage to be canceled matches srcLoadDependency, the operand
+is canceled. \
+\
+When wake-up and cancellation for the same operand arrive simultaneously,
+cancellation takes higher priority. \
+\
+The source operand status information output by the Entry comes in two forms:
+immediate and delayed, corresponding to fast and slow wake-ups. Immediate means
+the source operand status information is obtained from the registers and output
+immediately in the same cycle after the wake-up and cancellation updates.
+Delayed means the source operand status information is written back to the
+registers after wake-up and cancellation updates and is output from the
+registers in the next cycle. \
+\
+WB wake-ups are always slow, while IQ wake-ups can be configured as fast or
+slow. Entries configured for fast wake-ups are called ComplexEntry, while those
+configured for slow wake-ups are called SimpleEntry. EnqEntry could
+theoretically be configured, but in practice, it is always fast. \
+\
+The difference between EnqEntry and OthersEntry lies in the additional enqueue
+wake-up. Due to timing constraints, wake-up and cancellation during enqueue
+cannot be performed before writing to EnqEntry, so they are delayed to the
+beginning of the next cycle after writing to EnqEntry. First, the delayed
+wake-up and cancellation signals (enqDelay*) are used to update the
+register-direct output state, followed by normal wake-up and cancellation. Note
+that enqueue wake-up only occurs in the first cycle after the uop enters
+EnqEntry; thereafter, the register-direct output state is used directly.
 
-总结：
-1. Entry 是 IssueQueue 内部存储 uop 关键信息的结构，可类比 RS。
-2. 昆明湖的整数 IssueQueue 标准设计规格下有24项Entry。
-3. Entry 按照行为逻辑分为三类：EnqEntry，SimpleEntry 和 ComplexEntry。
-4. 2 个 EnqEntry，作为入队端口，每周期进入 IQ 的两条指令只能存入这里。
-5. 6 个 SimpleEntry + 16 个 ComplexEntry。
+Summary:
+1. An Entry is a structure within IssueQueue that stores critical uop
+   information, analogous to RS.
+2. The standard design specification for Kunming Lake's integer IssueQueue
+   includes 24 Entry items.
+3. Entries are logically categorized into three types: EnqEntry, SimpleEntry,
+   and ComplexEntry.
+4. 2 EnqEntries serve as enqueue ports. Each cycle, the two instructions
+   entering the IQ can only be stored here.
+5. 6 SimpleEntries + 16 ComplexEntries.
 
-### 整体框图
+### Overall Block Diagram
 
-![示意图](./figure/Entires_valid.svg)
+![Schematic diagram](./figure/Entires_valid.svg)
 
-![示意图](./figure/Entires_entryReg.svg)
+![Schematic diagram](./figure/Entires_entryReg.svg)
 
-imm存放立即数，payload存放指令原始信息，entry不对其进行处理。
+imm stores immediate values, while payload holds the original instruction
+information, which the entry does not process.
 
-![示意图](./figure/Entires_status.svg)
+![Schematic diagram](./figure/Entires_status.svg)
 
-srcStatus 指示各项 uop 各源操作数的状态。 issued 指示 uop 的发射状态，因为发射可能成功可能失败，发射直到成功才能修改
-validReg，所以使用 issued 来标记在不在发射途中。
+srcStatus indicates the status of each source operand for uops. issued marks the
+issue state of a uop, as issuance may succeed or fail. Only successful issuance
+can modify validReg, so issued is used to track whether the uop is mid-issuance.
 
-![示意图](./figure/Entires_issueTimer.svg)
+![Schematic diagram](./figure/Entires_issueTimer.svg)
 
-issueTimer 和 deqPortIdx 的存在是为了适配 entry 转移机制，指令发射出去后，要经过 OG0 和 OG1 两级，只有通过 OG1 进入
-EXU 的 uop 才算发射成功，中途如果失败了就需要告知 IQ 重发，无转移机制的情况下，uop 可以通过 entryIdx 进行定位；有了转移机制后，uop
-发射出去后，可能下一拍就转移至其他位置，这样 OG0/1 的 resp 信号就难以定位，所以增加 issueTimer 和 deqPortIdx 信号，一旦
-uop 发射出去，就修改 issueTimer 并每拍自增，deqPortIdx 记录其从哪个出队端口发出，根据上图的时序关系，OG0 和 OG1 的 resp
-只需要识别各 Entry 内部的这两个信号值，即可定位 uop。
+The issueTimer and deqPortIdx exist to accommodate the entry transfer mechanism.
+After an instruction is issued, it passes through OG0 and OG1 stages. Only uops
+that successfully pass OG1 and enter the EXU are considered issued. If a failure
+occurs midway, the IQ must be notified to reissue. Without the transfer
+mechanism, uops can be located via entryIdx. With the transfer mechanism, a uop
+may move to another location immediately after being issued, making it difficult
+for OG0/1 resp signals to locate it. Hence, issueTimer and deqPortIdx signals
+are added. Once a uop is issued, issueTimer is modified and increments each
+cycle, while deqPortIdx records the dequeue port it was issued from. Based on
+the timing relationship shown in the diagram, OG0 and OG1 resp signals only need
+to recognize these two signal values within each Entry to locate the uop.
 
-![示意图](./figure/Entires_srcStatus.svg)
+![Schematic diagram](./figure/Entires_srcStatus.svg)
 
-唤醒 --> 修改srcState srcWakeupL1ExuOH --> 标记推测唤醒信号来自哪个 exu
+Wake-up --> Modify srcState srcWakeupL1ExuOH --> Mark speculative wake-up
+signals indicating which EXU they originated from.
 
-![示意图](./figure/Entires_WBwakeup.svg)
+![Schematic diagram](./figure/Entires_WBwakeup.svg)
 
-写回唤醒在 uop 执行的最后一拍发出，被写回唤醒的项不支持当拍唤醒当拍发射。
+Writeback wakeup is issued in the final cycle of uop execution; entries woken by
+writeback cannot be woken and issued in the same cycle.
 
-![示意图](./figure/Entires_wakeup.svg)
+![Schematic diagram](./figure/Entires_wakeup.svg)
 
-dataSource 用于推测唤醒场景 写回唤醒直接置为 reg 推测唤醒当拍 --> forward 每多停留一拍修改一次，最后维持 reg forward
---> bypass --> reg --> reg
+dataSource is used for speculative wakeup scenarios. Writeback wakeup directly
+sets to reg. Speculative wakeup in the same cycle → forward. Each additional
+cycle of stay modifies it once, finally maintaining reg → forward → bypass → reg
+→ reg.
 
-![示意图](./figure/Entires_ldcancel.svg)
+![Schematic diagram](./figure/Entires_ldcancel.svg)
 
-srcLoadDependency 3 bit，用于记录各 uop 的 Load 依赖关系。 ldCancel 产生时，刷掉唤醒链上的全部 uop。
+srcLoadDependency 3-bit, used to record the Load dependency relationships of
+each uop. When ldCancel occurs, all uops on the wake-up chain are flushed.
 

@@ -7,119 +7,154 @@
 
 ## Glossary of Terms
 
-Table: 术语说明
+Table: Terminology Explanation
 
-| 缩写  | 全称              | 描述                                       |
-| --- | --------------- | ---------------------------------------- |
-| -   | renameIn        | rename 模块输入的 uop 信息                      |
-| -   | fromRename      | rename 模块输出后经过打拍的 uop 信息                 |
-| -   | toRenameAllFire | 所有 uop 分派完成的信号                           |
-| -   | enqRob          | 传给 rob 的信号，会在 ctrlblock 打一拍再进入 rob       |
-| -   | IQValidNumVec   | IQ 中每个 Exu 对应的指令数量                       |
-| -   | toIssueQueues   | 分派给所有 IQ 的 uop 信息                        |
-| -   | XXBusyTable     | 寄存器堆状态表                                  |
-| -   | wbPregsXX       | 写回寄存器堆的信息，用与更新 BusyTable                 |
-| -   | wakeUpXX        | 快速唤醒的信息，用与推测更新 BusyTable                 |
-| -   | og0Cancel       | 表示在 og0 阶段，该 uop 被 cancel                |
-| -   | ldCancel        | 表示访存 uop 执行到 s3 阶段（s0-s3），该 uop 被 cancel |
-| -   | fromMem         | 来自访存的信号，包括 lsq commit 和 cancel 的数量       |
-| -   | toMem           | 发给访存的信号，包括 lsqEnqIO                      |
+| Abbreviation | Full name       | Description                                                                                                 |
+| ------------ | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| -            | renameIn        | Uop information input to the rename module                                                                  |
+| -            | fromRename      | Buffered uop information output from the rename module.                                                     |
+| -            | toRenameAllFire | Signal indicating all uops have completed dispatch                                                          |
+| -            | enqRob          | Signals sent to the rob are buffered for one cycle in ctrlblock before entering the rob.                    |
+| -            | IQValidNumVec   | Number of instructions per Exu in IQ                                                                        |
+| -            | toIssueQueues   | Uop information dispatched to all IQs                                                                       |
+| -            | XXBusyTable     | Register file status table                                                                                  |
+| -            | wbPregsXX       | Write-back register file information, used to update the BusyTable.                                         |
+| -            | wakeUpXX        | Fast wake-up information, used for speculative updates to the BusyTable.                                    |
+| -            | og0Cancel       | Indicates that the uop is canceled in the og0 stage                                                         |
+| -            | ldCancel        | Indicates that the memory access uop has executed up to the s3 stage (s0-s3), and the uop has been canceled |
+| -            | fromMem         | Signals from memory operations, including lsq commit and cancel counts.                                     |
+| -            | toMem           | Signals sent to memory, including lsqEnqIO.                                                                 |
 
-## 子模块列表
+## Submodule List
 
-Table: 子模块列表
+Table: Submodule List
 
-| 子模块         | 描述                                                           |
-| ----------- | ------------------------------------------------------------ |
-| XXBusyTable | 寄存器堆状态表，包括5个：Int（整数）Fp（浮点）Vec（向量，不含 V0）V0（向量V0）Vl（vcsr 的 vl） |
-| rcTagTable  | 整数 reg cache（寄存器堆缓存）的 Tag 表                                  |
-| lsqEnqCtrl  | 控制进入 load/store queue 指针的模块                                  |
+| Submodule   | Description                                                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| XXBusyTable | Register file status tables, comprising five types: Int (integer), Fp (floating-point), Vec (vector, excluding V0), V0 (vector V0), and Vl (vcsr's vl). |
+| rcTagTable  | Integer register cache (register file cache) Tag table                                                                                                  |
+| lsqEnqCtrl  | Module controlling pointers entering the load/store queue                                                                                               |
 
-## 设计规格
+## Design specifications
 
-- 支持将 uop 按照负载均衡的策略分派给所有 IQ
-- 支持更新维护 BusyTable 并在分派时写到 srcState 中
-- 支持更新维护进入 lsq 的指针并在分派时写到 lqidx sqidx 中
-- 支持 uop 根据顺序进行阻塞
-- 支持分派给 IQ 时屏蔽发生异常的指令
+- Supports dispatching uops to all IQs using a load-balancing strategy.
+- Supports updating and maintaining the BusyTable and writing to srcState during
+  dispatch
+- Supports updating and maintaining pointers entering the LSQ and writing them
+  to lqidx and sqidx during dispatch
+- Supports sequential blocking of uops
+- Supports masking instructions with exceptions when dispatching to IQs
 
-## 功能
+## Function
 
-Dispatch 模块包含各个寄存器堆的 BusyTable、rcTagTable、lsqEnqCtrl，根据写回寄存器堆、快速唤醒、og0Cancel 和
-ldCancel 来更新 BusyTable 和 rcTagTable，lsqEnqCtrl 模块则会控制 load/store queue 的入队指针
-lqidx/sqidx，当 lsq 容量不足时，会拉低 io_enq_CanAccept 来阻塞分派。
+The Dispatch module includes the BusyTable, rcTagTable, and lsqEnqCtrl for each
+register file. It updates the BusyTable and rcTagTable based on the write-back
+register file, fast wake-up, og0Cancel, and ldCancel. The lsqEnqCtrl module
+controls the enqueue pointers lqidx/sqidx for the load/store queue. When the lsq
+capacity is insufficient, it pulls down io_enq_CanAccept to block dispatch.
 
-Dispatch 模块在每个时钟周期会将经过 rename 之后的至多 6 个 uop 分派给各个 IQ，所有待分派的 uop 全部分派出去后拉高握手信号
-toRenameAllFire，rename 模块收到握手信号后更新下一组 uop 给 Dispatch 模块。
+Each clock cycle, the Dispatch module dispatches up to 6 uops that have
+undergone renaming to various IQs. Once all pending uops are dispatched, the
+handshake signal toRenameAllFire is asserted. Upon receiving this signal, the
+rename module updates the next set of uops for the Dispatch module.
 
-Dispatch 模块在每个时钟周期会统计各个 IQ 中每个 Exu 对应的指令数量，针对每种 fu ，包含它的所有 Exu 所在的 IQ
-之间都会进行负载比较，严格按照负载顺序生成分派策略，存到寄存器中。
+Each clock cycle, the Dispatch module counts the number of instructions per Exu
+in each IQ. For each fu type, all Exus containing it undergo load comparison
+across their respective IQs, strictly following load order to generate dispatch
+strategies, which are then stored in registers.
 
-Dispatch 模块收集 rename 的输入信号和输出打拍后的信号，根据输入信号中的 fuType 计算出每个 uop 之前的 uop（idx
-比自己小的）和自己 fu 相同的数量，根据两个信息查表得到分派的IQ，第一个信息是 fu 的类型，第二个信息是在它之前有几个 uop 与自身相同的 fu
-类型，根据 IQ 负载从低到高的顺序进行分派，把第一条该 fu 的指令分给负载最低的 IQ，第二条该 fu 的指令分给负载次低的 IQ ，以此类推。
+The Dispatch module collects input signals from rename and output signals after
+pipelining. Based on the fuType in the input signals, it calculates the number
+of preceding uops (with smaller indices) that share the same fu as each uop.
+Using these two pieces of information, it looks up a table to determine the
+dispatch IQ. The first piece of information is the fu type, and the second is
+the count of preceding uops with the same fu type. Dispatch is performed in
+ascending order of IQ load: the first uop of a given fu type is assigned to the
+least-loaded IQ, the second to the next least-loaded IQ, and so on.
 
-Dispatch 模块会接收各个模块的控制信号来阻塞指令的分派，阻塞原因主要包括：分派到的 IQ 不 ready，分派到同一个 IQ 的指令数量超过了 IQ
-的入口数量，rob 不能接收指令，lsq 不能接收指令，该指令之前有指令需要 blockBackward，该指令自身或它之前有指令需要
-waitForward。阻塞时按顺序阻塞，一条指令被阻塞，这条指令之后的指令也要一起被阻塞。一旦发生阻塞，toRenameAllFire
-就会拉低，需等待阻塞住的指令分派完才能分派下一组指令。
+The Dispatch module receives control signals from various modules to block the
+dispatching of instructions. The reasons for blocking mainly include: the
+targeted IQ is not ready, the number of instructions dispatched to the same IQ
+exceeds the IQ's entry capacity, the ROB cannot receive instructions, the LSQ
+cannot receive instructions, there are preceding instructions that require
+blockBackward, or the instruction itself or preceding instructions require
+waitForward. Blocking occurs sequentially; if an instruction is blocked, all
+subsequent instructions are also blocked. Once blocking occurs, toRenameAllFire
+is pulled low, and the next group of instructions can only be dispatched after
+the blocked instructions have been dispatched.
 
-Dispatch 模块会将一些异常情况的指令屏蔽掉（将发送给 IQ 的 valid 置低），不分派给 IQ ，比如该指令译码出现异常，或者该指令被挂了
-singleStep 。
-
-
-## 总体设计
-
-### 整体框图
-
-![整体框图](./figure/dispatch.svg)
-
-### 接口列表
-
-见接口文档
-
-## 模块设计
-
-### 二级模块 BusyTable
-
-#### 功能
-
-BusyTable 模块负责记录寄存器堆繁忙状态，dispatch 的同时需要用 psrc 读 BusyTable 得到源操作数的就绪状态。
-
-每一个寄存器堆对应一个 BusyTable 模块，BusyTable 的项数和寄存器堆保持一致，初始化为 0（空闲状态），当指令经过重命名后，对应的 pdest
-信息通过 allocPregs 输入，此时将对应项由 0 变成 1 ；BusyTable 同时接收推测唤醒的信号 wakeUpXX，当被唤醒时，对应项由 1
-变成 0 ；推测唤醒的指令有可能会被取消，此时通过 og0Cancel 将对应项由 0 变成 1（可能和 wakeup 是同一拍的，优先级比 wakeup
-高），如果是整数的 BusyTable ，还需要额外响应 ldCancel 。
-
-BusyTable 模块的读口数量根据指令集定义的一条指令需要的对应寄存器操作数数量乘以发射宽度，如 6 发射时整数 BusyTable 读口数量 2 * 6
-= 12，浮点和向量都是 18 个，V0 和 Vl 是 6 个。
-
-#### 整体框图
-
-![整体框图](./figure/busyTable.svg)
-
-#### 接口列表
-
-见接口文档
-
-### 二级模块 rcTagTable
-
-#### 功能
-
-rcTagTable 是整数寄存器堆缓存的 tag ，和整数的 BusyTable 模块十分相似，读口也是 12 个。
+The Dispatch module masks instructions under exceptional conditions (by
+deasserting the valid signal sent to the IQ) and does not dispatch them to the
+IQ. Examples include instructions with decoding exceptions or those flagged for
+singleStep.
 
 
-#### 接口列表
+## Overall design
 
-见接口文档
+### Overall Block Diagram
 
-### 二级模块 lsqEnqCtrl
+![Overall Block Diagram](./figure/dispatch.svg)
 
-lsqEnqCtrl 模块负责维护进入 lsq 的指针，并将 uop 发送给 lsq ，根据每条指令的 needAlloc（ 2 比特，低位拉高表示需要进
-load queue，高位拉高表示要进 store queue）和 numLsElem（需要占几项）进行指针的维护，当 io_enq_iqAccept
-拉高时（表示 uop 被 IQ 接收）发送给 lsq 。
+### Interface list
+
+Refer to the interface documentation.
+
+## Module Design
+
+### Level 2 module BusyTable
+
+#### Function
+
+The BusyTable module is responsible for recording the busy status of the
+register file. During dispatch, it reads the BusyTable with psrc to obtain the
+ready status of source operands.
+
+Each register file corresponds to a BusyTable module, with the number of entries
+matching the register file, initialized to 0 (idle state). When an instruction
+is renamed, the corresponding pdest information is input via allocPregs,
+changing the corresponding entry from 0 to 1. The BusyTable also receives
+speculative wake-up signals wakeUpXX, changing the corresponding entry from 1 to
+0 upon wake-up. Speculatively woken instructions may be canceled, in which case
+og0Cancel changes the corresponding entry from 0 to 1 (possibly in the same
+cycle as wakeup, with higher priority than wakeup). For integer BusyTables,
+ldCancel must also be handled.
+
+The number of read ports in the BusyTable module is determined by the number of
+register operands required per instruction in the ISA multiplied by the issue
+width. For example, with a 6-issue width, the integer BusyTable has 2 * 6 = 12
+read ports, while floating-point and vector units have 18 each, and V0 and Vl
+have 6 each.
+
+#### Overall Block Diagram
+
+![Overall Block Diagram](./figure/busyTable.svg)
+
+#### Interface list
+
+Refer to the interface documentation.
+
+### Submodule rcTagTable
+
+#### Function
+
+The rcTagTable serves as the tag for the integer register file cache, closely
+resembling the integer BusyTable module, and also features 12 read ports.
 
 
-#### 接口列表
+#### Interface list
 
-见接口文档
+Refer to the interface documentation.
+
+### Submodule lsqEnqCtrl
+
+The lsqEnqCtrl module manages the pointers for entries into the lsq and sends
+uops to the lsq. It maintains pointers based on each instruction's needAlloc (a
+2-bit signal, where the LSB indicates entry into the load queue and the MSB
+indicates entry into the store queue) and numLsElem (the number of entries
+required). When io_enq_iqAccept is asserted (indicating the uop is accepted by
+the IQ), the uop is sent to the lsq.
+
+
+#### Interface list
+
+Refer to the interface documentation.

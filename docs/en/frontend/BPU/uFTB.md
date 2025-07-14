@@ -1,60 +1,96 @@
-# BPU 子模块 uFTB
+# BPU Submodule uFTB
 
-## 功能概述
+## Functional Overview
 
-uFTB 作为 BPU 的 next line predictor，为处理器作出无空泡的基础预测以连续生成下一个推测 PC 值。
+The uFTB serves as the BPU's next-line predictor, providing the processor with
+bubble-free basic predictions to continuously generate the next speculative PC
+value.
 
-### uFTB 请求接收
+### uFTB Request Reception
 
-每次 0 阶段请求有效时，截取传入预测块起始 PC 的 16 到 1 位生成 tag 发送给本模块内的全相连 uFTB 用于读取 FTB 项，FTB
-项记录内容如前所述 。uFTB 各 bank 内均有 32 项使用寄存器搭建的全相连结构。由于使用寄存器实现，各项可在当拍根据其中存储数据是否有效及存储的
-tag 值 是否与传入信息匹配来生成本项是否命中的信号及读出的 FTB 项数据并返回到 uFTB 层次，但这一数据并不在本拍而是在下一拍使用。
+Each time a valid stage 0 request is made, bits 16 to 1 of the predicted block's
+starting PC are extracted to generate a tag, which is sent to the fully
+associative uFTB within the module for reading the FTB entry. The contents of
+the FTB entry are as previously described. Each bank in the uFTB contains 32
+fully associative entries implemented with registers. Due to the register-based
+implementation, each entry can generate a hit signal and the read FTB entry data
+in the current cycle based on whether the stored data is valid and whether the
+stored tag matches the incoming information. However, this data is not used in
+the current cycle but in the next cycle.
 
-### uFTB 数据读取与返回
+### uFTB Data Read and Return
 
-在下一拍，uFTB 存储体已返回命中信号及读出数据。预测器进入 1 阶段。在本阶段将会从返回的命中信号中选出至多一命中项并利用该命
-中项生成预测结果，生成完整预测结果的算法在后续 FTB 模块有详细叙述，这里 uFTB 有一额外补充的 counter 机制，为 uFTB 内每一项内至多 2
-条分支指令增加一个 2 位宽 counter，若 counter 大于 1 或 FTB 项内 always_taken 有效（后者机制也存在于 FTB
-模块中）则预测结果为跳转。此外，本级的命中信号及选出的命中路编号还被作为本预测器的 meta 信息等待其他预测器一起进入 s3
-阶段时送出预测器，随最终预测结果一起存储到 FTQ。本预测器在 2、3 阶段没有其他额外动作。
+In the next cycle, the uFTB memory bank returns the hit signal and read data.
+The predictor enters Stage 1. In this stage, at most one hit entry is selected
+from the returned hit signals, and the prediction result is generated using this
+hit entry. The algorithm for generating the complete prediction result is
+detailed in the subsequent FTB module. Here, the uFTB has an additional counter
+mechanism, where each entry in the uFTB can have up to two branch instructions
+with a 2-bit counter. If the counter is greater than 1 or the always_taken flag
+in the FTB entry is valid (the latter mechanism also exists in the FTB module),
+the prediction result is a jump. Additionally, the hit signal and the selected
+hit way number from this stage are used as meta information for this predictor,
+waiting to be sent out along with other predictors in Stage 3, and stored in the
+FTQ along with the final prediction result. This predictor has no additional
+actions in Stages 2 and 3.
 
-### uFTB 数据更新
+### uFTB Data Update
 
-当该预测块对应指令全部提交时，由 FTQ 传入 BPU 一直连到本模块的 update 通道中将包含 FTQ 模块根据指令提交信息更新的 FTB 项。由于全相连
-uFTB 全部采用寄存器搭建存储体，写操作不会影响并行的读操作，传来的更新信息将始终用于更新。在更新通道有效时，在当拍将利用传入的更新 pc 值生成 tag 与
-uFTB 内现有各项匹配并生成是否匹配及匹配的路信号。在下一拍，若存在已有匹配，将拉高匹配路的写入信号 ，否则利用伪 lru
-替换算法选出一待替换路拉高对应路写入信号，写入数据即为更新的 FTB 项。
+When all instructions corresponding to the prediction block are committed, the
+update channel from FTQ to BPU, which directly connects to this module, will
+include the FTB entry updated by the FTQ module based on instruction commit
+information. Since the fully associative uFTB is entirely built with registers,
+write operations do not affect parallel read operations, and the incoming update
+information will always be applied. When the update channel is valid, the
+current cycle will use the incoming update PC value to generate a tag and match
+it with existing entries in the uFTB, producing match signals and the matched
+way signals. In the next cycle, if a match exists, the write signal for the
+matched way will be asserted; otherwise, the pseudo-LRU replacement algorithm
+will select a way to be replaced, and the corresponding write signal will be
+asserted. The data to be written is the updated FTB entry.
 
-针对每个分支指令的 counter 维护也在 update 通道拉高时一并更新，在 update 通道拉高下一拍，更新 FTB
-项内跳转的分支指令及其之前的分支指令对应的 counter。若 taken 则 counter+1，若不 taken 则 counter-1，如达到饱和（0
-或全 1）则维持当前值不变。
+Maintenance of the counters for each branch instruction is also updated when the
+update channel is asserted. In the cycle following the update channel assertion,
+the counters for the branching instructions within the updated FTB entry and
+those before it are updated. If the branch is taken, the counter is incremented
+by 1; if not taken, it is decremented by 1. If the counter is saturated (0 or
+all 1s), the current value is maintained.
 
-伪 LRU 算法也需要数据更新，其共有两个数据源，其一为作出预测时命中的路编码，其二为 uFTB 更新时要写入的路编码，若其中任意有效 ，则利用其信息更新伪
-LRU 状态，当都有效时一拍内使用组合逻辑依次使用两信息更新。
+The pseudo-LRU algorithm also requires data updates, with two data sources: one
+is the way encoding of the hit during prediction, and the other is the way
+encoding to be written during uFTB updates. If either is valid, its information
+is used to update the pseudo-LRU state. If both are valid in the same cycle,
+combinational logic is used to update the state sequentially with both pieces of
+information.
 
-### SRAM 规格
+### SRAM specifications
 
-模块内不使用 SRAM，但存在较多的 reg 拼接结构，列举如下。
+The module does not use SRAM internally but contains numerous register
+concatenation structures, listed as follows.
 
-模块内含有 32 路数据，每一路包含 2 个 2 bit 宽饱和 counter，记录基础的分支方向预测；一个 60 bit FTB 项，具体含义与 FTB
-模块相同，详见 FTB SRAM 规格描述；一个 16 bit tag 及一个 1 bit 路有效信号。
+The module contains 32 ways of data, each consisting of two 2-bit wide
+saturating counters for basic branch direction prediction; a 60-bit FTB entry,
+with the same meaning as in the FTB module (see the FTB SRAM specification for
+details); a 16-bit tag; and a 1-bit way valid signal.
 
-## 整体框图
+## Overall Block Diagram
 
-![整体框图](../figure/BPU/uFTB/structure.png)
+![Overall Block Diagram](../figure/BPU/uFTB/structure.png)
 
-TODO：图与昆明湖不符，待更新
+TODO: The diagram does not match Kunming Lake and needs to be updated.
 
-## 接口时序
+## Interface timing
 
-### 结果输出接口
+### Result Output Interface
 
-![结果输出接口](../figure/BPU/uFTB/port1.png)
+![Result Output Interface](../figure/BPU/uFTB/port1.png)
 
-上图展示了一次有效的 uFTB 输出，其下一预测块起始地址为 0x80002000。
+The above diagram shows a valid uFTB output, with the next predicted block
+starting at address 0x80002000.
 
-### 更新接口
+### Update Interface
 
-![更新接口](../figure/BPU/uFTB/port2.png)
+![Update interface](../figure/BPU/uFTB/port2.png)
 
-上图展示了一次有效的更新请求，更新了 0x80003b9a 地址的 FTB 项。
+The above diagram illustrates a valid update request, modifying the FTB entry at
+address 0x80003b9a.

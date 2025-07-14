@@ -1,30 +1,47 @@
-# MissUnit 子模块文档
+# MissUnit submodule documentation
 
-MissUnit 负责处理 ICache 缺失的请求，通过 MSHR 进行管理，通过 Tilelink 总线与 L2 Cache 进行交互，并负责向
-MetaArray 和 DataArray 发送写请求，向 MainPipe 发送响应。
+The MissUnit handles ICache miss requests, manages them through MSHR, interacts
+with the L2 Cache via the Tilelink bus, and is responsible for sending write
+requests to the MetaArray and DataArray, as well as sending responses to the
+MainPipe.
 
-![MissUnit 结构](../figure/ICache/MissUnit/missunit_structure.png)
+![MissUnit structure](../figure/ICache/MissUnit/missunit_structure.png)
 
-## MSHR 的管理
+## MSHR management
 
-MissUnit 通过 MSHR 分别管理取指请求和预取请求，为了防止 flush 时取指 MSHR 不能完全释放，设置取指 MSHR 的数量为 4，预取
-MSHR 的数量为 10。采用数据和地址分离的设计方法，所有的 MSHR 公用一组数据寄存器，在 MSHR 只存储请求的地址信息。
+The MissUnit manages fetch requests and prefetch requests separately through
+MSHRs. To ensure fetch MSHRs can be fully released during a flush, the number of
+fetch MSHRs is set to 4, and prefetch MSHRs to 10. A design separating data and
+address is used, with all MSHRs sharing a set of data registers, while only
+storing address information in the MSHRs.
 
-## 请求入队
+## Request enqueue
 
-MissUnit 接收来自 MainPipe 的取指请求和来自 IPrfetchPipe 的预取请求，取指请求只能被分配到
-fetchMSHR，预取请求只能分配到 prefetchMSHR，入队时采用低 index 优先的分配方式。 在入队的同时对 MSHR 进行查询，如果请求已经在
-MSHR 中存在，就丢弃该请求，对外接口仍表现 fire，只是不入队到 MSHR 中。在入队时向 Replacer 请求写入 waymask。
+The MissUnit receives fetch requests from the MainPipe and prefetch requests
+from the IPrfetchPipe. Fetch requests can only be assigned to fetchMSHRs, and
+prefetch requests to prefetchMSHRs, using a lower-index-first allocation
+strategy during enqueue. Simultaneously, the MSHR is queried during enqueue. If
+the request already exists in the MSHR, it is discarded, with the external
+interface still appearing to fire, but the request is not enqueued into the
+MSHR. During enqueue, a write request for the waymask is sent to the Replacer.
 
 ## acquire
 
-当到 L2 的总线空闲时，选择 MSHR 表现进行处理，整体 fetchMSHR 的优先级高于 prefetchMSHR，只有没有需要处理的
-fetchMSHR，才会处理 prefetchMSHR。 对于 fetchMSHR，采用低 index
-优先的优先级策略，因为同时最多只有两个请求需要处理，并且只有当两个请求都处理完成时才能向下走，所有 fetchMSHR 之间的优先级并不重要。 对于
-prefetchMSHR，考虑到预取请求之间具有时间顺序，采用先到先得的优先级策略，在入队时通过一个 FIFO 记录入队顺序，处理时按照入队顺序进行处理。
+When the bus to L2 is idle, the MSHR entries are selected for processing. The
+fetchMSHR has higher priority than the prefetchMSHR, and only when there are no
+fetchMSHRs to process will the prefetchMSHRs be handled. For fetchMSHRs, a
+lower-index-first priority strategy is used because there are at most two
+requests to process simultaneously, and both must be completed before proceeding
+further, making the priority among fetchMSHRs less critical. For prefetchMSHRs,
+considering the temporal order of prefetch requests, a first-come-first-served
+priority strategy is adopted. A FIFO records the enqueue order, and processing
+follows this order.
 
 ## grant
 
-通过状态机与 Tilelink 的 D 通道进行交互，到 L2 的带宽为 32byte，需要分 2
-次传输，并且不同的请求不会发生交织，所以只需要一组寄存器来存储数据。当一次传输完成时，根据传输的 id 选出对应的 MSHR，从 MSHR
-中读取地址、掩码等信息，将相关信息写入 SRAM，同时将 MSHR 释放。
+It interacts with the D channel of Tilelink through a state machine. The
+bandwidth to L2 is 32 bytes, requiring two transmissions, and different requests
+do not interleave, so only one set of registers is needed to store data. When a
+transmission completes, the corresponding MSHR is selected based on the
+transmission ID, and information such as address and mask is read from the MSHR.
+The relevant information is then written to SRAM, and the MSHR is released.

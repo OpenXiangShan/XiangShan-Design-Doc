@@ -1,102 +1,172 @@
-# 缺失队列 MissQueue
+# Miss Queue: MissQueue
 
-## 功能描述
+## Functional Description
 
-负责处理miss的load、store和原子请求，包含16项Miss Entry, 每一项负责一个请求，通过一组状态寄存器控制其处理流程。
+Responsible for handling miss requests from load, store, and atomic operations,
+containing 16 Miss Entries, each managing one request through a set of state
+registers that control its processing flow.
 
-* miss的load请求：
-  MissQueue为它分配一项空的MissEntry，并且可以在一定条件下合并请求或拒绝请求，分配后在MissEntry中记录相关信息。进入MissQueue的请求会向
-  L2 发送 Acquire 请求，如果是对整个 block 的覆盖写则发送 AcquirePerm (L2 将会省去一次 sram 读操作)，否则发送
-  AcquireBlock；等待 L2 返回权限 (Grant) 或者数据加权限 (GrantData)，并在收到Grant / GrantData 第一个
-  beat 后向 L2 返回
-  GrantAck。在收到L2返回的结果前，会提前先收到L2向上发送的hint信号，表明对应的权限和数据会在2拍后到达tilelink
-  D通道。收到hint后MissQueue会向MainPipe发起回填请求，并在后续收到Grant /
-  GrantData后通过前递的方式将回填数据送至MainPipe中，等待应答，待完成回填后释放对应的MissEntry。
+* Miss load request: The MissQueue allocates an empty MissEntry for it and can
+  merge or reject the request under certain conditions. After allocation,
+  relevant information is recorded in the MissEntry. Requests entering the
+  MissQueue send an Acquire request to L2. If it is a full-block overwrite, an
+  AcquirePerm is sent (L2 will skip an SRAM read operation); otherwise, an
+  AcquireBlock is sent. It waits for L2 to return permission (Grant) or data
+  plus permission (GrantData) and sends a GrantAck back to L2 after receiving
+  the first beat of Grant/GrantData. Before receiving the response from L2, it
+  first receives an L2-upstream hint signal, indicating that the corresponding
+  permission and data will arrive on the TileLink D channel in 2 cycles. Upon
+  receiving the hint, the MissQueue initiates a refill request to the MainPipe.
+  Subsequently, upon receiving Grant/GrantData, it forwards the refill data to
+  the MainPipe and waits for the response. After completing the refill, the
+  corresponding MissEntry is released.
 
-* miss的store请求： 和load的流程基本一致, 在最终完成回填后由MainPipe向StoreBuffer返回应答, 表示store已完成。
+* Store request for a miss: The process is essentially the same as for a load.
+  After the final backfill is completed, the MainPipe sends a response back to
+  the StoreBuffer, indicating that the store operation is finished.
 
-* miss的原子指令： 和load的流程基本一致, 在最终完成回填后由MainPipe向AtomicsUnit返回应答, 表示原子指令操作已完成。
+* Atomic instruction for a miss: The process is essentially the same as for a
+  load. After the final backfill is completed, the MainPipe sends a response
+  back to the AtomicsUnit, indicating that the atomic instruction operation is
+  finished.
 
-### 特性 1： MissQueue 入队处理
+### Feature 1: MissQueue enqueue processing
 
-MissQueue对于新入队请求，总的操作可分为响应和拒绝，而响应又可以分为分配和合并。MissQueue支持一定程度的请求合并,
-从而提高miss请求处理的效率。
+For newly enqueued requests, the MissQueue's overall operations can be
+categorized into response and rejection, with responses further divided into
+allocation and merging. The MissQueue supports a certain degree of request
+merging to improve the efficiency of miss request processing.
 
-* 空项分配：如果新的miss请求不符合合并或者拒绝条件，则为该请求分配新的MissEntry。
+* Allocation of an empty entry: If a new miss request does not meet the
+  conditions for merging or rejection, a new MissEntry is allocated for the
+  request.
 
-* 请求合并条件：当已分配的 MissEntry (请求 A) 和新的 miss 请求 B 的块地址相同时，在下述两种情况下可以将请求B合并：
-  * 向L2的Acquire 请求还没有握手, 且 A 是 load 请求, B 是 load 或 store
-    请求，即A还未成功发起对L2的读请求前可以合并B，一起发送Acquire；
-  * 向 L2 的 Acquire 已经发送出去，但是还没有收到 Grant/GrantData，且 A 是 load 或 store 请求，B 是 load
-    请求，即新来的load请求可以在refill前合并，而store请求只能在acquire握手前合并。
+* Request merging condition: When the block address of an allocated MissEntry
+  (request A) matches that of a new miss request B, request B can be merged
+  under the following two scenarios:
+  * The Acquire request to L2 has not yet been acknowledged, and A is a load
+    request while B is a load or store request. This means B can be merged with
+    A before A successfully initiates a read request to L2, allowing them to
+    send the Acquire request together.
+  * The Acquire to L2 has been sent out, but Grant/GrantData has not yet been
+    received, and A is a load or store request, while B is a load request. This
+    means a new load request can be merged before refill, whereas a store
+    request can only be merged before the Acquire handshake.
 
-* 请求拒绝条件：下述情况下需要将新的miss请求拒绝，该请求会在一定时间后重新发出：
-  * 新的 miss 请求和某个 MissEntry 中请求的块地址相同, 但是不满足请求合并条件；
-  * Miss Queue已满。
+* Request rejection conditions: In the following cases, the new miss request
+  will be rejected and will be reissued after a certain period:
+  * The new miss request shares the same block address as a request in an
+    existing MissEntry but does not meet the request merging conditions.
+  * Miss Queue is full.
 
-### 特征 2：MSHR给LoadUnit数据前递
+### Feature 2: MSHR data forwarding to LoadUnit
 
-MissQueue支持数据前递，如果，lsq重发信号有效（具体重发逻辑请参考LoadQueueReplay部分，选出最合适的最老指令），在loadUnit的stage1，前递指定的mshrid以及地址，MissQueue拿到前递信息后，去比对，如果匹配，直接将重填的数据在LoadUnits的stage2传给LoadUnit，通过前递的方式更快地获得先前请求的数据，以减少加载指令的等待时间。
+The MissQueue supports data forwarding. If the lsq replay signal is active (the
+replay logic is detailed in the LoadQueueReplay section, selecting the oldest
+suitable instruction), in stage1 of the LoadUnit, the specified mshrid and
+address are forwarded. Upon receiving the forwarding information, the MissQueue
+performs a match. If a match is found, the refill data is directly forwarded to
+the LoadUnit in stage2, enabling faster access to previously requested data and
+reducing load instruction wait times.
 
-### 特征 3：MissQueue 预取处理
+### Feature 3: MissQueue Prefetch Handling
 
-对于进入MissQueue的预取请求，会在MissEntry内对预取请求的来源进行标记，其余操作与一条普通的load指令一致，向L2发出Acquire请求等待收到Grant/GrantData后完成回填。
+For prefetch requests entering the MissQueue, the source of the prefetch request
+is marked within the MissEntry, while the remaining operations are consistent
+with a regular load instruction, sending an Acquire request to L2 and waiting
+for Grant/GrantData to complete the refill.
 
-### 特征 4：MissQueue 中发出的回填请求
+### Feature 4: Backfill requests issued by the MissQueue
 
-为了提升数据回填的效率，可以便于在收到回填数据之后立刻进行DCache的写入，因此采用提前向MainPipe发出回填请求的方式进行完成元数据的读取以及替换路的选取。在收到L2返回的hint信号后，对应请求所在的MissEntry会向MainPipe发起回填请求，此时该回填请求中不携带具体的待写回数据，在MainPipe进行元数据读取及替换路选择的同时继续等待回填数据的到达。接收到Grant/GrantData后，通过前递的方式将回填数据块直接传递到MainPipe的stage2，与提前发出的回填请求进行匹配，完成写回操作。待写回操作完成后接收MainPipe传回的release信号，释放对应的MissEntry，完成本次请求。
+To improve the efficiency of data backfilling, it is beneficial to immediately
+write to the DCache upon receiving the backfill data. Therefore, a backfill
+request is sent to the MainPipe in advance to complete metadata reading and
+replacement way selection. Upon receiving the hint signal from L2, the MissEntry
+corresponding to the request initiates a backfill request to the MainPipe. At
+this stage, the backfill request does not carry the specific data to be written
+back. While the MainPipe performs metadata reading and replacement way
+selection, it continues to wait for the backfill data to arrive. Upon receiving
+Grant/GrantData, the backfill data block is forwarded directly to stage2 of the
+MainPipe, matching the pre-sent backfill request to complete the write-back
+operation. After the write-back operation is completed, the release signal from
+the MainPipe is received, releasing the corresponding MissEntry and finalizing
+the request.
 
-## 整体框图
+## Overall Block Diagram
 
-MissQueue整体架构如[@fig:DCache-MissQueue]所示。
+The overall architecture of the MissQueue is shown in [@fig:DCache-MissQueue].
 
-![MissQueue流程图](./figure/DCache-MissQueue.svg){#fig:DCache-MissQueue}
+![MissQueue Flowchart](./figure/DCache-MissQueue.svg){#fig:DCache-MissQueue}
 
-## 接口时序
+## Interface timing
 
-### 请求接口时序实例
+### Request Interface Timing Example
 
-[@fig:DCache-MissQueue-Timing]展示了一个load
-miss请求进入MissQueue之后的接口时序。请求到达后分配MissEntry，下一拍向L2发送Acquire请求等待hint和数据的响应。接收到l2_hint信号后的下一拍向MainPipe发起回填请求；接收到Grant数据的第一个beat之后，向L2返回mem_finish响应，接收到Grant数据的最后一个beat之后，下一拍通过refill_info将回填数据前递到MainPipe的stage2，完成数据的写入。。
+[@fig:DCache-MissQueue-Timing] illustrates the interface timing after a load
+miss request enters the MissQueue. Upon arrival, the request allocates a
+MissEntry, and in the next cycle, an Acquire request is sent to L2 to await hint
+and data responses. After receiving the l2_hint signal, a backfill request is
+initiated to the MainPipe in the following cycle. Upon receiving the first beat
+of Grant data, a mem_finish response is returned to L2. After receiving the last
+beat of Grant data, the backfill data is forwarded to stage2 of the MainPipe via
+refill_info in the next cycle, completing the data write.
 
-![MissQueue时序](./figure/DCache-MissQueue-Timing.svg){#fig:DCache-MissQueue-Timing}
+![MissQueue
+Timing](./figure/DCache-MissQueue-Timing.svg){#fig:DCache-MissQueue-Timing}
 
-## MissEntry模块
-### 特征 1：Miss Entry 分配、合并、拒绝
+## MissEntry Module
+### Feature 1: Miss Entry allocation, merging, and rejection
 
-  * 空项分配：如果新的miss请求不符合合并或者拒绝条件，则为该请求分配新的 Miss Entry。
-  * 请求合并条件：当已分配的 Miss Entry (请求 A) 和新的 miss 请求 B 的块地址相同时，在下述两种情况下可以将请求B合并：
-    * 向L2的Acquire 请求还没有握手, 且 A 是 load 请求, B 是 load 或 store
-      请求，即A还未成功发起对L2的读请求前可以合并B，一起发送Acquire；
-    * 向 L2 的 Acquire 已经发送出去，但是还没有收到 Grant/GrantData，且 A 是 load 或 store 请求，B 是
-      load 请求，即新来的load请求可以在refill前合并，而store请求只能在acquire握手前合并。
-  * 请求拒绝条件：下述情况下需要将新的miss请求拒绝，该请求会在一定时间后重新发出：
-    * 新的 miss 请求和某个 Miss Entry 中请求的块地址相同, 但是不满足请求合并条件；
-    * Miss Queue已满。
+  * Empty entry allocation: If a new miss request does not meet the merge or
+    rejection conditions, a new Miss Entry is allocated for the request.
+  * Request merging condition: When the block address of an allocated Miss Entry
+    (request A) matches that of a new miss request B, request B can be merged
+    under the following two scenarios:
+    * The Acquire request to L2 has not yet been acknowledged, and A is a load
+      request while B is a load or store request. This means B can be merged
+      with A before A successfully initiates a read request to L2, allowing them
+      to send the Acquire request together.
+    * The Acquire to L2 has been sent out, but Grant/GrantData has not yet been
+      received, and A is a load or store request, while B is a load request.
+      This means a new load request can be merged before refill, whereas a store
+      request can only be merged before the Acquire handshake.
+  * Request rejection conditions: In the following cases, the new miss request
+    will be rejected and will be reissued after a certain period:
+    * The new miss request shares the same block address as a request in an
+      existing Miss Entry but does not meet the request merging conditions.
+    * Miss Queue is full.
 
-### 特征 2：MissEntry状态设计：
+### Feature 2: MissEntry State Design:
 
-Miss Entry由一系列状态寄存器控制操作的执行, 以及这些操作之间的顺序。s_* 寄存器表示需要调度的请求是否发送，w_*
-寄存器表示要等待的应答是否返回，这些寄存器在初始状态下被置为 true.B, 在为请求分配一项 Miss Entry 时，会将相应的 s_* 和 w_*
-寄存器置为 false.B，这表示请求还没有发出去，以及要等待的响应没有握手。
-[@tbl:MissEntry-state]和[@fig:DCache-MissEntry]展示了各个寄存器的含义描述以及执行的先后顺序：
+Miss Entry is controlled by a series of state registers that manage the
+execution of operations and their sequence. The s_* register indicates whether
+the request to be scheduled has been sent, and the w_* register indicates
+whether the expected response has been received. These registers are initially
+set to true.B. When allocating a Miss Entry for a request, the corresponding s_*
+and w_* registers are set to false.B, indicating that the request has not been
+sent and the expected handshake response has not been received.
+[@tbl:MissEntry-state] and [@fig:DCache-MissEntry] illustrate the descriptions
+of each register and the execution sequence:
 
-Table: MissEntry状态列表 {#tbl:MissEntry-state}
+Table: MissEntry State List {#tbl:MissEntry-state}
 
-| 状态              | Descrption                                                |
-| --------------- | --------------------------------------------------------- |
-| s_acquire       | 向 L2 发送 AcquireBlock / AcquirePerm请求                      |
-| w_grantfirst    | 等待接收到 GrantData 的第一个 beat，拉高表示接收到                         |
-| w_grantlast     | 等待接收到 GrantData 的最后一个 beat，拉高表示接收到                        |
-| s_grantack      | 在收到 L2 的数据后向 L2 返回应答, 在收到 Grant 的第一个 beat 时就可以返回 GrantAck |
-| s_mainpipe_req  | 向Main Pipe发送回填请求，将数据回填到 DCache                            |
-| w_mainpipe_resp | 表示将原子请求发送到 Main Pipe 回填入DCache 后, 接收到 Main Pipe 的应答       |
-| w_l2hint        | 表示当前miss请求已收到l2_hint信号, 可以唤醒, 向MainPipe发起乎提案请求            |
-| w_refill_resp   | 表示非原子操作的回填请求已完成, 可以释放MissEntry                            |
+| Status          | Descrption                                                                                                                                   |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| s_acquire       | Send an AcquireBlock / AcquirePerm request to L2.                                                                                            |
+| w_grantfirst    | Waiting to receive the first beat of GrantData; a high signal indicates reception.                                                           |
+| w_grantlast     | Waiting to receive the last beat of GrantData; a high signal indicates reception.                                                            |
+| s_grantack      | After receiving data from L2, send a response back to L2. A GrantAck can be returned upon receiving the first beat of the Grant.             |
+| s_mainpipe_req  | Send a backfill request to the Main Pipe to backfill the data into the DCache.                                                               |
+| w_mainpipe_resp | Indicates that after sending the atomic request to the Main Pipe for backfilling into the DCache, a response from the Main Pipe is received. |
+| w_l2hint        | Indicates that the current miss request has received the l2_hint signal and can be awakened, initiating a proposal request to the MainPipe.  |
+| w_refill_resp   | Indicates that the refill request for non-atomic operations is completed, and the MissEntry can be released.                                 |
 
-![MissEntry流程图](./figure/DCache-MissEntry.svg){#fig:DCache-MissEntry}
+![MissEntry Flowchart](./figure/DCache-MissEntry.svg){#fig:DCache-MissEntry}
 
-### 特征 3： MissEntry别名处理
+### Feature 3: MissEntry Alias Handling
 
-L1 DCache支持与L2配合处理缓存别名问题，MissEntry在向L2发送Acquire请求时会携带请求地址的别名位（vaddr[13:12]）,
-供L2保存及判断是否有别名问题需要处理。别名问题的具体处理流程详见ProbeQueue一节。
+The L1 DCache supports handling cache alias issues in coordination with L2. When
+sending an Acquire request to L2, the MissEntry includes the alias bits
+(vaddr[13:12]) of the request address for L2 to store and determine if alias
+issues need resolution. The detailed alias resolution process is described in
+the ProbeQueue section.
