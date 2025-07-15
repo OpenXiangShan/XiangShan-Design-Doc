@@ -28,22 +28,22 @@ extra:
       lang: en
 
 nav:
-  - 首页: index.md
-  - 前端:
-    - 分支预测单元:
+  - Home: index.md
+  - Frontend:
+    - Branch Prediction Unit:
       - frontend/BPU/index.md
-      - BPU抽象模块: frontend/BPU/Composer.md
-      - 取指目标单元: frontend/BPU/FTB.md
-      - 分支目标缓冲: frontend/BPU/uFTB.md
-      - 主预测器TAGE-SC: frontend/BPU/TAGE-SC.md
-      - 间接跳转指令预测器: frontend/BPU/ITTAGE.md
-      - 返回地址预测器: frontend/BPU/RAS.md
-    - 取指目标队列: 
+      - BPU Abstract Module: frontend/BPU/Composer.md
+      - Fetch Target Unit: frontend/BPU/FTB.md
+      - Branch Target Buffer: frontend/BPU/uFTB.md
+      - Main Predictor TAGE-SC: frontend/BPU/TAGE-SC.md
+      - Indirect Branch Predictor: frontend/BPU/ITTAGE.md
+      - Return Address Stack: frontend/BPU/RAS.md
+    - Fetch Target Queue: 
       - frontend/FTQ/index.md
-    - 取指令单元:
+    - Instruction Fetch Unit:
       - frontend/IFU/index.md
-      - 预译码器: frontend/IFU/PreDecoder.md
-    - 指令缓存:
+      - Pre-Decoder: frontend/IFU/PreDecoder.md
+    - Instruction Cache:
       - frontend/ICache/index.md
       - MainPipe: frontend/ICache/MainPipe.md
       - IPrefetchPipe: frontend/ICache/IPrefetchPipe.md
@@ -51,75 +51,75 @@ nav:
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
-    - PC类: 
+    - PC Class: 
       - frontend/Pruned_Address/index.md
-  - 后端:
+  - Backend:
     - backend/index.md
-    - 控制模块 CtrlBlock: 
+    - Control Block (CtrlBlock): 
       - backend/CtrlBlock/index.md
-      - 译码: backend/CtrlBlock/decode.md
-      - 重命名: backend/CtrlBlock/Rename.md
-      - 分派: backend/CtrlBlock/Dispatch.md
-      - 重排序缓存: backend/CtrlBlock/Rob.md
-    - 数据通路 DataPath:
+      - Decode: backend/CtrlBlock/decode.md
+      - Rename: backend/CtrlBlock/Rename.md
+      - Dispatch: backend/CtrlBlock/Dispatch.md
+      - Reorder Buffer: backend/CtrlBlock/Rob.md
+    - Data Path (DataPath):
       - DataPath: backend/DataPath/DataPath.md
       - Og2ForVector: backend/DataPath/Og2ForVector.md
       - WbDataPath: backend/DataPath/WbDataPath.md
       - WbFuBusyTable: backend/DataPath/WbFuBusyTable.md
       - BypassNetwork: backend/DataPath/BypassNetwork.md
-    - 调度与发射:
+    - Scheduling and Issue:
       - Scheduler: backend/Schedule_And_Issue/Scheduler.md
       - IssueQueue: backend/Schedule_And_Issue/IssueQueue.md
       - IssueQueueEntries: backend/Schedule_And_Issue/IssueQueueEntries.md
-    - 执行:
+    - Execution:
       - ExuBlock: backend/ExuBlock/ExuBlock.md
       - ExuUnit: backend/ExuBlock/ExuUnit.md
-    - 功能单元 FunctionUnit:
-      - 整数功能单元: backend/FunctionUnit/IntFunctionUnit.md
-      - 浮点功能单元: backend/FunctionUnit/FpFunctionUnit.md
-      - 向量功能单元: backend/FunctionUnit/VecFunctionUnit.md
-      - 访存功能单元: backend/FunctionUnit/MemFunctionUnit.md
-    - 向量浮点功能单元 VFPU: backend/VFPU.md
-    - 控制状态寄存器 CSR: backend/CSR.md
-    - 硬件性能计数单元 HPM: backend/HPM.md
-    - 调试模块 Debug Module: backend/DebugModule/DM.md
-  - 访存:
-    - 访存流水线 LSU:
+    - Function Unit (FunctionUnit):
+      - Integer Function Unit: backend/FunctionUnit/IntFunctionUnit.md
+      - Floating-Point Function Unit: backend/FunctionUnit/FpFunctionUnit.md
+      - Vector Function Unit: backend/FunctionUnit/VecFunctionUnit.md
+      - Memory Function Unit: backend/FunctionUnit/MemFunctionUnit.md
+    - Vector Floating-Point Unit (VFPU): backend/VFPU.md
+    - Control and Status Registers (CSR): backend/CSR.md
+    - Hardware Performance Monitor (HPM): backend/HPM.md
+    - Debug Module: backend/DebugModule/DM.md
+  - Memory System:
+    - Load-Store Unit (LSU):
       - memblock/LSU/index.md
-      - Load 指令执行单元 LoadUnit: memblock/LSU/LoadUnit.md
-      - Store 地址执行单元 StoreUnit: memblock/LSU/StoreUnit.md
-      - Store 数据执行单元 StdExeUnit: memblock/LSU/StdExeUnit.md
-      - 原子指令执行单元 AtomicsUnit: memblock/LSU/AtomicsUnit.md
-      - 向量访存: 
+      - Load Unit (LoadUnit): memblock/LSU/LoadUnit.md
+      - Store Address Unit (StoreUnit): memblock/LSU/StoreUnit.md
+      - Store Data Unit (StdExeUnit): memblock/LSU/StdExeUnit.md
+      - Atomic Operation Unit (AtomicsUnit): memblock/LSU/AtomicsUnit.md
+      - Vector Memory Access:
         - memblock/LSU/VLSU/index.md
-        - 向量 Load 拆分单元 VLSplit: memblock/LSU/VLSU/VLSplit.md
-        - 向量 Store 拆分单元 VSSpli: memblock/LSU/VLSU/VSSplit.md
-        - 向量 Load 合并单元 VLMergeBuffer: memblock/LSU/VLSU/VLMergeBuffer.md
-        - 向量 Store 合并单元 VSMergeBuffer: memblock/LSU/VLSU/VSMergeBuffer.md
-        - 向量 Segment 访存指令处理单元 VSegmentUnit: memblock/LSU/VLSU/VSegmentUnit.md
-        - 向量 FOF 指令单元 VfofBuffer: memblock/LSU/VLSU/VfofBuffer.md
-      - 访存队列 LSQ:
+        - Vector Load Split Unit (VLSplit): memblock/LSU/VLSU/VLSplit.md
+        - Vector Store Split Unit (VSSplit): memblock/LSU/VLSU/VSSplit.md
+        - Vector Load Merge Buffer (VLMergeBuffer): memblock/LSU/VLSU/VLMergeBuffer.md
+        - Vector Store Merge Buffer (VSMergeBuffer): memblock/LSU/VLSU/VSMergeBuffer.md
+        - Vector Segment Unit (VSegmentUnit): memblock/LSU/VLSU/VSegmentUnit.md
+        - Vector FOF Unit (VfofBuffer): memblock/LSU/VLSU/VfofBuffer.md
+      - Load-Store Queue (LSQ):
         - memblock/LSU/LSQ/index.md
-        - Load 队列 VirtualLoadQueu: memblock/LSU/LSQ/VirtualLoadQueue.md
-        - 读后读违例检查 LoadQueueRAR: memblock/LSU/LSQ/LoadQueueRAR.md
-        - 写后读违例检查 LoadQueueRAW: memblock/LSU/LSQ/LoadQueueRAW.md
-        - Load 重发队列 LoadQueueReplay: memblock/LSU/LSQ/LoadQueueReplay.md
-        - Uncache Load 处理单元 LoadQueueUncach: memblock/LSU/LSQ/LoadQueueUncache.md
-        - Load 异常缓冲 LqExceptionBuffer: memblock/LSU/LSQ/LqExceptionBuffer.md
-        - Store 队列 StoreQueue: memblock/LSU/LSQ/StoreQueue.md
-      - Uncache 处理单元 Uncache: memblock/LSU/Uncache.md
-      - Store 提交缓冲 SBuffer: memblock/LSU/SBuffer.md
-      - Load 非对齐访存单元 LoadMisalignBuffer: memblock/LSU/LoadMisalignBuffer.md
-      - Store 非对齐访存单元 StoreMisalignBuffer: memblock/LSU/StoreMisalignBuffer.md
-    - 数据缓存:
+        - Load Queue (VirtualLoadQueu): memblock/LSU/LSQ/VirtualLoadQueue.md
+        - Read-After-Read Check (LoadQueueRAR): memblock/LSU/LSQ/LoadQueueRAR.md
+        - Read-After-Write Check (LoadQueueRAW): memblock/LSU/LSQ/LoadQueueRAW.md
+        - Load Replay Queue (LoadQueueReplay): memblock/LSU/LSQ/LoadQueueReplay.md
+        - Uncache Load Unit (LoadQueueUncach): memblock/LSU/LSQ/LoadQueueUncache.md
+        - Load Exception Buffer (LqExceptionBuffer): memblock/LSU/LSQ/LqExceptionBuffer.md
+        - Store Queue (StoreQueue): memblock/LSU/LSQ/StoreQueue.md
+      - Uncache Handling Unit (Uncache): memblock/LSU/Uncache.md
+      - Store Commit Buffer (SBuffer): memblock/LSU/SBuffer.md
+      - Load Misaligned Access Unit (LoadMisalignBuffer): memblock/LSU/LoadMisalignBuffer.md
+      - Store Misaligned Access Unit (StoreMisalignBuffer): memblock/LSU/StoreMisalignBuffer.md
+    - Data Cache:
       - memblock/DCache/index.md
-      - Load 访存流水线 LoadPipe: memblock/DCache/LoadPipe.md
-      - 缺失队列 MissQueue: memblock/DCache/MissQueue.md
-      - Probe 队列 ProbeQueue: memblock/DCache/ProbeQueue.md
-      - 主流水线 MainPipe: memblock/DCache/MainPipe.md
-      - 写回队列 WritebackQueue: memblock/DCache/WritebackQueue.md
-      - 错误处理与自定义故障注入指令: memblock/DCache/Error.md
-    - 内存管理单元 MMU:
+      - Load Pipeline (LoadPipe): memblock/DCache/LoadPipe.md
+      - Miss Queue (MissQueue): memblock/DCache/MissQueue.md
+      - Probe Queue (ProbeQueue): memblock/DCache/ProbeQueue.md
+      - Main Pipeline (MainPipe): memblock/DCache/MainPipe.md
+      - Writeback Queue (WritebackQueue): memblock/DCache/WritebackQueue.md
+      - Error Handling and Custom Fault Injection: memblock/DCache/Error.md
+    - Memory Management Unit (MMU):
       - memblock/MMU/index.md
       - L1TLB: memblock/MMU/L1TLB.md
       - Repeater: memblock/MMU/Repeater.md
@@ -132,26 +132,26 @@ nav:
         - Miss Queue: memblock/MMU/L2TLB/MissQueue.md
         - Prefetcher: memblock/MMU/L2TLB/Prefetcher.md
       - PMP & PMA: memblock/MMU/PMP-PMA.md
-  - 缓存子系统:
-    - 二级缓存:
-      - 二级缓存 CoupledL2: cache/l2cache/CoupledL2.md
-      - A 通道请求缓冲 RequestBuffer: cache/l2cache/ReqBuf.md
-      - 请求仲裁器与主流水线: cache/l2cache/ReqArb_MainPipe.md
-      - 目录 Directory: cache/l2cache/Directory.md
-      - 数据 SRAM DataStorage: cache/l2cache/DataStorage.md
+  - Cache Subsystem:
+    - L2 Cache:
+      - L2 Cache (CoupledL2): cache/l2cache/CoupledL2.md
+      - Channel A Request Buffer (RequestBuffer): cache/l2cache/ReqBuf.md
+      - Request Arbiter and Main Pipeline: cache/l2cache/ReqArb_MainPipe.md
+      - Directory (Directory): cache/l2cache/Directory.md
+      - Data SRAM (DataStorage): cache/l2cache/DataStorage.md
       - MSHR: cache/l2cache/MSHR.md
-      - 上游 TileLink 总线通道: 
+      - Upstream TileLink Channels: 
         - SinkA: cache/l2cache/upstream/SinkA.md
         - SinkC: cache/l2cache/upstream/SinkC.md
         - GrantBuffer: cache/l2cache/upstream/GrantBuffer.md
-      - 下游 CHI 总线通道: 
+      - Downstream CHI Channels: 
         - TXREQ: cache/l2cache/downstream/TXREQ.md
         - RXRSP: cache/l2cache/downstream/RXRSP.md
         - RXDAT: cache/l2cache/downstream/RXDAT.md
         - RXSNP: cache/l2cache/downstream/RXSNP.md
         - TXDAT: cache/l2cache/downstream/TXDAT.md
         - TXRSP: cache/l2cache/downstream/TXRSP.md
-        - P‑Credit 管理机制: cache/l2cache/downstream/PCredit.md
-        - 链路层控制器 LinkMonitor: cache/l2cache/downstream/LinkMonitor.md
-      - MMIO 转接桥 MMIOBridge: cache/l2cache/MMIOBridge.md
-      - 错误处理: cache/l2cache/Error.md
+        - P-Credit Management: cache/l2cache/downstream/PCredit.md
+        - Link Layer Controller (LinkMonitor): cache/l2cache/downstream/LinkMonitor.md
+      - MMIO Bridge (MMIOBridge): cache/l2cache/MMIOBridge.md
+      - Error Handling: cache/l2cache/Error.md
