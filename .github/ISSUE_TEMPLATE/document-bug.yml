@@ -1,0 +1,145 @@
+name: Documentation Bug Report
+description: Report a bug or suggest an improvement in the documentation
+labels:
+  - 'type: bug/reported'
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a documentation issue! You could use English or Chinese to open an issue.
+        感谢您提交文档问题！您可以使用中文或英文提交议题。
+
+        This template is intended only for reporting issues of XiangShan Documentation (Design-Doc). If your issue concerns other parts of the documentation or the Xiangshan processor cores themselves, please go back and select a different option.
+        此模板仅用于提报香山文档（设计文档）本身的问题。如果您的问题涉及文档的其他部分，或与香山处理器核本身相关，请返回并选择其他选项。
+        
+        Please provide as much detail as possible to help us locate and fix it quickly.
+        请尽可能详细填写以下信息，以帮助我们快速定位和修复。
+
+  - type: checkboxes
+    id: before-start
+    attributes:
+      label: Before start 开始之前
+      description: |
+        Before start, PLEASE MAKE SURE you have done these:  
+        开始之前，请确保您已经做过以下事情：
+      options:
+        - label: I have checked the [XiangShan Contribution guide for Documentation](https://docs.xiangshan.cc/zh-cn/latest/contribution/documentation/) 我已阅读[香山文档贡献指南](https://docs.xiangshan.cc/zh-cn/latest/contribution/documentation/)。
+          required: true
+        - label: I have searched the existing issues and did not find a similar report. 我已经搜索过已有的 issue，没有找到类似的问题。
+          required: true
+        - label: I have checked the latest version of the user manual and the problem still exists. 我已经确认使用的是用户手册的最新版本，问题依然存在。
+          required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Document Language 文档语言
+      options:
+        - Chinese
+        - English 
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Document Format 文档形式
+      options:
+        - Web
+        - PDF
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Document Version 文档版本
+      description: |
+        Please provide the tag / release / commit hash of the document to help us confirm the specific version.  
+        请提供文档的标签、发行版或提交哈希，以便确定版本。
+      placeholder: "latest | release Kunminghu-v2r2-alpha1 | commit x1s2x3s"
+
+  - type: input
+    id: location
+    attributes:
+      label: Issue Location 问题位置
+      description: |
+        For web version, paste the URL; For PDF version, specify the page number.  
+        对于网页版本，请粘贴 URL；对于 PDF 版本，请写明页码。
+      placeholder: "https://... (web) | Page 42 (PDF)"
+    validations:
+      required: true
+
+  - type: input
+    id: section
+    attributes:
+      label: Section Title (from top to bottom) 章节标题（从大到小）
+      description: |
+        Provide the section hierarchy to help locate the issue.  
+        请按照从大到小的顺序提供章节标题。
+      placeholder: "Chapter > Section > Subsection | 章 > 节 > 小节"
+
+  - type: input
+    id: source-md
+    attributes:
+      label: Source File 源文件
+      description: |
+        If possible, provide the relative path of the Markdown file in the repository.  
+        如果可能，请提供仓库中 Markdown 文件的相对路径。
+      placeholder: "e.g. docs/user-guide/installation.md"
+
+  - type: dropdown
+    id: error_type
+    attributes:
+      label: Error Type 错误类型
+      options:
+        - Typo 笔误
+        - Format 格式
+        - Translation 翻译
+        - Broken Link 链接失效
+        - Technical Content Error 技术内容错误
+        - Other 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Error Description 错误描述
+      description: |
+        Clearly describe the problem you found.  
+        清晰地描述您发现的问题。
+      placeholder: |
+        Explain the issue in detail, e.g., which sentence has a typo or incorrect content.  
+        详细说明问题，例如哪一段文字有拼写错误或内容不正确。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Screenshot 截图
+      description: |
+        Provide screenshots if the issue is about formatting.  
+        如果问题涉及显示，请提供截图。
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Fix 建议的修改方案
+      description: |
+        Provide your suggestion if you have one.  
+        如果您有明确建议，请在这里写下。
+      placeholder: |
+        e.g., change to xxx  
+        例如：建议改为 xxx"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional Notes 备注信息
+      description: |
+        Any other information or related issues.  
+        任何其他补充说明。
