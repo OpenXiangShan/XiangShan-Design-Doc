@@ -1,0 +1,137 @@
+name: Issue Comment Command Handling
+run-name: Response to issue comment command
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  manage-claim:
+    if: github.event.issue.number == 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse command
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.comment.body.trim();
+            core.info(`Received comment: "${body}"`);
+
+            let action = null;
+            let file = null;
+
+            // Match \claim and \unclaim
+            let claimMatch = body.match(/^\\claim\s+(.+)$/);
+            let unclaimMatch = body.match(/^\\unclaim\s+(.+)$/);
+
+            if (claimMatch) {
+              action = "claim";
+              file = claimMatch[1].trim();
+              core.info(`Parsed command: claim ${file}`);
+            } else if (unclaimMatch) {
+              action = "unclaim";
+              file = unclaimMatch[1].trim();
+              core.info(`Parsed command: unclaim ${file}`);
+            } else {
+              core.info("No valid command matched, skipping.");
+              core.setOutput("do", "false");
+              return;
+            }
+
+            core.setOutput("do", "true");
+            core.exportVariable("action", action);
+            core.exportVariable("file", file);
+
+      - name: Process claim/unclaim
+        if: steps.parse.outputs.do == 'true'
+        id: process
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const action = process.env.action;
+            const filePath = process.env.file;
+            const user = context.payload.comment.user.login;
+            core.info(`Start processing ${action}, user: @${user}, file: ${filePath}`);
+
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
+
+            let body = issue.body;
+            core.info("Successfully retrieved issue body");
+
+            const regex = new RegExp(`^(\\*\\s+${filePath}\\s*\\()(.*?)(\\))`, "m");
+            const match = body.match(regex);
+
+            if (!match) {
+              core.warning(`File ${filePath} was not found in the issue list, or the format does not match`);
+              core.setOutput("status", "fail");
+              return;
+            }
+
+            let currentClaimers = match[2].trim();
+            let claimers = currentClaimers
+              ? currentClaimers.split(",").map(s => s.trim()).filter(Boolean)
+              : [];
+
+            core.info(`Current claimers: [${claimers.join(", ")}]`);
+
+            if (action === "claim") {
+              if (!claimers.includes(`@${user}`)) {
+                claimers.push(`@${user}`);
+                core.info(`Added claimer @${user}`);
+              } else {
+                core.info(`User @${user} has already claimed ${filePath}`);
+              }
+            } else if (action === "unclaim") {
+              const before = claimers.length;
+              claimers = claimers.filter(c => c !== `@${user}`);
+              if (claimers.length < before) {
+                core.info(`Removed claimer @${user}`);
+              } else {
+                core.info(`User @${user} has not claimed ${filePath}`);
+              }
+            }
+
+            let newContent = claimers.length > 0 ? claimers.join(", ") : "";
+            const newLine = `${match[1]}${newContent}${match[3]}`;
+            body = body.replace(regex, newLine);
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+            core.info(`Update successful, claimers for file ${filePath} are now: [${claimers.join(", ")}]`);
+            core.setOutput("status", "success");
+
+      - name: Add reaction (success)
+        if: steps.process.outputs.status == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "+1"
+            });
+            core.info("Added success reaction +1");
+
+      - name: Add reaction (fail)
+        if: steps.process.outputs.status == 'fail'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: "confused"
+            });
+            core.info("Added failure reaction confused");
