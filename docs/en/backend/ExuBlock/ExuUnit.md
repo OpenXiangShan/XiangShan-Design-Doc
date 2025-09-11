@@ -62,7 +62,7 @@ in this ExeUnit.
 Additionally, for cases where JmpFu or BrhFu exists in the ExeUnit, the
 instruction address translation type `instrAddrTransType` must also be input
 
-## Function
+## 功能
 
 Each ExuUnit generates a series of corresponding FU modules based on its
 configuration parameters.
@@ -108,12 +108,12 @@ The intExuBlock contains 8 ExeUnits, each with the following functions:
 
 Table: FUs included in each ExeUnit within intExuBlock
 
-| ExeUnit | Function                                |
+| ExeUnit | 功能                                      |
 | ------- | --------------------------------------- |
 | exus0   | alu，mul，bku                             |
-| exus1   | brh, jmp                                |
+| exus1   | brh，jmp                                 |
 | exus2   | alu，mul，bku                             |
-| exus3   | brh, jmp                                |
+| exus3   | brh，jmp                                 |
 | exus4   | alu                                     |
 | exus5   | brh, jmp, i2f, i2v, VSetRiWi, VSetRiWvf |
 | exus6   | alu                                     |
@@ -124,7 +124,7 @@ following functions:
 
 Table: FUs included in each ExeUnit in fpExuBlock
 
-| ExeUnit | Function           |
+| ExeUnit | 功能                 |
 | ------- | ------------------ |
 | exus0   | falu，fcvt，f2v，fmac |
 | exus1   | fdiv               |
@@ -137,7 +137,7 @@ functions:
 
 Table: FUs included in each ExeUnit in vfExuBlock
 
-| ExeUnit | Function                    |
+| ExeUnit | 功能                          |
 | ------- | --------------------------- |
 | exus0   | vfma，vialu，vimac，vppu       |
 | exus1   | vfalu，vfcvt，vipu，VSetRvfWvf |

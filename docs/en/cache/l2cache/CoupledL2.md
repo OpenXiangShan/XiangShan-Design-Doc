@@ -91,7 +91,7 @@ The list of submodules in each Slice is as follows:
   lower address bits
 - Cache line size is 64B, bus data width is 32B, a complete cache line transfer
   requires 2 beats of data transmission
-- Adopts a MESI-like cache coherence protocol
+- 采用类 MESI 的缓存一致性协议
 - Adopts a strict inclusion policy with DCache and a non-strict inclusion policy
   with ICache / PTW.
 - Adopts a non-blocking main pipeline structure
@@ -107,7 +107,7 @@ The list of submodules in each Slice is as follows:
 - Supports BOP prefetcher
 - Supports handling prefetch requests trained by L1 and backfilled to L2.
 - Supports replacement algorithms such as DRRIP / PLRU, defaulting to DRRIP
-- Supports hardware handling of Cache aliases.
+- 支持硬件处理 Cache 别名
 - Supports MMIO request handling. MMIO requests are converted from TileLink bus
   to CHI bus in CoupledL2 and arbitrated with cacheable requests from 4 Slices.
 
@@ -138,7 +138,7 @@ based on the cache block state and request information:
 When all operations required by a request are completed in the MSHR, the MSHR is
 released and waits to receive a new request.
 
-### Adopts a MESI-like cache coherence protocol
+### 采用类 MESI 的缓存一致性协议
 
 The cache subsystem of the Xiangshan core follows the rules of the TileLink
 consistency tree. The cache line states in CoupledL2 include N (Nothing), B
@@ -315,7 +315,7 @@ implemented as follows:
     response; for Acquire requests, L2 returns data and responses to the
     upstream node that issued the Acquire via the grantQueue queue.
 
-### Supports hardware handling of Cache aliases.
+### 支持硬件处理 Cache 别名
 
 The L1 Cache of the Xiangshan core adopts the VIPT indexing method, where the
 DCache is a 64KB 4-way set-associative structure. The index and block offset
