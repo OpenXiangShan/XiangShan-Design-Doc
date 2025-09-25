@@ -41,7 +41,7 @@
 
 L2 Cache 目前默认的 ECC 校验码为 SECDED。同时，L2 Cache 支持 parity、SEC 等校验码，可在 Configs 中修改，编译时进行配置。相关[校验算法参考](https://github.com/OpenXiangShan/Utility/blob/master/src/main/scala/utility/ECC.scala)
 
-SECDED 要求对于一个 n 位的数据，所需的校验位数 r 需要满足：  $ 2^r \geq n + r + 1 $ 
+SECDED 要求对于一个 $n$ 位的数据，所需的校验位数 $r$ 需要满足：  $ 2^r \geq n + r + 1 $ 
 
 #### ECC 处理流程
 
