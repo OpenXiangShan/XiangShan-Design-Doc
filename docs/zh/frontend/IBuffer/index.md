@@ -132,7 +132,8 @@ Bypass 逻辑主要在 bypassEntries 的选择和 numBypass计算。
 
 | 名称          | 描述                                               | 属性                                                |
 | ------------- | -------------------------------------------------- | --------------------------------------------------- |
-| deqPtr        | 出队指针，用于配合 enqPtr 计算队列 valid 个数      | 循环指针，循环范围为Size                            |
+| deqPtr        | 出队指针，即 deqPtrVec(0)                          | 循环指针，循环范围为 Size                           |
+| deqPtrVec     | 出队指针向量，用于配合 enqPtr 计算队列 valid 个数  | 共 DecodeWidth 个循环指针，循环范围为Size           |
 | deqBankPtr    | 出队通道指针，即 deqBankPtrVec(0)                  | 循环指针，循环范围为 numReadBanks                   |
 | deqBankPtrVec | 出队通道指针向量，表示出队通道对应的 Bank 号       | 共 DecodeWidth 个循环指针，循环范围为 numReadBanks  |
 | deqInBankPtr  | 出队 Bank 内指针，表示每个 Bank 内待出队数据的偏移 | 共 numReadBanks 个循环指针，循环范围为 ReadBankSize |
@@ -217,6 +218,14 @@ IBuffer 模块的 ready 信号会级联到 IFU 模块的 ready，路径较长，
 - nextNumInvalid = Size - nextNumValid
 - allowEnq := prevInstrCount < nextNumInvalid
 
+### 异常
+
+由于后端遇到异常会发送重定向，所以对于进入 IBuffer 的所有异常，理论上只需要保存遇到的第一个。我们首先计算出第一个异常所在入队项的偏移 offset。当使用bypass时，直接输出到 outputEntries(offset)；若不使用bypass，则通过 enqPtrVec(offset) 求出其对应的 IBuffer 下标，保存到寄存器 idx。在出队时匹配 deqPtrVec(i) 与 idx，若相等则将异常出队。
+
+实际上，IBuffer 在 IFU.s4 阶段接受数据，并且取值块中每条指令是否触发 RVCIllegalInstruction（即rvcIll） 在 IFU.s4 由 rvcExpander 当周期产生，如果通过优先编码器计算 EnqueueWidth 个 rvcIll 中第一个出现的 offset 再来索引 enqPtrVec，引入过多延迟。因此我们将每条指令的 rvcIll 存入 IBufEntry，而其他的异常只保存遇到的第一个。此时，异常只会发生在入队端口的第一条指令。若使用bypass，直接保存到 outputEntries(0)；若不使用bypass，则将 enqPtrVec(0) 保存到 idx。
+
+为了记录当前 IBuffer 中是否有已经寄存的异常，添加寄存器 firstHasExceptionExcludingRVCII，初始值为 false，表示没有已寄存的异常。当值为 false 时，保存异常的寄存器每周期更新。当有异常入队时，将其值置为 true；当有异常出队时，将值置为 false。注意，这里出队的优先级更高，因为理论上只要第一个异常成功出队，后续的异常可以视为不起作用。
+
 ### 冲刷
 
 冲刷时，需要将状态和指针复位，包括
@@ -227,6 +236,7 @@ IBuffer 模块的 ready 信号会级联到 IFU 模块的 ready，路径较长，
 - deqInBankPtr := 0.U
 - deqPtr := 0.U
 - outputEntries.foreach(_.valid := false.B)
+- firstHasExceptionExcludingRVCII := false.B
 
 ## 整体框图
 
