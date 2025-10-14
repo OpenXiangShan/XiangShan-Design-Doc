@@ -48,6 +48,8 @@ nav:
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
+    - 指令缓冲:
+      - frontend/IBuffer/index.md
     - PC类: 
       - frontend/Pruned_Address/index.md
   - 后端:
