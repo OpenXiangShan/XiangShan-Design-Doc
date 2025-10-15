@@ -18,7 +18,7 @@
 | ECC | Error Correction Code | 错误校验码 |
 | SECDED | Single Error Correct Double Error Detect | 单比特纠错双比特校验 |
 | TL | Tile Link | Tile Link 总线协议 |
-| CHI | | CHI 总线协议 | 
+| CHI | Coherent Hub Interface | CHI 总线协议 | 
 
 ## 设计规格
 
@@ -41,11 +41,11 @@
 
 L2 Cache 目前默认的 ECC 校验码为 SECDED。同时，L2 Cache 支持 parity、SEC 等校验码，可在 Configs 中修改，编译时进行配置。相关[校验算法参考](https://github.com/OpenXiangShan/Utility/blob/master/src/main/scala/utility/ECC.scala)
 
-SECDED 要求对于一个 n 位的数据，所需的校验位数 r 需要满足： 2^r \geq n + r + 1 
+SECDED 要求对于一个 $n$ 位的数据，所需的校验位数 $r$ 需要满足：  $ 2^r \geq n + r + 1 $ 
 
 #### ECC 处理流程
 
-L2 Cache 支持 ECC 功能。在 MainPipe 在 s3 向 Directory 和 DataStorage 重填数据时，会计算 tag 和 data 的校验码，前者与 tag 一起存入 Directory 中的 tagArray（SRAM），后者与 data 一起存入 DataStorage 中的 array（SRAM）
+L2 Cache 支持 ECC 功能。当 MainPipe 在 s3 向 Directory 和 DataStorage 重填数据时，会计算 tag 和 data 的校验码，前者与 tag 一起存入 Directory 中的 tagArray（SRAM），后者与 data 一起存入 DataStorage 中的 array（SRAM）
 
 1. 对于 tag，直接以 tag 为单元进行 ECC 编码/解码。
 2. 对于 data，基于物理设计以及更好检测错误的需求，目前将 data 划分成 dataBankBits（128 bits）的单元进行 ECC 编码/解码。因而在 SECDED 算法要求下，对于 1 个 512 bits 的 cache line，应该有 4 * 8 = 32 bits 校验位
