@@ -48,12 +48,12 @@
 
 | 指标名称                  | 说明                                                                 | 现有计算方式                                                                            |
 | ------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| refill                    | MissQueue 回填到 DCache 的次数                                       | missQueue.io.main_pipe_req.fire                                                         |
-| accuracy.total_prefetch   | MissQueue 分配给预取请求的项数                                       | alloc && io.req.valid && !io.req.bits.cancel && isFromL1Prefetch(io.req.bits.pf_source) |
-| accuracy.useful_prefetch  | 需求请求命中 Cache 预取块                                            | loadpipe 命中判定                                                                       |
-| timely.late_prefetch      | 预取器发出的请求命中 MissQueue                                       | missQueue 项分派判定                                                                    |
-| pollution.demand_miss     | 首次发出的需求访问缺失                                               | loadpipe 缺失判定                                                                       |
-| pollution.cache_pollution | 首次发出的需求访问缺失，但命中了因预取请求而换出的缓存行布隆过滤器中 | loadpipe 缺失和 bloomFilter 命中判定                                                    |
+| refill                    | MissQueue 回填到 DCache 的次数                                       | missQueue.io.main\_pipe\_req.fire                                                         |
+| accuracy.total\_prefetch   | MissQueue 分配给预取请求的项数                                       | alloc && io.req.valid && !io.req.bits.cancel && isFromL1Prefetch(io.req.bits.pf\_source) |
+| accuracy.useful\_prefetch  | 需求请求命中 Cache 预取块                                            | loadpipe 命中判定                                                                       |
+| timely.late\_prefetch      | 预取器发出的请求命中 MissQueue                                       | missQueue 项分派判定                                                                    |
+| pollution.demand\_miss     | 首次发出的需求访问缺失                                               | loadpipe 缺失判定                                                                       |
+| pollution.cache\_pollution | 首次发出的需求访问缺失，但命中了因预取请求而换出的缓存行布隆过滤器中 | loadpipe 缺失和 bloomFilter 命中判定                                                    |
 
 以 refill 8192 次为一次预取信息统计间隔。
 
@@ -77,17 +77,16 @@
 
 | 指标名称                             | 说明                                           | 现有计算方式    |
 | ------------------------------------ | ---------------------------------------------- | --------------- |
-| XSPerfHistogram parallel_misses_CPU  | L2 Cache MSHR 中 demand 缺失请求的持有周期     |                 |
-| 数                                   | MSHR 中各项判定                                |                 |
-| XSPerfHistogram parallel_misses_Pref | L2 Cache MSHR 中 prefetch 缺失请求的持有周期数 | MSHR 中各项判定 |
-| XSPerfHistogram parallel_misses_All  | L2 Cache MSHR 中各项缺失的持有周期数           | MSHR 中各项判定 |
+| XSPerfHistogram.parallel\_misses\_CPU  | L2 Cache MSHR 中 demand 缺失请求的持有周期数   | MSHR 中各项判定 |
+| XSPerfHistogram.parallel\_misses\_Pref | L2 Cache MSHR 中 prefetch 缺失请求的持有周期数 | MSHR 中各项判定 |
+| XSPerfHistogram.parallel\_misses\_All  | L2 Cache MSHR 中各项缺失的持有周期数           | MSHR 中各项判定 |
 
 **（3）预取**：在返回 dirResult 时统计 A 通道（channel 为 1）的不同来源访问数量、缺失数量；总的需求访问数量、预取发送数量、预取有用数量、预取迟到数量；以及不同预取器的发送数量 `Sent`、有用数量、迟到数量。
 
 | 指标名称                  | 说明                              | 现有计算方式                                 |
 | ------------------------- | --------------------------------- | -------------------------------------------- |
-| E2_L2AReqSource_XXX_Total | XXX 发起的 A 通道请求数量         | dirResult 判定                               |
-| E2_L2AReqSource_XXX_Miss  | XXX 发起的 A 通道请求但缺失的数量 | dirResult 判定                               |
+| E2\_L2AReqSource\_XXX\_Total | XXX 发起的 A 通道请求数量         | dirResult 判定                               |
+| E2\_L2AReqSource\_XXX\_Miss  | XXX 发起的 A 通道请求但缺失的数量 | dirResult 判定                               |
 | demandRequest             | 来自 CPU 的请求数量               | dirResult 判定                               |
 | l2prefetchSentXXX         | XXX预取器的预取发送数量           | dirResult 判定                               |
 | l2prefetchUsefulXXX       | XXX预取器的有用数量               | dirResult 判定                               |
