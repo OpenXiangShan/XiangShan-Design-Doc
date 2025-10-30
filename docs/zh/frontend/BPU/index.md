@@ -8,13 +8,13 @@
 | -------- | ------------------------------------------------- | ------------------------------------------------------ |
 | BPU      | Branch Prediction Unit                            | 分支预测单元                                           |
 | IFU      | Instruction Fetch Unit                            | 取指单元                                               |
-| FTQ      | Fetch Target Queue                                | 取指目标单元                                           |
-| uFTB     | Micro Fetch Target Buffer                         | 分支目标缓冲                                           |
+| FTQ      | Fetch Target Queue                                | 取指目标队列                                           |
+| uFTB     | Micro Fetch Target Buffer                         | 微取值目标缓冲                                         |
 | FTB      | Fetch Target Buffer                               | 取指目标缓冲                                           |
 | TAGE     | TAgged GEometric length predictor                 | 一种条件分支预测器                                     |
 | SC       | statistical corrector predictor                   | 一种用于在统计偏向情况下纠正 TAGE 预测的条件分支预测器 |
 | ITTAGE   | Indirect Target TAgged GEometric length predictor | 一种用于预测间接跳转指令目标地址的分支预测器           |
-| RAS      | Return Address Stack                              | 一种用于预测调用指令对应返回指令目标地址的分支预测器   |
+| RAS      | Return Address Stack                              | 一种用于预测调用(CALL)指令返回地址的分支预测器         |
 
 ## 设计规格
 
