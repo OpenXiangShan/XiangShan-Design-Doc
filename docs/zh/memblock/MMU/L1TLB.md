@@ -24,7 +24,7 @@
 
 ### 接收 Frontend 和 MemBlock 的地址翻译请求
 
-在核内进行内存读写，包括前端取指和后端访存前，都需要由 L1 TLB 进行地址翻译。因物理距离较远，并且为了避免相互污染，分为前端取指的 ITLB（Instruction TLB）和后端访存的 DTLB（Data TLB）。ITLB 采用全相联模式，48 项全相联保存全部大小页。ITLB 接收来自 Frontend 的地址翻译请求，itlb_requestors(0) 至 itlb_requestors(2) 来自 icache，其中 itlb_requestors(2) 为 icache 的预取请求；itlb_requestors(3) 来自 ifu，为 MMIO 指令的地址翻译请求。
+在核内进行内存读写，包括前端取指和后端访存前，都需要由 L1 TLB 进行地址翻译。因物理距离较远，并且为了避免相互污染，分为前端取指的 ITLB（Instruction TLB）和后端访存的 DTLB（Data TLB）。ITLB 采用全相联模式，48 项全相联保存全部大小页。ITLB 接收来自 Frontend 的地址翻译请求，itlb_requestors(0) 至 itlb_requestors(1) 来自 icache 中的 IPrefetch；itlb_requestors(2) 来自 ifu，为 MMIO 指令的地址翻译请求，特别地，对 MMIO 使用阻塞式 ITLB 进行地址翻译。
 
 ITLB 的项配置和请求来源分别如 [@tbl:ITLB-config;@tbl:ITLB-request-source]。
 
@@ -39,14 +39,13 @@ Table: ITLB 的请求来源 {#tbl:ITLB-request-source}
 
 |   **序号**    |       **来源**       |
 |:-------------:|:--------------------:|
-| requestors(0) |   Icache, mainPipe   |
-| requestors(1) |   Icache, mainPipe   |
-| requestors(2) | Icache, fdipPrefetch |
-| requestors(3) |         IFU          |
+| requestors(0) |   Icache   |
+| requestors(1) |   Icache   |
+| requestors(2) |         IFU          |
 
-香山的访存通道访存拥有 2 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride 预取器。为应对众多请求，两条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB，均采用 PLRU 替换算法（参见 5.1.1.2 节）。
+香山的访存通道访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream 预取器以及。为应对众多请求，三条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB，均采用 PLRU 替换算法（参见 5.1.1.2 节）。
 
-DTLB 采用全相联模式，48 项全相联保存全部大小页。DTLB 接收来自 MemBlock 的地址翻译请求，dtlb_ld 接收来自 loadUnits 和 L1 Load stream & stride 预取器的请求，负责 Load 指令的地址翻译；dtlb_st 接收 StoreUnits 的请求，负责 Store 指令的地址翻译。特别地，对于 AMO 指令，会使用 loadUnit(0) 的 dtlb_ld_requestor，向 dtlb_ld 发送请求。SMSPrefetcher 会向单独的 DTLB 发送预取请求。
+DTLB 采用全相联模式，48 项全相联保存全部大小页。DTLB 接收来自 MemBlock 的地址翻译请求，dtlb_ld 接收来自 loadUnits, vSegmentUnit 和 L1 Load stream & stride 预取器的请求，负责 Load 指令的地址翻译；dtlb_st 接收 StoreUnits 的请求，负责 Store 指令的地址翻译。特别地，对于 AMO 指令，会使用 loadUnit(0) 的 dtlb_ld_requestor，向 dtlb_ld 发送请求。SMSPrefetcher 与来自 L2 的预取会向单独的 DTLB 发送预取请求。
 
 DTLB 的项配置和请求来源分别如 [@tbl:DTLB-config;@tbl:DTLB-request-source]。
 
@@ -62,7 +61,7 @@ Table: DTLB 的请求来源 {#tbl:DTLB-request-source}
 | **模块** |     **序号**     |             **来源**             |
 |:--------:|:----------------:|:--------------------------------:|
 | DTLB_LD  |                  |                                  |
-|          | ld_requestors(0) |     loadUnit(0), AtomicsUnit     |
+|          | ld_requestors(0) |loadUnit(0), AtomicsUnit, VsegmentUnit|
 |          | ld_requestors(1) |           loadUnit(1)            |
 |          | ld_requestors(2) |           loadUnit(2)            |
 |          | ld_requestors(3) | L1 Load stream & stride Prefetch |
@@ -106,19 +105,19 @@ Table: ITLB 和 DTLB 的回填策略 {#tbl:L1TLB-refill-policy}
 
 南湖架构的上述功能通过 TLB 实现，TLB 会通过一些控制逻辑，当 ITLB 发生缺失后，持续等待通过 PTW 取回页表项。昆明湖的上述功能通过 ICache 保证，当 ITLB 发生缺失、并报给 ICache 后，ICache 会持续重发同一条请求，直至 hit，保证非阻塞式访问的效果。
 
-但需要注意，昆明湖架构的 ITLB 和 DTLB 都是非阻塞的，无论外部效果是阻塞式或非阻塞式，均由取指单元或访存单元控制。
+但需要注意，昆明湖架构的 DTLB 是非阻塞的，ITLB的前两个通道是非阻塞的，但是对于MMIO的地址翻译请求，ITLB是阻塞式的。
 
 ### L1 TLB 表项的存储结构
 
 香山的 TLB 可以对组织结构进行配置，包括相联模式、项数及替换策略等。默认配置为：ITLB 和 DTLB 均为 48 项全相联结构，且均由寄存器堆实现（参见 5.1.2.3 节）。如果在同一拍对某地址同时读写，可以通过 bypass 直接得到结果。
 
-参考的 ILTB 或 DTLB 配置：均采用全相联结构，项数 8 / 16 / 32 / 48。目前并不支持参数化修改全相联 / 组相联 / 直接映射的 TLB 结构，需要手动修改代码。
+参考的 ITLB 或 DTLB 配置：均采用全相联结构，项数 8 / 16 / 32 / 48。目前并不支持参数化修改全相联 / 组相联 / 直接映射的 TLB 结构，需要手动修改代码。
 
 ### 支持在 L1 TLB 内部判断虚存是否开启以及两个阶段翻译是否开启
 
-香山支持 RISC-V 手册中的 Sv39 页表，虚拟地址长度为 39 位。香山的物理地址为 36 位，可参数化修改。
+香山支持 RISC-V 手册中的 Sv39/Sv48 页表，虚拟地址长度为 39/48 位。香山的物理地址为 48 位，可参数化修改。
 
-虚存是否开启需要根据特权级和 SATP 寄存器的 MODE 域等共同决定，这一判断在 TLB 内部完成，对 TLB 外透明。关于特权级的描述，参见 5.1.2.7 节；关于 SATP 的 MODE 域，香山的昆明湖架构只支持 MODE 域为 8，也就是 Sv39 分页机制，否则会上报 illegal instruction fault。在 TLB 外的模块（Frontend、LoadUnit、StoreUnit、AtomicsUnit 等）看来，所有地址都经过了 TLB 的地址转换。
+虚存是否开启需要根据特 权级和 SATP 寄存器的 MODE 域等共同决定，这一判断在 TLB 内部完成，对 TLB 外透明。关于特权级的描述，参见 5.1.2.7 节；关于 SATP 的 MODE 域，香山的昆明湖架构支持 MODE 域为 8/9，也就是 Sv39/Sv48 分页机制，否则会上报 illegal instruction fault。在 TLB 外的模块（Frontend、LoadUnit、StoreUnit、AtomicsUnit 等）看来，所有地址都经过了 TLB 的地址转换。
 
 当添加了 H 拓展后，地址翻译是否启用还需要判断是否有两阶段地址翻译，两阶段地址翻译开启有两个请求，第一个是此时执行的是虚拟化访存指令，第二个是虚拟化模式开启并且此时 VSATP 或者 HGATP 的 MODE 不为零。此时的翻译模式有以下几种。翻译模式用于在 TLB 中查找对应类型的页表以及向 L2TLB 发送的 PTW 请求。
 
@@ -132,7 +131,7 @@ Table: 两阶段翻译模式
 
 ### L1 TLB 的特权级
 
-根据 Riscv 手册要求，前端取指（ITLB）的特权级为当前处理器特权级，后端访存（DTLB）的特权级为访存执行有效特权级。当前处理器特权级和访存执行有效特权级均在 CSR 模块中判断，传递到 ITLB 和 DTLB 中。当前处理器特权级保存在 CSR 模块中；访存执行有效特权级由 mstatus 寄存器的 MPRV、MPV 和 MPP 位以及 hstatus 的 SPVP 共同决定。如果执行虚拟化访存指令，则访存执行有效特权级为 hstatus 的 SPVP 位保存的特权级，如果执行的指令不是虚拟化访存指令，MPRV 位为 0，则访存执行有效特权级和当前处理器特权级相同，访存执行有效虚拟化模式也与当前虚拟化模式一致；如果 MPRV 位为 1，则访存执行有效特权级为 mstatus 寄存器的 MPP 中保存的特权级，访存执行有效虚拟化模式位 hstatus 寄存器的 MPV 保存的虚拟化模式。ITLB 和 DTLB 的特权级如表所示。
+根据 RISC-V 手册要求，前端取指（ITLB）的特权级为当前处理器特权级，后端访存（DTLB）的特权级为访存执行有效特权级。当前处理器特权级和访存执行有效特权级均在 CSR 模块中判断，传递到 ITLB 和 DTLB 中。当前处理器特权级保存在 CSR 模块中；访存执行有效特权级由 mstatus 寄存器的 MPRV、MPV 和 MPP 位以及 hstatus 的 SPVP 共同决定。如果执行虚拟化访存指令，则访存执行有效特权级为 hstatus 的 SPVP 位保存的特权级，如果执行的指令不是虚拟化访存指令，MPRV 位为 0，则访存执行有效特权级和当前处理器特权级相同，访存执行有效虚拟化模式也与当前虚拟化模式一致；如果 MPRV 位为 1，则访存执行有效特权级为 mstatus 寄存器的 MPP 中保存的特权级，访存执行有效虚拟化模式位 hstatus 寄存器的 MPV 保存的虚拟化模式。ITLB 和 DTLB 的特权级如表所示。
 
 Table: ITLB 和 DTLB 的特权级
 
@@ -209,6 +208,14 @@ pmm 的值可能来自于 mseccfg/menvcfg/henvcfg/senvcfg 的 PMM（[33:32]）�
 1. 对于开启虚存的非虚拟化场景，或虚拟化场景的非 onlyStage2（vsatp 的 mode 不为 0）情况；根据 pmm 的值为 2 或 3，分别对地址的高 7 或 16 位做符号扩展
 2. 对于虚拟化场景的 onlyStage2 情况，或未开启虚存，根据 pmm 的值为 2 或 3，分别对地址的高 7 或 16 位做零扩展
 
+### 支持 Svnapot 拓展
+
+目前香山还支持 Svnapot 拓展。
+
+Svnapot 拓展的目的是将一段连续的页（2的幂次个）用一个页表项表示，减少 TLB 的压力，在 PTE 中，第 63 位为 1 时表示这个页表项为 NAPOT 页表项，一个 NAPOT 页表项的 PPN 低 4 位设置 NAPOT 表示的连续地址空间，例如 ppn 低 4 位为 1000 时，表示这个是一个 64KB 大小的页表项，在香山中，目前只支持表示 64KB 大小的 NAPOT 页表项。
+
+在 TLB 中，同样设置一个 N 位表示 NAPOT 属性，在命中匹配时，对于普通 4KB 的页，通过对比 tag 低 6 位与 vpn 的 [8:3] 位进行命中匹配，如果 TLB 项的 N 位为 1， 通过对比 tag 的 [6:1] 位与 vpn 的 [8:4] 位进行匹配，因为 NAPOT 页覆盖了 16 个连续的 4KB 页。在生成物理地址时，NAPOT 页会用 vpn 的低 4 位替换生成 ppn 的低 4 位。
+
 ### 支持 TLB 压缩
 
 ![TLB 压缩示意图](figure/image18.png)
@@ -217,21 +224,21 @@ pmm 的值可能来自于 mseccfg/menvcfg/henvcfg/senvcfg 的 PMM（[33:32]）�
 
 也就是说，对于虚拟页号高位相同的页表项，当这些页表项的物理页号高位和页表属性也相同时，可以将这些页表项压缩为一项保存，从而提升 TLB 的有效容量。压缩后的 TLB 项共用物理页号高位以及页表属性位，每个页表单独拥有物理页号低位，并通过 valid 表示该页表在压缩后的 TLB 项中有效，如表 5.1.8。
 
-表 5.1.8 展示了压缩前后的对比，压缩前的 tag 即为 vpn，压缩后的 tag 为 vpn 的高 24 位，低 3 位无需保存，事实上连续 8 项页表的第 i 项，i 即为 tag 的低 3 位。ppn 高 21 位相同，ppn_low 分别保存 8 项页表的 ppn 低 3 位。Valididx 表示这 8 项页表的有效性，只有 valididx(i) 为 1 时才有效。pteidx(i) 代表原始请求对应的第 i 项，即原始请求 vpn 的低 3 位的值。
+表 5.1.8 展示了压缩前后的对比，压缩前的 tag 即为 vpn，压缩后的 tag 为 vpn 的高 vpnLen - 3 位，低 3 位无需保存，事实上连续 8 项页表的第 i 项，i 即为 tag 的低 3 位。ppn 高 ppnLen - 3 位相同，ppn_low 分别保存 8 项页表的 ppn 低 3 位。Valididx 表示这 8 项页表的有效性，只有 valididx(i) 为 1 时才有效。pteidx(i) 代表原始请求对应的第 i 项，即原始请求 vpn 的低 3 位的值。
 
-这里举例进行说明。例如，某 vpn 为 0x0000154，低三位为 100，即 4。当回填入 L1 TLB 后，会将 vpn 为 0x0000150 到 0x0000157 的 8 项页表均回填，且压缩为 1 项。例如，vpn 为 0x0000154 的 ppn 高 21 位为 PPN0，页表属性位为 PERM0，如果这 8 项页表的第 i 项 ppn 高 21 位和页表属性也为 PPN0 和 PERM0，则 valididx(i) 为 1，通过 ppn_low(i) 保存第 i 项页表的低 3 位。另外，pteidx(i) 代表原始请求对应的第 i 项，这里原始请求的 vpn 低三位为 4，因此 pteidx(4) 为 1，其余 pteidx(i) 均为 0。
+这里举例进行说明。例如，某 vpn 为 0x0000154，低三位为 100，即 4。当回填入 L1 TLB 后，会将 vpn 为 0x0000150 到 0x0000157 的 8 项页表均回填，且压缩为 1 项。例如，vpn 为 0x0000154 的 ppn 高位为 PPN0，页表属性位为 PERM0，如果这 8 项页表的第 i 项 ppn 高位和页表属性也为 PPN0 和 PERM0，则 valididx(i) 为 1，通过 ppn_low(i) 保存第 i 项页表的低 3 位。另外，pteidx(i) 代表原始请求对应的第 i 项，这里原始请求的 vpn 低三位为 4，因此 pteidx(4) 为 1，其余 pteidx(i) 均为 0。
 
-另外，TLB 不会对查询结果为大页（1GB、2MB）情况进行压缩。对于大页，返回时会将 valididx(i) 的每一位都设置为 1，根据页表查询规则，大页事实上不会使用 ppn_low，因此 ppn_low 的值可以为任意值。
+另外，TLB 不会对查询结果为大页（1GB、2MB）情况或者 NAPOT 页进行压缩。对于大页，返回时会将 valididx(i) 的每一位都设置为 1，根据页表查询规则，大页事实上不会使用 ppn_low，因此 ppn_low 的值可以为任意值。
 
 Table: TLB 压缩前后每项存储的内容
 
-| **是否压缩** | **tag** | **asid** | **level** | **ppn** | **perm** | **valididx** | **pteidx** | **ppn_low** |
-|:--------:|:------:|:-----:|:-----:|:-----:|:--------:|:-------:|:------:|:-------:|
-| 否 | 27 位 | 16 位 | 2 位 | 24 位 | 页表属性 | 不保存 | 不保存 | 不保存 |
-| 是 | 24 位 | 16 位 | 2 位 | 21 位 | 页表属性 | 8 位 | 8 位 | 8×3 位 |
+| **是否压缩** | **tag** | **asid** | **level** | **ppn** | **n** | **perm** | **valididx** | **pteidx** | **ppn_low** |
+|:--------:|:------:|:-----:|:-----:|:-----:|:---:|:--------:|:-------:|:------:|:-------:|
+| 否 | 27/36 位 | 16 位 | 2 位 | 24/44 位 | 1位 | 页表属性 | 不保存 | 不保存 | 不保存 |
+| 是 | 24/33 位 | 16 位 | 2 位 | 21/41 位 | 1位 | 页表属性 | 8 位 | 8 位 | 8×3 位 |
 
 
-在实现 TLB 压缩后，L1 TLB 的命中条件由 TAG 命中，变为 TAG 命中（vpn 高位匹配），同时还需满足用 vpn 低 3 位索引的 valididx(i) 有效。PPN 由 ppn（高 21 位）与 ppn_low(i) 拼接得到。
+在实现 TLB 压缩后，L1 TLB 的命中条件由 TAG 命中，变为 TAG 命中（vpn 高位匹配），同时还需满足用 vpn 低 3 位索引的 valididx(i) 有效。PPN 由 ppn（高位）与 ppn_low(i) 拼接得到。
 
 但注意的是，添加 H 拓展后，L1TLB 的项分为四种类型，TLB 压缩机制虚拟化的 TLB 项中不启用（但 TLB 压缩在 L2TLB 中仍然使用），接下来会详细介绍这四种类型。
 
@@ -245,12 +252,12 @@ Table: TLB 压缩前后每项存储的内容
 
 Table: TLB 项的类型
 
-| **类型** | **s2xlate** | **tag** | **ppn** | **perm** | **g_perm** | **level** |
-|:---------:|:-----:|:------------:|:-----------:|:--------:|:--------:|:---------:|
-| noS2xlate | b00 | 非虚拟化下的虚拟页号 | 非虚拟化下的物理页号 | 非虚拟化下的页表项 perm | 不使用 | 非虚拟化下的页表项 level |
-| allStage | b11 | 第一阶段页表的虚拟页号 | 第二阶段页表的物理页号 | 第一阶段页表的 perm | 第二阶段页表的 perm | 两阶段翻译中最大的 level |
-| onlyStage1 | b01 | 第一阶段页表的虚拟页号 | 第一阶段页表的物理页号 | 第一阶段页表的 perm | 不使用 | 第一阶段页表的 level |
-| onlyStage2 | b10 | 第二阶段页表的虚拟页号 | 第二阶段页表的物理页号 | 不使用 | 第二阶段页表的 perm | 第二阶段页表的 level |
+| **类型** | **s2xlate** | **tag** | **ppn** | **n** | **perm** | **g_perm** | **level** |
+|:---------:|:-----:|:------------:|:-----------:|:------:|:--------:|:--------:|:---------:|
+| noS2xlate | b00 | 非虚拟化下的虚拟页号 | 非虚拟化下的物理页号 | NAPOT属性 | 非虚拟化下的页表项 perm | 不使用 | 非虚拟化下的页表项 level |
+| allStage | b11 | 第一阶段页表的虚拟页号 | 第二阶段页表的物理页号 | NAPOT属性 | 第一阶段页表的 perm | 第二阶段页表的 perm | 两阶段翻译中最大的 level |
+| onlyStage1 | b01 | 第一阶段页表的虚拟页号 | 第一阶段页表的物理页号 | NAPOT属性 | 第一阶段页表的 perm | 不使用 | 第一阶段页表的 level |
+| onlyStage2 | b10 | 第二阶段页表的虚拟页号 | 第二阶段页表的物理页号 | NAPOT属性 | 不使用 | 第二阶段页表的 perm | 第二阶段页表的 level |
 
 
 其中 TLB 压缩技术在 noS2xlate 和 onlyStage1 中启用，在其他情况下不启用，allStage 和 onlyS2xlate 情况下，L1TLB 的 hit 机制会使用 pteidx 来计算有效 pte 的 tag 与 ppn，这两种情况在重填的时候也会有所区别。此外，asid 在 noS2xlate、allStage、onlyStage1 中有效，vmid 在 allStage、onlyStage2 中有效。
@@ -263,19 +270,27 @@ Table: TLB 项的类型
 
 对于 noS2xlate 和 onlyStage1 的情况，只需要将 s1 的结果填入 TLB 项中即可，写入方法与原先的设计类似，将返回的 s1 的对应字段填入 entry 的对应字段即可。需要注意的是，noS2xlate 的时候，vmid 字段无效。
 
-对于 onlyS2xlate 的情况，我们将 s2 的结果给填入 TLB 项，这里由于要符合 TLB 压缩的结构，所以需要进行一些特殊处理。首先该项的 asid、perm 不使用，所以我们不关心此时填入的什么值，vmid 填入 s1 的 vmid（由于 PTW 模块无论什么情况都会填写这个字段，所以可以直接使用这个字段写入）。将 s2 的 tag 填入 TLB 项的 tag，pteidx 根据 s2 的 tag 的低 sectortlbwidth 位来确定，如果 s2 是大页，那么 TLB 项的 valididx 均为有效，否则 TLB 项的 pteidx 对应 valididx 有效。关于 ppn 的填写，复用了 allStage 的逻辑，将在 allStage 的情况下介绍。
+对于 onlyS2xlate 的情况，我们将 s2 的结果给填入 TLB 项，这里由于要符合 TLB 压缩的结构，所以需要进行一些特殊处理。首先该项的 asid、perm 不使用，所以我们不关心此时填入的什么值，vmid、n 填入 s2 的 vmid、n。将 s2 的 tag 填入 TLB 项的 tag，pteidx 根据 s2 的 tag 的低 sectortlbwidth 位来确定，如果 s2 是大页，那么 TLB 项的 valididx 均为有效，否则 TLB 项的 pteidx 对应 valididx 有效。关于 ppn 的填写，复用了 allStage 的逻辑，将在 allStage 的情况下介绍。
 
-对于 allStage，需要将两阶段的页表进行融合，首先根据 s1 填入 tag、asid、vmid 等，由于只有一个 level，level 填入 s1 和 s2 最大的值，这是考虑到如果存在第一阶段是大页和第二阶段是小页的情况，可能会导致某个地址进行查询的时候 hit 大页，但实际已经超出了第二阶段页表的范围，对于这种请求的 tag 也要进行融合，比如第一个 tag 是一级页表，第二个 tag 是二级页表，我们需要取第一个 tag 的第一级页号与第二个 tag 的第二级页号拼合（第三级页号可以直接补零）得到新页表的 tag。此外，还需要填入 s1 和 s2 的 perm 以及 s2xlate，对于 ppn，由于我们不保存客户机物理地址，所以对于第一阶段小页和第二阶段大页的情况，如果直接存储 s2 的 ppn 会导致查询到该页表时计算得到的物理地址出错，所以首先要根据 s2 的 level 将 s2 的 tag 与 ppn 拼接一下，s2ppn 为高位 ppn，s2ppn_tmp 则是为了计算低位构造出来的，然后高位填入 TLB 项的 ppn 字段，低位填入 TLB 项的 ppn_low 字段。
+对于 allStage，需要将两阶段的页表进行融合，首先根据 s1 填入 tag、asid、vmid 等，由于只有一个 level，level 填入 s1 和 s2 最小的值，这是考虑到如果存在第一阶段是大页和第二阶段是小页的情况，可能会导致某个地址进行查询的时候 hit 大页，但实际已经超出了第二阶段页表的范围，对于这种请求的 tag 也要进行融合，比如第一个 tag 是一级页表，第二个 tag 是二级页表，我们需要取第一个 tag 的第一级页号与第二个 tag 的第二级页号拼合（第三级页号可以直接补零）得到新页表的 tag。此外，还需要填入 s1 和 s2 的 perm 以及 s2xlate，对于 ppn，由于我们不保存客户机物理地址，所以对于第一阶段小页和第二阶段大页的情况，如果直接存储 s2 的 ppn 会导致查询到该页表时计算得到的物理地址出错，所以首先要根据 s2 的 level 将 s2 的 tag 与 ppn 拼接一下，s2ppn 为高位 ppn，s2ppn_tmp 则是为了计算低位构造出来的，然后高位填入 TLB 项的 ppn 字段，低位填入 TLB 项的 ppn_low 字段。对于填入的 n，以下几种情况认为 n 位为 1：
+1. 当 stage1 的 n 位为 1 且 stage2 不是叶节点时。
+2. 当 stage2 的 n 位位 1 且 stage1 不是叶节点时。
+3. 当 stage1 与 stage2 的 n 位都为 1 时。
+
+特别的，对于存在异常的 allStage，若 stage1 出现异常，填入的 level 应写回为 s1_level，若 stage2 出现异常：
+1. 若 stage1 是 fakePTE，level 应写回为 stage1 和 stage2 中的最大值（表明 vsatp 配置错误）。
+2. 若 stage1 是非叶节点，level 应写回为 s1_level。
+3. 若 stage1 是叶节点，level 应写回为 stage1 和 stage2 中的最小值。
 
 ### TLB 项的 hit 的判断逻辑
 
 L1TLB 中使用的 hit 有三种，查询 TLB 的 hit，填写 TLB 的 hit，以及 PTW 请求 resp 时的 hit。
 
-对于查询 TLB 的 hit，新增了 vmid，hasS2xlate，onlyS2，onlyS1 等参数。Asid 的 hit 在第二阶段翻译的时候一直为 true。H 拓展中增加了 pteidx hit，在小页并且在 allStage 和 onlyS2 的情况下启用，用来屏蔽掉 TLB 压缩机制。
+对于查询 TLB 的 hit，新增了 vmid，hasS2xlate，onlyS2，onlyS1 等参数。Asid 的 hit 在第二阶段翻译的时候一直为 true。H 拓展中增加了 pteidx hit，在小页、n 位为 0 并且在 allStage 和 onlyS2 的情况下启用，用来屏蔽掉 TLB 压缩机制。
 
 对于填写 TLB 的 hit（wbhit），输入是 PtwRespS2，需要判断当前的进行对比的 vpn，如果是只有第二阶段的翻译，则使用 s2 的 tag 的高位，其他情况使用 s1vpn 的 tag，然后在低 sectortlbwidth 位补上 0，然后使用 vpn 与 TLB 项的 tag 进行对比。H 拓展对 wb_valid 的判断进行了修改，并且新增了 pteidx_hit 和 s2xlate_hit。如果是只有第二阶段翻译的 PTW resp，则 wb_valididx 根据 s2 的 tag 来确定，否则直接连接 s1 的 valididx。s2xlate hit 则是对比 TLB 项的 s2xlate 与 PTW resp 的 s2xlate，用来筛选 TLB 项的类型。pteidx_hit 则是为了无效 TLB 压缩，如果是只有第二阶段翻译，则对比 s2 的 tag 的低位与 TLB 项的 pteidx，其他的两阶段翻译情况则对比 TLB 项的 ptedix 和 s1 的 pteidx。
 
-对于 PTW 请求的 resp hit，主要用于 PTW resp 的时候判断此时 TLB 发送的 PTW req 是否正好与该 resp 对应或者判断在查询 TLB 的时候 PTW resp 是否是 TLB 这个请求需要的 PTW 结果。该方法在 PtwRespS2 中定义，在该方法内部分为三种 hit，对于 noS2_hit（noS2xlate），只需要判断 s1 是否 hit 即可，对于 onlyS2_hit（onlyStage2），则判断 s2 是否 hit 即可，对于 all_onlyS1_hit（allStage 或者 onlyStage1），需要重新设计 vpnhit 的判断逻辑，不能简单判断 s1hit，判断 vpn_hit 的 level 应该取用 s1 和 s2 的最大值，然后根据 level 来判断 hit，并且增加 vasid（来自 vsatp）的 hit 和 vmid 的 hit。
+对于 PTW 请求的 resp hit，主要用于 PTW resp 的时候判断此时 TLB 发送的 PTW req 是否正好与该 resp 对应或者判断在查询 TLB 的时候 PTW resp 是否是 TLB 这个请求需要的 PTW 结果。该方法在 PtwRespS2 中定义，在该方法内部分为三种 hit，对于 noS2_hit（noS2xlate），只需要判断 s1 是否 hit 即可，对于 onlyS2_hit（onlyStage2），则判断 s2 是否 hit 即可，对于 all_onlyS1_hit（allStage 或者 onlyStage1），需要重新设计 vpnhit 的判断逻辑，不能简单判断 s1hit，判断 vpn_hit 的 level 应该取用 s1 和 s2 的最小值，然后根据 level 来判断 hit，并且增加 vasid（来自 vsatp）的 hit 和 vmid 的 hit。
 
 ### 支持客户机缺页后重新发送 PTW 获取 gpaddr
 
@@ -284,19 +299,27 @@ L1TLB 中使用的 hit 有三种，查询 TLB 的 hit，填写 TLB 的 hit，以
 Table: 获取 gpaddr 的新增 Reg
 
 |    **名称**     | **类型** |                 **作用**                  |
-|:---------------:|:--------:|:-----------------------------------------:|
-|    need_gpa     |   Bool   |     表示此时有一个请求正在获取 gpaddr      |
-| need_gpa_robidx |  RobPtr  |         获取 gpaddr 的请求的 robidx          |
-|  need_gpa_vpn   |  vpnLen  |           获取 gpaddr 的请求的 vpn           |
-|  need_gpa_gvpn  |  vpnLen  |          存储获取的 gpaddr 的 gvpn           |
-| need_gpa_refill |   Bool   | 表示该请求的 gpaddr 已经被填入 need_gpa_gvpn |
+|:---------------:|:---------------:|:-----------------------------------------:|
+|    need_gpa     |   Bool          |     表示此时有一个请求正在获取 gpaddr      |
+| need_gpa_robidx |  RobPtr         |         获取 gpaddr 的请求的 robidx          |
+|  need_gpa_vpn   |  vpnLen         |           获取 gpaddr 的请求的 vpn           |
+|  need_gpa_gvpn  |  vpnLen         |          存储获取的 gpaddr 的 gvpn           |
+| need_gpa_refill |   Bool          | 表示该请求的 gpaddr 已经被填入 need_gpa_gvpn |
+| resp_s1_level   | log2Up(Level+1) |    存储 s1 页表的 level，用于计算 gpaddr |
+| resp_s1_isLeaf  | Bool            |    存储 s1 是否为叶子节点    |
+| resp_s1_isFakePte  | Bool         |    存储 s1 是否为假 PTE    |
+| need_clear_need_gpa  | Bool       |    用于 PTW 快速命中时快速清除 need_gpa   |
 
 
-当一个 TLB 请求查询出来的 TLB 项出现了客户机缺页，则需要重新进行 PTW，此时会把 need_gpa 有效，将请求的 vpn 填入 need_gpa_vpn，将请求的 robidx 填入 need_gpa_robidx，初始化 resp_gpa_refill 为 false。当 PTW resp，并且通过 need_gpa_vpn 判断是之前发送的获取 gpaddr 的请求，则将 PTW resp 的 s2 tag 填入 need_gpa_gvpn，并且将 need_gpa_refill 有效，表示已经获取到 gpaddr 的 gvpn，当之前的请求重新进入 TLB 的时候，就可以使用这个 need_gpa_gvpn 来计算出 gpaddr 并且返回，当一个请求完成以上过程后，将 need_gpa 无效掉。这里的 resp_gpa_refill 依旧有效，所以重填的 gvpn 可能被其他的 TLB 请求使用（只要跟 need_gpa_vpn 相等）。
+当一个 TLB 请求查询出来的 TLB 项出现了客户机缺页，则需要重新进行 PTW，此时会把 need_gpa 有效，将请求的 vpn 填入 need_gpa_vpn，将请求的 robidx 填入 need_gpa_robidx，初始化 resp_gpa_refill 为 false。
+
+当 TLB 请求与 PTW resp 在同一周期到达且 PTW bypass 命中时（p_hit_fast），可以直接获取 gpaddr 相关信息。此时设置 need_clear_need_gpa，在下一周期清除 need_gpa 状态，无需等待请求重发。
+
+当 PTW resp，并且通过 need_gpa_vpn 判断是之前发送的获取 gpaddr 的请求，若 resp 为处于 OnlyStage2，则将 PTW resp 的 s2 tag 填入 need_gpa_gvpn，否则通过 need_gpa_vpn 计算出 resp_gpa_gvpn，并且将 need_gpa_refill 有效，表示已经获取到 gpaddr 的 gvpn，当之前的请求重新进入 TLB 的时候，就可以使用这个 need_gpa_gvpn 来计算出 gpaddr 并且返回，当一个请求完成以上过程后，将 need_gpa 无效掉。这里的 resp_gpa_refill 依旧有效，所以重填的 gvpn 可能被其他的 TLB 请求使用（只要跟 need_gpa_vpn 相等）。
 
 此外可能出现 redirect 的情况，导致整个指令流变化，之前获取 gpaddr 的请求不会再进入 TLB，所以如果出现 redirect 就根据我们保存的 need_gpa_robidx 来判断是否需要无效掉 TLB 内与获取 gpaddr 有关的寄存器。
 
-此外为了保证获取 gpaddr 的 PTW 请求返回的时候不会 refill TLB，在发送 PTW 请求的时候添加了一个新的 output 信号 getGpa，该信号传递的路径与 memidx 类似，可以参考 memidx，该信号会传入 Repeater 内，当 PTW resp 回 TLB 的时候，该信号也会发送回来，如果该信号有效，则表明这个 PTW 请求只是为了获取 gpaddr，所以此时不会重填 TLB。
+此外为了保证获取 gpaddr 的 PTW 请求返回的时候不会 refill TLB，由于 need_gpa 是寄存器，在设置的同一周期无法阻止 refill。因此新增 maybe_need_gpa_not_allow_refill 组合逻辑信号，用于在触发 need_gpa 的同周期立即阻止 TLB refill。在发送 PTW 请求的时候添加了一个新的 output 信号 getGpa，该信号传递的路径与 memidx 类似，可以参考 memidx，该信号会传入 Repeater 内，当 PTW resp 回 TLB 的时候，该信号也会发送回来，如果该信号有效，则表明这个 PTW 请求只是为了获取 gpaddr，所以此时不会重填 TLB。
 
 关于发生 guest page fault 后获取 gpaddr 的处理流程，这里对于一些关键点做再次说明：
 
@@ -316,7 +339,7 @@ Table: 获取 gpaddr 的新增 Reg
 
 ## 整体框图
 
-L1 TLB 的整体框图如 [@fig:L1TLB-overall] 所述，包括绿框中的 ITLB 和 DTLB。ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括 ICache 的 3 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 2 个请求（AtomicsUnit 占用 LoadUnit 的 1 个请求通道）、L1 Load Stream & Stride prefetch 的 1 个请求，StoreUnit 的 2 个请求，以及 SMSPrefetcher 的 1 个请求。
+L1 TLB 的整体框图如 [@fig:L1TLB-overall] 所述，包括绿框中的 ITLB 和 DTLB。ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括 ICache 的 2 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 3 个请求（AtomicsUnit 与 VsegmentUnit 占用 LoadUnit 的 1 个请求通道）、L1 Load Stream & Stride prefetch 的 1 个请求，StoreUnit 的 2 个请求，以及 SMSPrefetcher 的 1 个请求。
 
 在 ITLB 和 DTLB 查询得到结果后，都需要进行 PMP 和 PMA 检查。由于 L1 TLB 的面积较小，因此 PMP 和 PMA 寄存器的备份并不存储在 L1 TLB 内部，而是存储在 Frontend 或 Memblock 中，分别为 ITLB 和 DTLB 提供检查。ITLB 和 DTLB 缺失后，需要经过 repeater 向 L2 TLB 发送查询请求。
 
