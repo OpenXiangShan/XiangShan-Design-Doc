@@ -43,7 +43,7 @@ Table: ITLB 的请求来源 {#tbl:ITLB-request-source}
 | requestors(1) |   Icache   |
 | requestors(2) |         IFU          |
 
-香山的访存通道访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream 预取器以及。为应对众多请求，三条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB，均采用 PLRU 替换算法（参见 5.1.1.2 节）。
+香山的访存通道访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride 预取器以及。为应对众多请求，三条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB，均采用 PLRU 替换算法（参见 5.1.1.2 节）。
 
 DTLB 采用全相联模式，48 项全相联保存全部大小页。DTLB 接收来自 MemBlock 的地址翻译请求，dtlb_ld 接收来自 loadUnits, vSegmentUnit 和 L1 Load stream & stride 预取器的请求，负责 Load 指令的地址翻译；dtlb_st 接收 StoreUnits 的请求，负责 Store 指令的地址翻译。特别地，对于 AMO 指令，会使用 loadUnit(0) 的 dtlb_ld_requestor，向 dtlb_ld 发送请求。SMSPrefetcher 与来自 L2 的预取会向单独的 DTLB 发送预取请求。
 
@@ -117,7 +117,7 @@ Table: ITLB 和 DTLB 的回填策略 {#tbl:L1TLB-refill-policy}
 
 香山支持 RISC-V 手册中的 Sv39/Sv48 页表，虚拟地址长度为 39/48 位。香山的物理地址为 48 位，可参数化修改。
 
-虚存是否开启需要根据特 权级和 SATP 寄存器的 MODE 域等共同决定，这一判断在 TLB 内部完成，对 TLB 外透明。关于特权级的描述，参见 5.1.2.7 节；关于 SATP 的 MODE 域，香山的昆明湖架构支持 MODE 域为 8/9，也就是 Sv39/Sv48 分页机制，否则会上报 illegal instruction fault。在 TLB 外的模块（Frontend、LoadUnit、StoreUnit、AtomicsUnit 等）看来，所有地址都经过了 TLB 的地址转换。
+虚存是否开启需要根据特权级和 SATP 寄存器的 MODE 域等共同决定，这一判断在 TLB 内部完成，对 TLB 外透明。关于特权级的描述，参见 5.1.2.7 节；关于 SATP 的 MODE 域，香山的昆明湖架构支持 MODE 域为 8/9，也就是 Sv39/Sv48 分页机制，否则会上报 illegal instruction fault。在 TLB 外的模块（Frontend、LoadUnit、StoreUnit、AtomicsUnit 等）看来，所有地址都经过了 TLB 的地址转换。
 
 当添加了 H 拓展后，地址翻译是否启用还需要判断是否有两阶段地址翻译，两阶段地址翻译开启有两个请求，第一个是此时执行的是虚拟化访存指令，第二个是虚拟化模式开启并且此时 VSATP 或者 HGATP 的 MODE 不为零。此时的翻译模式有以下几种。翻译模式用于在 TLB 中查找对应类型的页表以及向 L2TLB 发送的 PTW 请求。
 
