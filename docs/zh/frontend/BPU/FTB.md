@@ -6,15 +6,15 @@ FTB 暂存 FTB 项，为后续高级预测器提供更为精确的分支指令�
 
 ### 请求接收
 
-0 阶段时，FTB 模块向内部 FTBBank 发送读请求，其请求 pc 值为 s0 传入的 PC,。
+0 阶段时，FTB 模块向内部 FTBBank 发送读请求，其请求 pc 值为 s0 传入的 PC。
 
-数据读取与返回
+### 数据读取与返回
 
 在发送请求的下一拍也就是预测器的 1 阶段，将暂存从 FTB SRAM 中读出的多路信号。
 
 再下一拍也就是预测器的 2 阶段，从暂存数据中根据各路的 tag 和实际请求时 tag 的匹配情况生成命中信号并在命中时选出命中 FTB 数据。若存在 hit 请求，则返回值为选出的 FTB 项及命中的路信息，若未 hit，则输出数据无意义。tag 为 PC 的 29 到 10 位。
 
-FTBBank 模块读出的数据在 FTB 模块内作为 2 阶段的预测结果以组合逻辑连线形式在当拍传递给后续预测器，此外这一读出的结果还会被暂 存到 FTB 模块内，在 3 阶段作为预测结果再次以组合逻辑连线传递给后续预测器。若 FTB 命中，则读出的命中路编号也会作为 meta 信息在 s3 与命中信息、周期数一起传递给后续 FTQ 模块。
+FTBBank 模块读取的数据，将作为 FTB 模块在 2 阶段预测的结果，通过组合逻辑连线形式，在当拍传递给后续预测器。此外这一读出的结果还会被暂存到 FTB 模块内，在 3 阶段作为预测结果再次以组合逻辑连线传递给后续预测器。若 FTB 命中，则读出的命中路编号也会作为 meta 信息在 s3 与命中信息、周期数一起传递给后续 FTQ 模块。
 
 此外，若 FTB 项内存在 always taken 标志，则 2 阶段的预测结果中对应 br_taken_mask 也在本模块内拉高处理。
 
@@ -30,27 +30,27 @@ FTBBank 模块读出的数据在 FTB 模块内作为 2 阶段的预测结果以�
 
 20 bit tag，60 bit FTB 项。
 
-其中 FTB 项
+其中 FTB 项: 
 
-1 bit valid
+- 1 bit valid
 
-20 bit br slot（4 bit offset，12 bit lower 2 bit tarStat, 1bit sharing, 1 bit valid）
+- 20 bit br slot（4 bit offset, 12 bit lower, 2 bit tarStat, 1bit sharing, 1 bit valid）
 
-28 bit tail slot (4 bit offset , 20 bit lower, 2 bit tarStat, 1 bit sharing, 1 bit valid)
+- 28 bit tail slot (4 bit offset , 20 bit lower, 2 bit tarStat, 1 bit sharing, 1 bit valid)
 
-4 bit pftAddr
+- 4 bit pftAddr
 
-1 bit carry
+- 1 bit carry
 
-1 bit isCall
+- 1 bit isCall
 
-1 bit isRet
+- 1 bit isRet
 
-1 bit isJalr
+- 1 bit isJalr
 
-1 bit 末尾可能为 rvi call
+- 1 bit 末尾可能为 rvi call
 
-2 bit always taken
+- 2 bit always taken
 
 ## 整体框图
 
@@ -99,7 +99,7 @@ FTBBank 模块读出的数据在 FTB 模块内作为 2 阶段的预测结果以�
 FTB 是 BPU 的核心。BPU 的其他预测部件所作出的预测全部依赖于 FTB 提供的信息。FTB 除了提供预测块内分支指令的信息之外，还提供预测块的结束地址。对于 FTB 来说，FTB 项的生成策略至关重要。南湖架构在原始论文 1 的基础上，结合这篇论文 2 的思想形成了现有的策略，记 FTB 项的起始地址为 start ，结束地址为 end ，具体策略如下：
 
 - FTB 项由 start 索引， start 在预测流水线中生成，实际上， start 基本遵循如下原则之一：
-  - start 是上一个预测块的 end
+  - start 是上一个预测块的 end；
   - start 是来自 BPU 外部的重定向的目标地址；
 - FTB 项内最多记录两条分支指令，其中第一条一定是条件分支；
 - end 一定满足三种条件之一：
@@ -138,6 +138,7 @@ FTB 共有 2048 项，4 路组相联，每项最多记录 2 条分支，其中�
 1. 表项生成
 
     1.1 从FTQ读取必要信息：
+    
       - 起始地址 startAddr
       - 预测时读出的旧FTB项 old_entry
       - 包含FTQ项内32Byte内所有分支指令的预译码信息 pd
@@ -147,6 +148,7 @@ FTB 共有 2048 项，4 路组相联，每项最多记录 2 条分支，其中�
       - 对应FTQ项内所有可能指令的误预测 mask
 
     1.2 FTB项生成逻辑：
+
       - 情况1：FTB未命中或存在错误
         1) 无条件跳转指令处理：
           - 不论是否被执行，都一定会被写入新FTB项的tailSlot
