@@ -1,7 +1,7 @@
 # RXSNP
 
 ## 功能描述
-RXSNP模块把来自RXSNP总线通道的Snoop请求进行处理，转化为内部任务格式，然后发给RequestArb。同时如果MSHR中有正在进行符合一下条件的，则阻塞RXSNP总线进入SinkB：
+RXSNP模块把来自RXSNP总线通道的Snoop请求进行处理，转化为内部任务格式，然后发给RequestArb。同时如果MSHR中有正在进行符合以下条件的，则阻塞RXSNP总线进入SinkB：
 - 地址相同，且不能被这笔Snoop请求嵌套
 - 准备替换的数据块与这笔Snoop请求地址相同且不能被这笔Snoop嵌套
 
