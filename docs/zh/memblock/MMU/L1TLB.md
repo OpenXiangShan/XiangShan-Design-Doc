@@ -43,7 +43,7 @@ Table: ITLB 的请求来源 {#tbl:ITLB-request-source}
 | requestors(1) |   Icache   |
 | requestors(2) |         IFU          |
 
-香山的访存通道访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride 预取器以及。为应对众多请求，三条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB，均采用 PLRU 替换算法（参见 5.1.1.2 节）。
+香山的访存通道访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride 预取器。为应对众多请求，三条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB，均采用 PLRU 替换算法（参见 5.1.1.2 节）。
 
 DTLB 采用全相联模式，48 项全相联保存全部大小页。DTLB 接收来自 MemBlock 的地址翻译请求，dtlb_ld 接收来自 loadUnits, VSegmentUnit 和 L1 Load stream & stride 预取器的请求，负责 Load 指令的地址翻译；dtlb_st 接收 StoreUnits 的请求，负责 Store 指令的地址翻译。特别地，对于 AMO 指令，会使用 loadUnit(0) 的 dtlb_ld_requestor，向 dtlb_ld 发送请求。SMSPrefetcher 与来自 L2 的预取会向单独的 DTLB 发送预取请求。
 
@@ -213,9 +213,9 @@ pmm 的值可能来自于 mseccfg/menvcfg/henvcfg/senvcfg 的 PMM（[33:32]）�
 
 目前香山还支持 Svnapot 拓展。
 
-Svnapot 拓展的目的是将一段连续的页（2的幂次个）用一个页表项表示，减少 TLB 的压力，在 PTE 中，第 63 位为 1 时表示这个页表项为 NAPOT 页表项，一个 NAPOT 页表项的 PPN 低 4 位设置 NAPOT 表示的连续地址空间，例如 ppn 低 4 位为 1000 时，表示这个是一个 64KB 大小的页表项，在香山中，目前只支持表示 64KB 大小的 NAPOT 页表项。
+Svnapot 拓展的目的是将一段连续的页（2的幂次个）用一个页表项表示，减少 TLB 的压力，在 PTE 中，第 63 位为 1 时表示这个页表项为 NAPOT 页表项，一个 NAPOT 页表项的 PPN 低 4 位设置 NAPOT 表示的连续地址空间。例如 ppn 低 4 位为 1000 时，表示这个是一个 64KB 大小的页表项。在香山中，目前只支持表示 64KB 大小的 NAPOT 页表项。
 
-在 TLB 中，同样设置一个 N 位表示 NAPOT 属性，在命中匹配时，对于普通 4KB 的页，通过对比 tag 低 6 位与 vpn 的 [8:3] 位进行命中匹配，如果 TLB 项的 N 位为 1， 通过对比 tag 的 [6:1] 位与 vpn 的 [8:4] 位进行匹配，因为 NAPOT 页覆盖了 16 个连续的 4KB 页。在生成物理地址时，NAPOT 页会用 vpn 的低 4 位替换生成 ppn 的低 4 位。
+在 TLB 中，同样设置一个 N 位表示 NAPOT 属性，在命中匹配时，对于普通 4KB 的页，通过对比 tag 低 6 位与 vpn 的 [8:3] 位进行命中匹配；如果 TLB 项的 N 位为 1，通过对比 tag 的 [6:1] 位与 vpn 的 [8:4] 位进行匹配。因为 NAPOT 页覆盖了 16 个连续的 4KB 页。在生成物理地址时，NAPOT 页会用 vpn 的低 4 位替换生成 ppn 的低 4 位。
 
 ### 支持 Svpbmt 扩展
 
