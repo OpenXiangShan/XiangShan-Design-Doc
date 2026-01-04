@@ -11,13 +11,13 @@ Page Cache refers to the following module:
 4. Support returning hit results to the L1 TLB and sending PTW replies
 5. Supports returning miss results to L2 TLB and forwarding PTW requests
 6. Supports Page Cache refill
-7. Supports ECC verification
-8. Support sfence refresh
+7. 支持 ecc 校验
+8. 支持 sfence 刷新
 9. Supports exception handling mechanism
-10. Supports TLB compression
-11. Supports dividing each level of page tables into three types
-12. Supports receiving second-stage translation requests (hptw requests)
-13. Supports hfence refresh
+10. 支持 TLB 压缩
+11. 支持各级页表分为三种类型
+12. 支持接收第二阶段翻译请求（hptw 请求）
+13. 支持 hfence 刷新
 
 ## Function
 
@@ -52,10 +52,10 @@ Table: Page Cache Entry Configuration {#tbl:PageCache-config}
 
 | **entry** | **item count** |       **组织结构**        | **Implementation method** | **Replacement Algorithm** |                                  **stored content**                                   |
 | :-------: | :------------: | :-------------------: | :-----------------------: | :-----------------------: | :-----------------------------------------------------------------------------------: |
-|    l1     |       16       |   Fully associative   |       Register File       |           PLRU            |      Valid first-level (1GB size) page table, no need to store permission bits.       |
+|    l1     |       16       |          全相联          |           寄存器堆            |           PLRU            |      Valid first-level (1GB size) page table, no need to store permission bits.       |
 |    l2     |       64       | 2-way set-associative |           SRAM            |           PLRU            | A valid second-level (2MB-sized) page table does not require storage permission bits. |
 |    l3     |      512       | 4-way set-associative |           SRAM            |           PLRU            |      Valid three-level (4KB size) page tables require storage of permission bits      |
-|    sp     |       16       |   Fully associative   |       Register File       |           PLRU            |                         大页（是叶子节点的一级、二级页表）、无效的一级、二级页表，需要存储权限位                          |
+|    sp     |       16       |          全相联          |           寄存器堆            |           PLRU            |                         大页（是叶子节点的一级、二级页表）、无效的一级、二级页表，需要存储权限位                          |
 
 Information stored in a Page Cache entry includes: tag, asid, ppn, perm
 (optional), level (optional), prefetch. The H extension adds vmid and h (used to
@@ -131,11 +131,11 @@ Table: Possible combinations and meanings of X, W, R bits in page table entries
 | :---: | :---: | :---: | :------------------------------------------------------------------------------------------------------------------------: |
 |   0   |   0   |   0   | Indicates that the page table entry is not a leaf node and requires indexing the next-level page table through this entry. |
 |   0   |   0   |   1   |                                              Indicates the page is read-only                                               |
-|   0   |   1   |   0   |                                                          Reserved                                                          |
+|   0   |   1   |   0   |                                                             保留                                                             |
 |   0   |   1   |   1   |                                     Indicates that the page is readable and writable.                                      |
 |   1   |   0   |   0   |                                                         表示该页是只可执行的                                                         |
 |   1   |   0   |   1   |                                                        表示该页是可读、可执行的                                                        |
-|   1   |   1   |   0   |                                                          Reserved                                                          |
+|   1   |   1   |   0   |                                                             保留                                                             |
 |   1   |   1   |   1   |                                  Indicates the page is readable, writable, and executable                                  |
 
 ### Receives PTW requests and returns results
@@ -238,13 +238,13 @@ refills into the Page Cache, the signal sent by the Page Cache to HPTW includes
 a bypassed signal. When this signal is active, the results of memory accesses
 performed by HPTW for this request will not be refilled into the Page Cache.
 
-### Supports ECC verification
+### 支持 ecc 校验
 
 Page Cache 支持 ecc 校验，当访问 l2 或 l3 项时会同时进行 ecc 检查。如果 ecc 检查报错，并不会报例外，而是会向 L2 TLB
 发送该请求 miss 信号。同时 Page Cache 将 ecc 报错的项刷新，重新发送 PTW 请求。其余行为和 Page Cache miss
 时相同。ecc 检查采用 secded 策略。
 
-### Support sfence refresh
+### 支持 sfence 刷新
 
 When the sfence signal is active, the Page Cache refreshes its entries based on
 the rs1 and rs2 signals of sfence and the current virtualization mode.
@@ -263,7 +263,7 @@ ECC verification errors may occur in the Page Cache, in which case the Page
 Cache invalidates the current entry, returns a miss result, and reinitiates the
 Page Walk. Refer to Section 6 of this document: Exception Handling Mechanism.
 
-### Supports TLB compression
+### 支持 TLB 压缩
 
 To support TLB compression, when the Page Cache hits a 4KB page, it must return
 8 consecutive page table entries. In fact, due to the 512-bit memory access
@@ -271,7 +271,7 @@ width, each Page Cache entry inherently contains 8 page tables, which can be
 directly returned. Unlike the L1TLB, the L2TLB still uses TLB compression under
 the H extension.
 
-### Supports dividing each level of page tables into three types
+### 支持各级页表分为三种类型
 
 In the H extension, there are three types of page tables, managed by vsatp,
 hgatp, and satp, respectively. The Page Cache adds an h register to distinguish
@@ -279,7 +279,7 @@ these page tables: onlyStage1 represents those related to vsatp, onlyStage2
 represents those related to hgatp (where asid is invalid), and noS2xlate
 represents those related to satp (where vmid is invalid).
 
-### Supports receiving second-stage translation requests (hptw requests)
+### 支持接收第二阶段翻译请求（hptw 请求）
 
 In L2TLB, PTW and LLPTW send second-stage translation requests (indicated by the
 isHptwReq signal). These requests first query the Page Cache, following the same
@@ -292,7 +292,7 @@ bypassed. If such a request proceeds to HPTW for translation, none of the page
 tables obtained by HPTW's memory accesses will be refilled into the Page Cache.
 HptwReq requests also support l1Hit and l2Hit functionality.
 
-### Supports hfence refresh
+### 支持 hfence 刷新
 
 The hfence instruction can only be executed in non-virtualization mode. There
 are two types of such instructions, responsible for refreshing the VS-stage page

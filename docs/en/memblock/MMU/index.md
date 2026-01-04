@@ -43,7 +43,7 @@ The overall design specifications of the MMU module are as follows:
 5. Supports dynamic and static PMA checks
 6. Supports ASID
 7. Support Sfence.vma
-8. Support software updates for A/D bits
+8. 支持软件更新 A/D 位
 9. Supports two-stage address translation with the H extension.
 10. Supports the Sv39x4 paging mechanism
 11. Supports VMID
@@ -324,7 +324,7 @@ Table: HGATP Register Format {#tbl:MMU-CSR_HGATP}
 |  [57:44]  |   VMID    |                                                 Virtual machine identifier. For the Sv39x4 address translation mode adopted by the Xiangshan Kunminghu architecture, the maximum VMID length is 14.                                                  |
 |  [43:0]   |    PPN    |                                               Represents the physical page number of the root page table for the second-stage translation, obtained by right-shifting the physical address by 12 bits.                                               |
 
-### Support software updates for A/D bits
+### 支持软件更新 A/D 位
 
 Xiangshan supports software management of A/D bits in page tables. The A bit
 indicates that the page has been read, written, or fetched since the last time
@@ -355,17 +355,17 @@ Mechanism](#sec:MMU-exception).
 
 Table: Types of Exceptions Returned by TLB
 
-| **type**  |     **destination**      |                     **Description**                     |
-| :-------: | :----------------------: | :-----------------------------------------------------: |
-| pf_instr  |         Frontend         |    Indicates an instruction page fault has occurred.    |
-| af_instr  |         Frontend         |     Indicates an instruction access fault occurred      |
-| gpf_instr |         Frontend         | Indicates an instruction guest page fault has occurred. |
-|   pf_ld   | LoadUnit or AtomicsUnit  |          Indicates a load page fault occurred           |
-|   af_ld   | LoadUnit or AtomicsUnit  |         indicates a load access fault occurred          |
-|  gpf_ld   | LoadUnit or AtomicsUnit  |     Indicates a load guest page fault has occurred.     |
-|   pf_st   | StoreUnit or AtomicsUnit |          Indicates a store page fault occurred          |
-|   af_st   | StoreUnit or AtomicsUnit |         Indicates a store access fault occurred         |
-|  gpf_st   | StoreUnit or AtomicsUnit |    Indicates a store guest page fault has occurred.     |
+| **type**  |     **destination**     |                     **Description**                     |
+| :-------: | :---------------------: | :-----------------------------------------------------: |
+| pf_instr  |        Frontend         |    Indicates an instruction page fault has occurred.    |
+| af_instr  |        Frontend         |     Indicates an instruction access fault occurred      |
+| gpf_instr |        Frontend         | Indicates an instruction guest page fault has occurred. |
+|   pf_ld   | LoadUnit 或 AtomicsUnit  |          Indicates a load page fault occurred           |
+|   af_ld   | LoadUnit 或 AtomicsUnit  |         indicates a load access fault occurred          |
+|  gpf_ld   | LoadUnit 或 AtomicsUnit  |     Indicates a load guest page fault has occurred.     |
+|   pf_st   | StoreUnit 或 AtomicsUnit |          Indicates a store page fault occurred          |
+|   af_st   | StoreUnit 或 AtomicsUnit |         Indicates a store access fault occurred         |
+|  gpf_st   | StoreUnit 或 AtomicsUnit |    Indicates a store guest page fault has occurred.     |
 
 ## Exception Handling Mechanism {#sec:MMU-exception}
 
@@ -397,24 +397,24 @@ Possible exceptions and the MMU module's handling process are shown in
 
 Table: Possible MMU exceptions and handling procedures {#tbl:MMU-exceptions}
 
-| **module** |     **Possible Exceptions**     |                                 ** processing flow **                                  |
-| :--------: | :-----------------------------: | :------------------------------------------------------------------------------------: |
-|    ITLB    |                                 |                                                                                        |
-|            |    Generate inst page fault     |            Deliver to Icache or IFU for processing based on request source             |
-|            | Generate inst guest page fault  |            Deliver to Icache or IFU for processing based on request source             |
-|            |   Generate inst access fault    |            Deliver to Icache or IFU for processing based on request source             |
-|    DTLB    |                                 |                                                                                        |
-|            |   Generates a load page fault   |                         Hand over to LoadUnits for processing.                         |
-|            | Generate load guest page fault  |                         Hand over to LoadUnits for processing.                         |
-|            |    Generate store page fault    | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|            | Generate store guest page fault | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|            |  Generate a load access fault   |                         Hand over to LoadUnits for processing.                         |
-|            |   Generate store access fault   | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|   L2 TLB   |                                 |                                                                                        |
-|            |    Generate guest page fault    |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |       Generate page fault       |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |      Generate access fault      |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |         ECC check error         |       Invalidate the current entry, return a miss result, and restart Page Walk.       |
+| **module** |     **Possible Exceptions**     |                           ** processing flow **                            |
+| :--------: | :-----------------------------: | :------------------------------------------------------------------------: |
+|    ITLB    |                                 |                                                                            |
+|            |    Generate inst page fault     |                        根据请求来源，分别交付给 Icache 或 IFU 处理                        |
+|            | Generate inst guest page fault  |                        根据请求来源，分别交付给 Icache 或 IFU 处理                        |
+|            |   Generate inst access fault    |                        根据请求来源，分别交付给 Icache 或 IFU 处理                        |
+|    DTLB    |                                 |                                                                            |
+|            |   Generates a load page fault   |                             交付给 LoadUnits 进行处理                             |
+|            | Generate load guest page fault  |                             交付给 LoadUnits 进行处理                             |
+|            |    Generate store page fault    |                  根据请求来源，分别交付给 StoreUnits 或 AtomicsUnit 处理                  |
+|            | Generate store guest page fault |                  根据请求来源，分别交付给 StoreUnits 或 AtomicsUnit 处理                  |
+|            |  Generate a load access fault   |                             交付给 LoadUnits 进行处理                             |
+|            |   Generate store access fault   |                  根据请求来源，分别交付给 StoreUnits 或 AtomicsUnit 处理                  |
+|   L2 TLB   |                                 |                                                                            |
+|            |    Generate guest page fault    |                        交付给 L1 TLB，L1 TLB 根据请求来源交付处理                        |
+|            |       Generate page fault       |                        交付给 L1 TLB，L1 TLB 根据请求来源交付处理                        |
+|            |      Generate access fault      |                        交付给 L1 TLB，L1 TLB 根据请求来源交付处理                        |
+|            |         ECC check error         | Invalidate the current entry, return a miss result, and restart Page Walk. |
 
 
 ## Overall Design {#sec:MMU-overall}
