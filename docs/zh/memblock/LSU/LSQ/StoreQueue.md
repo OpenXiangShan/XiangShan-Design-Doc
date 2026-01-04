@@ -89,7 +89,7 @@ Table: StoreQueue存储的状态信息
 
     * addrvalid：这条 store 已经完成了虚实地址转换，得到了物理地址
 
-    * 如果启用了访存以来预测器，则SSID (Store-Set-ID) 标记了之前load预测执行失败历史信息，如果当前load命中之前历史中的SSID，会等之前所有older的store都执行完；如果没有命中就只会等物理地址相同的older Store执行完成。
+    * 如果启用了访存依赖预测器，则SSID (Store-Set-ID) 标记了之前load预测执行失败历史信息，如果当前load命中之前历史中的SSID，会等之前所有older的store都执行完；如果没有命中就只会等物理地址相同的older Store执行完成。
 
 ### 特性 2：非对齐store指令
 
