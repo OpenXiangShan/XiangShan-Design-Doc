@@ -11,17 +11,16 @@
 6. Both ITLB and DTLB entries are fully associative structures
 7. ITLB and DTLB adopt the current privilege level of the processor and the
    effective privilege level for memory access execution
-8. Supports determining whether virtual memory is enabled and whether two-stage
-   translation is enabled within the L1 TLB.
+8. 支持在 L1 TLB 内部判断虚存是否开启以及两个阶段翻译是否开启
 9. Support sending PTW requests to L2 TLB
 10. The DTLB supports copying the returned physical address.
 11. Support for exception handling
-12. Supports TLB compression
+12. 支持 TLB 压缩
 13. Support TLB Hint mechanism
-14. Stores four types of TLB entries.
-15. TLB refill merges the two stages of page tables.
-16. The hit logic for TLB entries.
-17. Supports reissuing PTW to obtain gpaddr after a guest page fault.
+14. 存储四种类型的 TLB 项
+15. TLB refill 将两个阶段的页表进行融合
+16. TLB 项的 hit 的判断逻辑
+17. 支持客户机缺页后重新发送 PTW 获取 gpaddr
 
 ## Function
 
@@ -122,12 +121,12 @@ The refill policies for ITLB and DTLB are shown in [@tbl:L1TLB-refill-policy].
 
 Table: ITLB and DTLB refill policy {#tbl:L1TLB-refill-policy}
 
-| **module** | **Item name** |                              **Policy**                              |
-| :--------: | :-----------: | :------------------------------------------------------------------: |
-|    ITLB    |               |                                                                      |
-|            |     Page      | 48-entry fully associative, capable of backfilling pages of any size |
-|    DTLB    |               |                                                                      |
-|            |     Page      | 48-entry fully associative, capable of backfilling pages of any size |
+| **module** | **Item name** |     **Policy**     |
+| :--------: | :-----------: | :----------------: |
+|    ITLB    |               |                    |
+|            |     Page      | 48 项全相联，可以回填任意大小的页 |
+|    DTLB    |               |                    |
+|            |     Page      | 48 项全相联，可以回填任意大小的页 |
 
 ### Returns the physical address to the Frontend and MemBlock.
 
@@ -203,7 +202,7 @@ with 8/16/32/48 entries. Currently, parameterized modification of TLB structures
 (fully associative/set-associative/direct-mapped) is not supported and requires
 manual code changes.
 
-### Supports determining whether virtual memory is enabled and whether two-stage translation is enabled within the L1 TLB.
+### 支持在 L1 TLB 内部判断虚存是否开启以及两个阶段翻译是否开启
 
 Xiangshan supports the Sv39 page table specified in the RISC-V manual, with a
 virtual address length of 39 bits. Xiangshan's physical address is 36 bits,
@@ -231,9 +230,9 @@ Table: Two-Stage Translation Mode
 
 | **VSATP Mode** | **HGATP Mode** |                 **Translation Mode**                  |
 | :------------: | :------------: | :---------------------------------------------------: |
-|    Non-zero    |    Non-zero    |       allStage, both translation stages present       |
-|    Non-zero    |       0        |       onlyStage1, only first-stage translation        |
-|       0        |    Non-zero    | onlyStage2, indicating only second-stage translation. |
+|      非 0       |      非 0       |       allStage, both translation stages present       |
+|      非 0       |       0        |       onlyStage1, only first-stage translation        |
+|       0        |      非 0       | onlyStage2, indicating only second-stage translation. |
 
 ### Privilege level of L1 TLB.
 
@@ -494,7 +493,7 @@ exceptions. Specifically:
    not enabled, zero-extend the upper 7 or 16 bits of the address based on
    whether the pmm value is 2 or 3, respectively.
 
-### Supports TLB compression
+### 支持 TLB 压缩
 
 ![TLB Compression Diagram](figure/image18.png)
 
@@ -545,10 +544,10 @@ the value of ppn_low can be arbitrary.
 
 Table: Contents stored per TLB entry before and after compression
 
-| **compressed or not** | **tag** | **asid** | **level** | **ppn** |       **perm**        | **valididx** | **pteidx** | **ppn_low** |
-| :-------------------: | :-----: | :------: | :-------: | :-----: | :-------------------: | :----------: | :--------: | :---------: |
-|          No           | 27 bits | 16-bit.  |  2 bits   | 24-bit  | Page table attributes |  Not saved   | Not saved  |  Not saved  |
-|          Yes          | 24-bit  | 16-bit.  |  2 bits   | 21 bits | Page table attributes |    8 bits    |   8 bits   |  8×3 bits.  |
+| **compressed or not** | **tag** | **asid** | **level** | **ppn** | **perm** | **valididx** | **pteidx** | **ppn_low** |
+| :-------------------: | :-----: | :------: | :-------: | :-----: | :------: | :----------: | :--------: | :---------: |
+|          No           | 27 bits |   16 位   |    2 位    |  24 位   |   页表属性   |     不保存      |    不保存     |     不保存     |
+|          Yes          |  24 位   |   16 位   |    2 位    | 21 bits |   页表属性   |     8 位      |    8 位     |  8×3 bits.  |
 
 
 After implementing TLB compression, the hit condition of L1 TLB changes from TAG
@@ -561,7 +560,7 @@ types. The TLB compression mechanism is not enabled for virtualized TLB entries
 (though TLB compression is still used in the L2TLB). These four types will be
 described in detail later.
 
-### Stores four types of TLB entries.
+### 存储四种类型的 TLB 项
 
 The L1 TLB entries have been modified with the addition of the H extension, as
 shown in [@fig:L1TLB-item].
@@ -576,12 +575,12 @@ s2xlate.
 
 Table: Types of TLB entries
 
-|  **type**   | **s2xlate** |                      **tag**                       |                       **ppn**                       |                       **perm**                       |          **g_perm**          |                   **level**                    |
-| :---------: | :---------: | :------------------------------------------------: | :-------------------------------------------------: | :--------------------------------------------------: | :--------------------------: | :--------------------------------------------: |
-|  noS2xlate  |     b00     |    Virtual page number in non-virtualized mode     |    Physical page number in non-virtualized mode     | Page table entry permissions in non-virtualized mode |           Not used           | Page table entry level in non-virtualized mode |
-|  allStage   |     b11     | Virtual page number of the first-stage page table  | Physical page number of the second-stage page table |          First-stage page table permissions          | Second-stage page table perm |   The highest level in two-stage translation   |
-| onlyStage1  |     b01     | Virtual page number of the first-stage page table  | Physical page number of the first-stage page table  |          First-stage page table permissions          |           Not used           |      Level of the first-stage page table       |
-| onlyStage2. |     b10     | Virtual page number of the second-stage page table | Physical page number of the second-stage page table |                       Not used                       | Second-stage page table perm |      Level of the second-stage page table      |
+|  **type**   | **s2xlate** |                      **tag**                       |                      **ppn**                       |                       **perm**                       |  **g_perm**  |                   **level**                    |
+| :---------: | :---------: | :------------------------------------------------: | :------------------------------------------------: | :--------------------------------------------------: | :----------: | :--------------------------------------------: |
+|  noS2xlate  |     b00     |    Virtual page number in non-virtualized mode     |    Physical page number in non-virtualized mode    | Page table entry permissions in non-virtualized mode |     不使用      | Page table entry level in non-virtualized mode |
+|  allStage   |     b11     |                    第一阶段页表的虚拟页号                     |                    第二阶段页表的物理页号                     |                     第一阶段页表的 perm                     | 第二阶段页表的 perm |   The highest level in two-stage translation   |
+| onlyStage1  |     b01     |                    第一阶段页表的虚拟页号                     | Physical page number of the first-stage page table |                     第一阶段页表的 perm                     |     不使用      |      Level of the first-stage page table       |
+| onlyStage2. |     b10     | Virtual page number of the second-stage page table |                    第二阶段页表的物理页号                     |                         不使用                          | 第二阶段页表的 perm |      Level of the second-stage page table      |
 
 
 TLB compression technology is enabled in noS2xlate and onlyStage1 but not in
@@ -590,7 +589,7 @@ pteidx to calculate the tag and ppn of valid ptes, and these two cases also
 differ during refill. Furthermore, asid is valid in noS2xlate, allStage, and
 onlyStage1, while vmid is valid in allStage and onlyS2xlate.
 
-### TLB refill merges the two stages of page tables.
+### TLB refill 将两个阶段的页表进行融合
 
 With the H extension added to the MMU, the PTW response structure is divided
 into three parts. The first part, s1, is the original PtwSectorResp, storing the
@@ -638,7 +637,7 @@ and s2ppn_tmp constructed for the low-order calculation. The high-order bits are
 stored in the TLB entry's ppn field, and the low-order bits in the ppn_low
 field.
 
-### The hit logic for TLB entries.
+### TLB 项的 hit 的判断逻辑
 
 There are three types of hits used in the L1TLB: TLB query hits, TLB fill hits,
 and PTW request response hits.
@@ -672,7 +671,7 @@ cannot simply check s1hit. The level for vpn_hit should use the maximum of s1
 and s2, then determine the hit based on the level, and include checks for vasid
 (from vsatp) hit and vmid hit.
 
-### Supports reissuing PTW to obtain gpaddr after a guest page fault.
+### 支持客户机缺页后重新发送 PTW 获取 gpaddr
 
 Since the L1TLB does not store the gpaddr from translation results, when a guest
 page fault occurs after querying a TLB entry, a new PTW is required to obtain

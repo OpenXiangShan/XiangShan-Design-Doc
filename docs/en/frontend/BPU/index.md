@@ -4,17 +4,17 @@
 
 Table 1.1 Terminology
 
-| **abbreviation** | **Full name**                                     | **Description**                                                                                                 |
-| ---------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| BPU              | Branch Prediction Unit                            | Branch Prediction Unit                                                                                          |
-| IFU              | Instruction Fetch Unit                            | Fetch Unit                                                                                                      |
-| FTQ              | Fetch Target Queue.                               | Fetch Target Unit                                                                                               |
-| uFTB             | Micro Fetch Target Buffer                         | Branch Target Buffer                                                                                            |
-| FTB              | Fetch Target Buffer                               | Fetch Target Buffer.                                                                                            |
-| TAGE             | TAgged GEometric length predictor                 | A conditional branch predictor                                                                                  |
-| SC.              | Statistical Corrector Predictor                   | A conditional branch predictor used to correct TAGE predictions under statistically biased conditions           |
-| ITTAGE           | Indirect Target TAgged GEometric length predictor | A branch predictor used to predict the target address of indirect jump instructions                             |
-| RAS              | Return Address Stack                              | A branch predictor used to predict the target address of return instructions corresponding to call instructions |
+| **abbreviation** | **Full name**                                     | **描述**                                                                                                |
+| ---------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| BPU              | Branch Prediction Unit                            | Branch Prediction Unit                                                                                |
+| IFU              | Instruction Fetch Unit                            | Fetch Unit                                                                                            |
+| FTQ              | Fetch Target Queue.                               | 取指目标队列                                                                                                |
+| uFTB             | Micro Fetch Target Buffer                         | 微取值目标缓冲                                                                                               |
+| FTB              | Fetch Target Buffer                               | Fetch Target Buffer.                                                                                  |
+| TAGE             | TAgged GEometric length predictor                 | A conditional branch predictor                                                                        |
+| SC.              | Statistical Corrector Predictor                   | A conditional branch predictor used to correct TAGE predictions under statistically biased conditions |
+| ITTAGE           | Indirect Target TAgged GEometric length predictor | A branch predictor used to predict the target address of indirect jump instructions                   |
+| RAS              | Return Address Stack                              | 一种用于预测调用(CALL)指令返回地址的分支预测器                                                                            |
 
 ## Design specifications
 
@@ -743,7 +743,7 @@ with a target jump address of 0x200000e0e.
 
 ## Register Configuration
 
-| **register** | **address** | **reset value** | **attribute** | **Description**                                                                                                                                                                                                             |
+| **register** | **address** | **reset value** | **attribute** | **描述**                                                                                                                                                                                                                      |
 | ------------ | ----------- | --------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | sbpctl       | 0x5C0       | 64'd0           | RW            | bit0: uFTB enable signal<br>bit1: FTB enable signal<br>bit2: BIM enable signal (reserved)<br>bit3: TAGE enable signal<br>bit4: SC enable signal<br>bit5: RAS enable signal<br>bit6: loop predictor enable signal (reserved) |
 
