@@ -138,7 +138,7 @@ Table: ITLB 和 DTLB 的特权级
 | **模块** | **特权级** |
 |:----------------:|:----------------------------------------------------:|
 | ITLB | 当前处理器特权级 |
-| DTLB | 执行非虚拟化访存指令，如果 mstatus.MPRV=0，为当前处理器特权级和虚拟化模式；如果 mstatus.MPRV=1，为 mtatus.MPP 保存的特权级和 hstatus.MPV 保存的虚拟化模式 |
+| DTLB | 执行非虚拟化访存指令，如果 mstatus.MPRV=0，为当前处理器特权级和虚拟化模式；如果 mstatus.MPRV=1，为 mstatus.MPP 保存的特权级和 hstatus.MPV 保存的虚拟化模式 |
 
 ### 发送 PTW 请求
 
@@ -308,7 +308,7 @@ L1TLB 中使用的 hit 有三种，查询 TLB 的 hit，填写 TLB 的 hit，以
 
 对于查询 TLB 的 hit，新增了 vmid，hasS2xlate，onlyS2，onlyS1 等参数。Asid 的 hit 在第二阶段翻译的时候一直为 true。H 拓展中增加了 pteidx hit，在小页、n 位为 0 并且在 allStage 和 onlyS2 的情况下启用，用来屏蔽掉 TLB 压缩机制。
 
-对于填写 TLB 的 hit（wbhit），输入是 PtwRespS2，需要判断当前的进行对比的 vpn，如果是只有第二阶段的翻译，则使用 s2 的 tag 的高位，其他情况使用 s1vpn 的 tag，然后在低 sectortlbwidth 位补上 0，然后使用 vpn 与 TLB 项的 tag 进行对比。H 拓展对 wb_valid 的判断进行了修改，并且新增了 pteidx_hit 和 s2xlate_hit。如果是只有第二阶段翻译的 PTW resp，则 wb_valididx 根据 s2 的 tag 来确定，否则直接连接 s1 的 valididx。s2xlate hit 则是对比 TLB 项的 s2xlate 与 PTW resp 的 s2xlate，用来筛选 TLB 项的类型。pteidx_hit 则是为了无效 TLB 压缩，如果是只有第二阶段翻译，则对比 s2 的 tag 的低位与 TLB 项的 pteidx，其他的两阶段翻译情况则对比 TLB 项的 ptedix 和 s1 的 pteidx。
+对于填写 TLB 的 hit（wbhit），输入是 PtwRespS2，需要判断当前的进行对比的 vpn，如果是只有第二阶段的翻译，则使用 s2 的 tag 的高位，其他情况使用 s1vpn 的 tag，然后在低 sectortlbwidth 位补上 0，然后使用 vpn 与 TLB 项的 tag 进行对比。H 拓展对 wb_valid 的判断进行了修改，并且新增了 pteidx_hit 和 s2xlate_hit。如果是只有第二阶段翻译的 PTW resp，则 wb_valididx 根据 s2 的 tag 来确定，否则直接连接 s1 的 valididx。s2xlate hit 则是对比 TLB 项的 s2xlate 与 PTW resp 的 s2xlate，用来筛选 TLB 项的类型。pteidx_hit 则是为了无效 TLB 压缩，如果是只有第二阶段翻译，则对比 s2 的 tag 的低位与 TLB 项的 pteidx，其他的两阶段翻译情况则对比 TLB 项的 pteidx 和 s1 的 pteidx。
 
 对于 PTW 请求的 resp hit，主要用于 PTW resp 的时候判断此时 TLB 发送的 PTW req 是否正好与该 resp 对应或者判断在查询 TLB 的时候 PTW resp 是否是 TLB 这个请求需要的 PTW 结果。该方法在 PtwRespS2 中定义，在该方法内部分为三种 hit，对于 noS2_hit（noS2xlate），只需要判断 s1 是否 hit 即可，对于 onlyS2_hit（onlyStage2），则判断 s2 是否 hit 即可，对于 all_onlyS1_hit（allStage 或者 onlyStage1），需要重新设计 vpnhit 的判断逻辑，不能简单判断 s1hit，判断 vpn_hit 的 level 应该取用 s1 和 s2 的最小值，然后根据 level 来判断 hit，并且增加 vasid（来自 vsatp）的 hit 和 vmid 的 hit。
 
@@ -324,7 +324,7 @@ Table: 获取 gpaddr 的新增 Reg
 | need_gpa_robidx |  RobPtr         |         获取 gpaddr 的请求的 robidx          |
 |  need_gpa_vpn   |  vpnLen         |           获取 gpaddr 的请求的 vpn           |
 |  need_gpa_gvpn  |  vpnLen         |          存储获取的 gpaddr 的 gvpn           |
-| need_gpa_refill |   Bool          | 表示该请求的 gpaddr 已经被填入 need_gpa_gvpn |
+| resp_gpa_refill |   Bool          | 表示该请求的 gpaddr 已经被填入 need_gpa_gvpn |
 | resp_s1_level   | log2Up(Level+1) |    存储 s1 页表的 level，用于计算 gpaddr |
 | resp_s1_isLeaf  | Bool            |    存储 s1 是否为叶子节点    |
 | resp_s1_isFakePte  | Bool         |    存储 s1 是否为假 PTE    |
@@ -333,7 +333,7 @@ Table: 获取 gpaddr 的新增 Reg
 #### need_gpa 机制 ####
 
 1. TLB 查询命中某 TLB 项，但该项存在 guest page fault。此时设置 need_gpa 为有效，将请求的 vpn 填入 need_gpa_vpn，将请求的 robidx 填入 need_gpa_robidx，初始化 resp_gpa_refill 为 false。同时发送 PTW 请求，在 PTW 请求中，将 getGpa 信号设置为 true，表示这个请求只是用来获取 gpaddr。若 PTW bypass 命中时（p_hit_fast），可以直接获取 gpaddr 相关信息。此时设置 need_clear_need_gpa，在下一周期清除 need_gpa 状态，无需等待请求重发。
-2. PTW resp 后，通过 need_gpa_vpn 判断是之前发送的获取 gpaddr 的请求，将 gvpn、s1_level、s1_isLeaf、s1_isFakePte 等信息保存到寄存器中，若 resp 为处于 OnlyStage2，则将 PTW resp 的 s2 tag 填入 need_gpa_gvpn，否则通过 need_gpa_vpn 计算出 resp_gpa_gvpn，并且将 need_gpa_refill 有效，表示已经获取到 gpaddr 的 gvpn，当之前的请求重新进入 TLB 的时候，就可以使用这个 need_gpa_gvpn 来计算出 gpaddr 并且返回，当一个请求完成以上过程后，将 need_gpa 无效掉。这里的 resp_gpa_refill 依旧有效，所以重填的 gvpn 可能被其他的 TLB 请求使用（只要跟 need_gpa_vpn 相等）。由于 getGpa 有效，该 PTW 响应不会回填 TLB。
+2. PTW resp 后，通过 need_gpa_vpn 判断是之前发送的获取 gpaddr 的请求，将 gvpn、s1_level、s1_isLeaf、s1_isFakePte 等信息保存到寄存器中，若 resp 为处于 OnlyStage2，则将 PTW resp 的 s2 tag 填入 need_gpa_gvpn，否则通过 need_gpa_vpn 计算出 resp_gpa_gvpn，并且将 resp_gpa_refill 有效，表示已经获取到 gpaddr 的 gvpn，当之前的请求重新进入 TLB 的时候，就可以使用这个 need_gpa_gvpn 来计算出 gpaddr 并且返回，当一个请求完成以上过程后，将 need_gpa 无效掉。这里的 resp_gpa_refill 依旧有效，所以重填的 gvpn 可能被其他的 TLB 请求使用（只要跟 need_gpa_vpn 相等）。由于 getGpa 有效，该 PTW 响应不会回填 TLB。
 3. 原请求重发进入 TLB 时，由于 resp_gpa_refill && need_gpa_vpn_hit 条件满足，miss 信号不再拉高，TLB 使用缓存的 gpaddr 信息正常返回异常结果。
 
 在处理过程中可能出现 redirect 的情况，导致整个指令流变化，之前获取 gpaddr 的请求不会再进入 TLB，所以如果出现 redirect 就根据我们保存的 need_gpa_robidx 来判断是否需要无效掉 TLB 内与获取 gpaddr 有关的寄存器。
