@@ -12,7 +12,7 @@ The repeater consists of the following modules:
 1. Supports the transmission of PTW requests and responses between the L1 TLB
    and L2 TLB.
 2. Support filtering duplicate requests
-3. Support TLB Hint mechanism
+3. 支持 TLB Hint 机制
 
 ## Function
 
@@ -61,7 +61,7 @@ duplicates at the entry level—only ensuring no duplicates within the same DTLB
 (load, store, or prefetch). However, requests from different DTLBs (e.g., load
 and store) sent to the L2 TLB may still overlap.
 
-### Support TLB Hint mechanism
+### 支持 TLB Hint 机制
 
 ![TLB Hint schematic](./figure/image28.png)
 
