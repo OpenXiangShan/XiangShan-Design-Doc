@@ -62,7 +62,7 @@ ITTAGE 表项中包含一个 usefulness 域，当 provider 预测正确而 altpr
 * 5 张历史表，项数分别为 256、256、512、512、512，每张表没有分 bank。
 * 每个表项含有 1bit valid，9bit tag，2bit ctr，20bit target_offset，1bit useful，都使用 SRAM 统一存储。
 * 以 FTB 结果作为 base table。
-* 每个历史表有 4 项的写缓存 wrbypass。
+* 每个历史表有 4 项的写缓存（WriteBuffer）。
 
 
 ## 预测流程
