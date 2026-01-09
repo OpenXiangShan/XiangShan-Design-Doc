@@ -37,11 +37,11 @@ ITTAGE 需要 3 拍延迟：
 * 2 拍选出命中结果
 * 3 拍输出
 
-### Wrbypass
+### 写缓存（WriteBuffer）
 
-Wrbypass 里面有 Mem，也有 Cam，用于给更新做定序，每次 ITTAGE 更新时都会写进这个 wrbypass，同时写进对应预测表的 sram。每次更新的时候会查这个 wrbypass，如果 hit 了，那就把读出的 ITTAGE 的 ctr 值作为旧值，之前随 branch 指令带到后端再送回前端的 ctr 旧值就不要了 。这样如果一个分支重复更新，那 wrbypass 可以保证某一次更新一定能拿到相邻的上一次更新的最终值。
+每个 IttageTable 使用 WriteBuffer 模块实现写缓存，用于在 SRAM 写操作与读操作冲突时，暂存写请求以保证数据一致性。
+每次 ITTAGE 更新时都会写进这个 WriteBuffer；当 SRAM 读端口空闲时，WriteBuffer 会将数据写入 SRAM。
 
-ITTAGE 的每一个预测表 T1~T5 都有着一个对应的 wrbypass，每个预测表的 wrbypass 中，Mem 都有 4 个 entry，每个 entry 存储 1 个 ctr；Cam 有 4 个 entry，输入更新的 idx 和 tag 就可以读到对应数据在 Cam 中的位置。Cam 和 Mem 是同时写的，所以数据在 Cam 中的位置就是在 Mem 中的位置。于是利用这个 Cam，我们就可以在更新的时候查看对应 idx 的数据是否在 wrbypass 中。
 
 ### 预测器训练
 
@@ -62,12 +62,8 @@ ITTAGE 表项中包含一个 usefulness 域，当 provider 预测正确而 altpr
 * 5 张历史表，项数分别为 256、256、512、512、512，每张表没有分 bank。
 * 每个表项含有 1bit valid，9bit tag，2bit ctr，20bit target_offset，1bit useful，都使用 SRAM 统一存储。
 * 以 FTB 结果作为 base table。
-* 每个历史表有 4 项的写缓存 wrbypass。
+* 每个历史表有 4 项的写缓存（WriteBuffer）。
 
-## 索引方式
-
-* index = pc[8:1] ^ folded_hist(8bit) 或 pc 和 folded_hist 各 9bit
-* tag = pc[17:9]（或 pc[19:10]） ^ folded_hist(9bit) ^ (folded_hist(8bit) << 1)
 
 ## 预测流程
 
