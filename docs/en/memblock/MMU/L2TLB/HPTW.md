@@ -7,15 +7,15 @@ Hypervisor Page Table Walker refers to the following module:
 
 ## Design Specifications
 
-1. Supports accessing the three-level page table of G-stage
-2. Supports sending requests to memory
+1. 支持访问 G-stage 的三级页表
+2. 支持向内存发送请求
 3. Supports sending refill signals to the Page Cache
 4. Support for exception handling
 5. Bypass special handling
 
 ## Function
 
-### Supports accessing the three-level page table of G-stage
+### 支持访问 G-stage 的三级页表
 
 The overall design of HPTW is fundamentally the same as PTW, capable of
 processing only one request at a time. HPTW can perform a complete second-stage
@@ -27,7 +27,7 @@ request. The scenarios in which HPTW returns include:
 1. Accessing a leaf node
 2. A pagefault or accessfault occurs during access
 
-### Supports sending requests to memory
+### 支持向内存发送请求
 
 Similar to PTW and LLPTW, HPTW needs to send requests to memory when accessing
 page tables, which are sent through an arbiter.

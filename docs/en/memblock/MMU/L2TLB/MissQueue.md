@@ -6,11 +6,11 @@ The Miss Queue refers to the following module:
 
 ## Design specifications
 
-1. Buffering requests while waiting for resources
+1. 缓冲请求等待资源
 
 ## Function
 
-### Buffering requests while waiting for resources
+### 缓冲请求等待资源
 
 The essence of the Miss Queue is a queue that receives requests from the Page
 Cache and the Last Level Page Table Walker, and sends them to the Page Cache. If
