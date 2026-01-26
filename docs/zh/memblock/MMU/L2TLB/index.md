@@ -22,9 +22,9 @@ L2 TLB 指的是：
 
 ## 功能
 
-L2 TLB 是更大的页表缓存，由 ITLB 和 DTLB 共享，当 L1 TLB 发生 miss 时，会向 L2 TLB 发送 Page Table Walk 请求。L2 TLB 分为 Page Cache（参见 5.3.7 节），Page Table Walker（参见 5.3.8 节），Last Level Page Table Walker（参见 5.3.9 节）、Hypervisor Page Table Walker（参加 5.3.10）、Miss Queue（参见 5.3.11 节）和 Prefetcher（参见 5.3.12 节）五部分。
+L2 TLB 是更大的页表缓存，由 ITLB 和 DTLB 共享，当 L1 TLB 发生 miss 时，会向 L2 TLB 发送 Page Table Walk 请求。L2 TLB 分为 Page Cache（参见 5.3.7 节），Page Table Walker（参见 5.3.8 节），Last Level Page Table Walker（参见 5.3.9 节）、Hypervisor Page Table Walker（参见 5.3.10）、Miss Queue（参见 5.3.11 节）和 Prefetcher（参见 5.3.12 节）六部分。
 
-来自 L1 TLB 的请求将首先访问 Page Cache，对于非两阶段地址翻译的请求，若命中叶子节点则直接返回给 L1 TLB，否则根据 Page Cache 命中的页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss Queue（参见 5.3.7 节）。而对于两阶段地址翻译请求，如果该请求是 onlyStage1 的，则处理方式与非两阶段地址翻译请求一致；如果该请求是 onlyStage2 的，命中叶子页表，则直接返回，没有命中，则发送给 Page Table Walker 进行翻译；如果该请求是 allStage 的，由于 Page Cache 一次只能查询一次页表，所以首先查询第一阶段页表，分两种情况，如果第一阶段页表命中，则发送给 Page Table Walker，由其进行接下来的翻译过程，如果第一阶段页表没有命中叶子节点，则根据命中页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss Queue。为了加快页表访问，Page Cache 将三级页表都分开做了缓存，可以同时查询三级页表（参见 5.3.7 节）。Page Cache 支持 ecc 校验，如果 ecc 校验出错，则刷新此项，并重新进行 Page Walk。
+来自 L1 TLB 的请求将首先访问 Page Cache，对于非两阶段地址翻译的请求，若命中叶子节点则直接返回给 L1 TLB，否则根据 Page Cache 命中的页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss Queue（参见 5.3.7 节）。而对于两阶段地址翻译请求，如果该请求是 onlyStage1 的，则处理方式与非两阶段地址翻译请求一致；如果该请求是 onlyStage2 的，命中叶子页表，则直接返回，没有命中，则发送给 Page Table Walker 进行翻译；如果该请求是 allStage 的，由于 Page Cache 一次只能查询一次页表，所以首先查询第一阶段页表，分两种情况，如果第一阶段页表命中，则发送给 Page Table Walker，由其进行接下来的翻译过程，如果第一阶段页表没有命中叶子节点，则根据命中页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss Queue。为了加快页表访问，Page Cache 将三级页表都分开做了缓存，可以同时查询三级页表（参见 5.3.7 节）。Page Cache 支持 ecc 校验，如果 ecc 校验出错，则刷新此项，并重新进行 Page Table Walk。
 
 Page Table Walker 接收 Page Cache 的请求，进行 Hardware Page Table Walk。对于非两阶段地址翻译的请求，Page Table Walker 只访问前两级（1GB 和 2MB）页表，不访问 4KB 页表，对 4KB 页表的访问会由 Last Level Page Table Walker 承担。如果 Page Table Walker 访问到叶子节点（大页），则返回给 L1 TLB，否则需要返回给 Last Level Page Table Walker，由 Last Level Page Table Walker 进行最后一级页表的访问。Page Table Walker 只能同时处理一个请求，无法并行访问前两级页表。对于两阶段地址翻译的请求，第一种情况，如果是 allStage 的请求并且第一阶段翻译的页表 hit，PTW 会发送第二阶段请求进入 Page Cache 查询，如果没有命中，则会发送给 Hypervisor Page Table Walker，第二阶段翻译结果会返回给 PTW；第二种情况，如果是 allStage 请求并且第一阶段翻译的叶子节点没有命中，则 PTW 翻译过程与非虚拟化请求翻译类似，区别在于 PTW 翻译过程中出现的物理地址为客户机物理地址，需要进行一次第二阶段地址翻译后才能访存，具体可见 Page Table Walker 的模块介绍；第三种情况，如果是 onlyStage2 请求，则 PTW 会向外发送第二阶段翻译的请求，接收到 resp 后，返回给 L1TLB；第四种请求是 onlyStage1 的请求，该请求在 PTW 内部的处理过程与非虚拟化请求的处理过程一致。
 
@@ -109,7 +109,7 @@ Miss Queue 接收来自 Page Cache 和 Last Level Page Table Walker 的请求，
 * outArb：1 to 1 的仲裁器，输入为 mergeArb，输出到 L1TLB 的 resp
 * mergeArb：3 to 1 的仲裁器，输入为 Page Cache、Page Table Walker 和 Last Level Page Table Walker，输出到 outArb
 * mq_arb：2 to 1 的仲裁器，输入为 Page Cache 和 Last Level Page Table Walker；输出为 Miss Queue
-* mem_arb：3 to 1 的仲裁器，输入为 Page Table Walker、Last Level Page Table Walker 和 Last Level Page Table Walker；输出为 L2 Cache（Last Level Page Table Walker 内部也有一个 mem_arb，把所有 Last Level Page Table Walker 向 L2 Cache 发送的 PTW 项做仲裁，之后传到这个 mem_arb 里）
+* mem_arb：3 to 1 的仲裁器，输入为 Page Table Walker、Last Level Page Table Walker 和 Hypervisor Page Table Walker；输出为 L2 Cache（Last Level Page Table Walker 内部也有一个 mem_arb，把所有 Last Level Page Table Walker 向 L2 Cache 发送的 PTW 项做仲裁，之后传到这个 mem_arb 里）
 
 ![L2 TLB 模块 hit 通路](../figure/image36.jpeg){#fig:L2TLB-hit-passthrough}
 

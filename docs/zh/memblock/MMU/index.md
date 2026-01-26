@@ -51,7 +51,7 @@ MMU 模块的整体设计规格如下：
 
 ## 功能描述
 
-香山的 MMU 模块由 L1 TLB，Repeater，L2 TLB，PMP 和 PMA 模块组成，其中 L2TLB 模块又分为 Page Cache、Page Table Walker、Last Level Page Table Walker、Miss Queue 和 Prefetcher 五部分。在核内进行内存读写，包括前端取指和后端访存之前，都需要由 MMU 模块进行地址翻译。前端取指和后端访存分别通过 ITLB 和 DTLB 进行地址翻译，均为非阻塞式访问，TLB 需要返回请求是否 miss，返回给请求来源，并由请求来源调度重新发送 TLB 查询请求，直至命中。对于 miss 的 Load 请求，昆明湖架构支持 TLB Hint，即当 L2 TLB refill 页表至 L1 TLB 时，可以精准唤醒因该虚拟地址 TLB miss 而导致阻塞的 Load 指令。当 L1 TLB（ITLB 和 DTLB）发生 miss 时，会访问 L2 TLB。如果 L2 TLB 依然 miss，则会通过 Page Table Walker 访问内存中的页表。
+香山的 MMU 模块由 L1 TLB，Repeater，L2 TLB，PMP 和 PMA 模块组成，其中 L2TLB 模块又分为 Page Cache、Page Table Walker、Last Level Page Table Walker、Miss Queue 和 Prefetcher 五部分。在核内进行内存读写，包括前端取指和后端访存之前，都需要由 MMU 模块进行地址翻译。前端取指和后端访存分别通过 ITLB 和 DTLB 进行地址翻译，均为非阻塞式访问，特别地，对 MMIO 使用阻塞式 ITLB 进行地址翻译。TLB 需要返回请求是否 miss，返回给请求来源，并由请求来源调度重新发送 TLB 查询请求，直至命中。对于 miss 的 Load 请求，昆明湖架构支持 TLB Hint，即当 L2 TLB refill 页表至 L1 TLB 时，可以精准唤醒因该虚拟地址 TLB miss 而导致阻塞的 Load 指令。当 L1 TLB（ITLB 和 DTLB）发生 miss 时，会访问 L2 TLB。如果 L2 TLB 依然 miss，则会通过 Page Table Walker 访问内存中的页表。
 
 Repeater 是 L1 TLB 到 L2 TLB 的请求缓冲，在 L1 TLB 和 L2 TLB 之间存在较长的物理距离，需要通过 Repeater 在中间加拍。由于 ITLB 和 DTLB 均支持多个 outstanding 的请求，因此 repeater 会同时承担类似 MSHR 的功能，并过滤重复请求。MMU 模块支持对物理地址访问进行权限检查，分为 PMP 和 PMA 两部分。PMP 和 PMA 检查并行查询，违反任一权限即为非法操作。对核内所有的物理地址访问都需要进行物理地址权限检查，包括在 ITLB 和 DTLB 检查之后，以及 Page Table Walker 访存之前。
 
@@ -67,7 +67,7 @@ Repeater 是 L1 TLB 到 L2 TLB 的请求缓冲，在 L1 TLB 和 L2 TLB 之间存
 
 在进行地址翻译时，前端取指通过 ITLB 进行地址翻译，后端访存通过 DTLB 进行地址翻译。ITLB 和 DTLB 如果 miss，会通过 Repeater 向 L2 TLB 发送请求。在目前设计中，前端取指和后端访存对 TLB 均采用非阻塞式访问，即一个请求 miss 后，会将请求 miss 的信息返回，请求来源调度重新发送 TLB 查询请求，直至命中。
 
-同时，访存拥有 2 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride 预取器。为应对众多请求，两条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB。
+同时，访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride 预取器。为应对众多请求，两条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用 Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB。
 
 为避免 TLB 中出现重复项，ITLB repeater 和 DTLB repeater 分别接受来自 ITLB 和 DTLB 的请求，需要过滤掉重复的请求后才能继续发往 L2 TLB。如果 L2 TLB 发生 miss，会使用 Hardware Page Table Walker 访问内存中的页表内容。得到页表内容后，返还给 Repeater，并最终返还给 ITLB 和 DTLB。（参见 [@sec:MMU-overall] [总体设计](#sec:MMU-overall) ）
 
@@ -214,7 +214,7 @@ MMU 整体架构如 [@fig:MMU-arch-overall] 所示。
 
 ![MMU 模块整体框图](figure/image9.jpeg){#fig:MMU-arch-overall}
 
-ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括 ICache 的 3 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 2 个请求（AtomicsUnit 占用 LoadUnit 的 1 个请求通道），L1 Load stream & stride 预取器的 1 个请求，StoreUnit 的 2 个请求，以及 SMSPrefetcher 的 1 个请求。ITLB、DTLB 通过 Repeater 与 L2 TLB 连接，均为非阻塞式访问。这些 Repeater 在加拍功能的基础上，增加了过滤重复请求的功能，可以过滤掉 L1 TLB 向 L2 TLB 发送的重复请求，避免 L1 TLB 中出现重复项。
+ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括 ICache 的 2 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 3 个请求（AtomicsUnit 占用 LoadUnit 的 1 个请求通道），L1 Load stream & stride 预取器的 1 个请求，StoreUnit 的 2 个请求，以及 SMSPrefetcher 的 1 个请求。ITLB、DTLB 通过 Repeater 与 L2 TLB 连接，均为非阻塞式访问。这些 Repeater 在加拍功能的基础上，增加了过滤重复请求的功能，可以过滤掉 L1 TLB 向 L2 TLB 发送的重复请求，避免 L1 TLB 中出现重复项。
 
 ITLB 的请求和 DTLB 的请求经过仲裁（Arbiter 2to1），将首先访问 Page Cache，若是非两阶段地址翻译的请求，命中叶子节点则直接返回给 L1 TLB，没有命中则根据 Page Cache 命中的页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss Queue（参见 5.3 节）。对于来自 Miss Queue、Prefetcher 的请求，会通过仲裁器（Arbiter 3to1）与来自 L1 TLB 的请求一起做仲裁，并重新访问 Page Cache。另一种情况，Page Cache 收到的是两阶段地址翻译请求，对于两阶段翻译均启用的情况，若第一阶段页表命中，则发送给 PTW 进行第二阶段翻译，其他情况根据第一阶段页表命中的级别和 PTW 以及 LLPTW 的空闲情况发送给 PTW、LLPTW、Miss Queue；对于只有第一阶段翻译的情况，则类似非两阶段地址翻译请求的处理，根据命中等级和 PTW 以及 LLPTW 的空闲情况发送给 PTW、LLPTW、Miss Queue；对于只有第二阶段翻译的情况，如果查询到则返回给 L1TLB，否则发送给 PTW 进行第二阶段翻译。此外，Page Cache 还会收到 isHptwReq 有效的请求，代表该请求是一个进行第二阶段翻译的请求，该类型请求若在 Page Cache 中命中，则会发送给 hptw_resp_arb，若没有命中，则发送给 HPTW 进行查询，HPTW 会将查询结果发送给 hptw_resp_arb。
 

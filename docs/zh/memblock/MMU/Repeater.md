@@ -19,7 +19,7 @@ Repeater 包括如下模块：
 
 在 L1 TLB 和 L2 TLB 之间有比较长的物理距离，会导致比较长的线延迟，因此需要通过 Repeater 模块在中间加拍。由于 ITLB 和 DTLB 均支持多个 outstanding 的请求，因此 repeater 会同时承担类似 MSHR 的功能，并过滤重复请求。Filter 可以过滤掉重复的请求，避免 L1 TLB 中出现重复项。Filter 的项数一定程度上决定了 L2 TLB 的并行度。（参见 5.1.1.2 节）
 
-昆明湖架构中，L2 TLB 位于 memblock 模块中，但与 ITLB 和 DTLB 均有一定距离。香山的 MMU 包含三个 itlbRepeater 和一个 dtlbRepeater，起到在 L1 TLB 与 L2 TLB 之间加拍的效果，两级 Repeater 之间通过 valid-ready 信号进行交互。ITLB 将 PTW 请求以及虚拟页号发送给 itlbRepeater1，进行仲裁后发送给 itlbRepeater2，并发送给 itlbRepeater3，通过 itlbRepeater3 向 L2 TLB 传递 PTW 请求。L2 TLB 将 PTW 请求对应的虚拟页号，查找 L2 TLB 得到的物理页号、页表的权限位、页表等级、是否发生异常等信号返回给 itlbRepeater3、itlbRepeater2，通过 itlbRepeater1 最终返回给 ITLB。DTLB 与 dtlbRepeater 的交互和 ITLB 类似，dtlbRepeater 和 itlbRepeater1 是 Filter 模块，可以合并 L1 TLB 中重复的请求。由于昆明湖架构中 ITLB 和 DTLB 均为非阻塞式访问，因此这些 repeater 也均为阻塞式 Repeater。
+昆明湖架构中，L2 TLB 位于 memblock 模块中，但与 ITLB 和 DTLB 均有一定距离。香山的 MMU 包含三个 itlbRepeater 和一个 dtlbRepeater，起到在 L1 TLB 与 L2 TLB 之间加拍的效果，两级 Repeater 之间通过 valid-ready 信号进行交互。ITLB 将 PTW 请求以及虚拟页号发送给 itlbRepeater1，进行仲裁后发送给 itlbRepeater2，并发送给 itlbRepeater3，通过 itlbRepeater3 向 L2 TLB 传递 PTW 请求。L2 TLB 将 PTW 请求对应的虚拟页号，查找 L2 TLB 得到的物理页号、页表的权限位、页表等级、是否发生异常等信号返回给 itlbRepeater3、itlbRepeater2，通过 itlbRepeater1 最终返回给 ITLB。DTLB 与 dtlbRepeater 的交互和 ITLB 类似，dtlbRepeater 和 itlbRepeater1 是 Filter 模块，可以合并 L1 TLB 中重复的请求。由于昆明湖架构中 ITLB 和 DTLB 均为非阻塞式访问，因此这些 repeater 也均为非阻塞式 Repeater。
 
 ### 过滤重复的请求
 
