@@ -433,7 +433,7 @@ Table: 昆明湖后端性能事件索引表
 | 67   | EXEC_STALL_CYCLE                                             |
 | 68   | MEMSTALL_STORE                                               |
 | 69   | MEMSTALL_L1MISS                                              |
-| 60   | MEMSTALL_L2MISS                                              |
+| 70   | MEMSTALL_L2MISS                                              |
 | 71   | MEMSTALL_L3MISS                                              |
 | 72   | issueQueue_enq_fire_cnt                                      |
 | 73   | IssueQueueAluMulBkuBrhJmp_full                               |
