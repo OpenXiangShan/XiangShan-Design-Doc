@@ -443,7 +443,7 @@ Table: 昆明湖后端性能事件索引表
 | 77   | issueQueue_enq_fire_cnt                                      |
 | 78   | IssueQueueFaluFcvtF2vFmacFdiv_full                           |
 | 79   | IssueQueueFaluFmacFdiv_full                                  |
-| 70   | IssueQueueFaluFmac_full                                      |
+| 80   | IssueQueueFaluFmac_full                                      |
 | 81   | issueQueue_enq_fire_cnt                                      |
 | 82   | IssueQueueVfmaVialuFixVimacVppuVfaluVfcvtVipuVsetrvfwvf_full |
 | 83   | IssueQueueVfmaVialuFixVfalu_full                             |
@@ -453,7 +453,7 @@ Table: 昆明湖后端性能事件索引表
 | 87   | IssueQueueStaMou_full                                        |
 | 88   | IssueQueueLdu_full                                           |
 | 89   | IssueQueueLdu_full                                           |
-| 80   | IssueQueueLdu_full                                           |
+| 90   | IssueQueueLdu_full                                           |
 | 91   | IssueQueueVlduVstuVseglduVsegstu_full                        |
 | 92   | IssueQueueVlduVstu_full                                      |
 | 93   | IssueQueueStdMoud_full                                       |
