@@ -30,7 +30,7 @@ addresses can be dispatched to the StoreUnit once ready.
 
 Table: Basic information stored in StoreQueue
 
-| Field       | Description                      |
+| Field       | 描述                               |
 | ----------- | -------------------------------- |
 | uop         | store instruction uop            |
 | dataModule  | 128-bit data and data valid mask |
@@ -43,7 +43,7 @@ Table: Basic information stored in StoreQueue
 
 Table: State information stored in the StoreQueue
 
-| Field         | Description                                                                                                                                 |
+| Field         | 描述                                                                                                                                          |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | allocated     | Set the allocated state for this entry to begin tracking the lifecycle of this store.                                                       |
 |               | When this store instruction is committed to the Sbuffer, the allocated status is cleared.                                                   |
@@ -116,11 +116,9 @@ Table: State information stored in the StoreQueue
     * addrvalid: This store has completed virtual-to-physical address
       translation and obtained the physical address.
 
-    * If the memory dependency predictor is enabled, the SSID (Store-Set-ID)
-      marks historical information of previously failed load prediction
-      executions. If the current load hits an SSID in the history, it waits for
-      all older stores to complete; if there is no hit, it only waits for older
-      stores with the same physical address to complete.
+    * 如果启用了访存依赖预测器，则SSID (Store-Set-ID)
+      标记了之前load预测执行失败历史信息，如果当前load命中之前历史中的SSID，会等之前所有older的store都执行完；如果没有命中就只会等物理地址相同的older
+      Store执行完成。
 
 ### Feature 2: Misaligned store instructions
 

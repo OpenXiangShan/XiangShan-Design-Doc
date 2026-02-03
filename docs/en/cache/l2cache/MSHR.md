@@ -119,9 +119,9 @@ directly distribute tasks to the following modules or channels via MSHRCtl
 arbitration:
 
 - MainPipe
-- Upstream TileLink B channel
-- Downstream TXREQ channel
-- Downstream TXRSP channel
+- 上游 TileLink B 通道
+- 下游 TXREQ 通道
+- 下游 TXRSP 通道
 
 For the distribution of TXDAT channel tasks, they must pass through the
 MainPipe, as detailed in [@sec:reqarb-mainpipe] [Request Arbiter and Memory
@@ -134,22 +134,22 @@ Memory Pipeline](ReqArb_MainPipe.md).
 The task distribution directions corresponding to each Schedule state item are
 as follows:
 
-| Name             | Target Module/Channel       |
-| ---------------- | --------------------------- |
-| ```s_acquire```  | Downstream TXREQ channel    |
-| ```s_rprobe```   | Upstream TileLink B channel |
-| ```s_pprobe```   | Upstream TileLink B channel |
-| ```s_release```  | MainPipe                    |
-| ```s_probeack``` | MainPipe                    |
-| ```s_refill```   | MainPipe                    |
-| ```s_retry```    | -                           |
-| ```s_cmoresp```  | MainPipe                    |
-| ```s_cmometaw``` | MainPipe                    |
-| ```s_rcompack``` | Downstream TXRSP channel    |
-| ```s_wcompack``` | Downstream TXRSP channel    |
-| ```s_cbwrdata``` | MainPipe                    |
-| ```s_reissue```  | -                           |
-| ```s_dct```      | MainPipe                    |
+| Name             | Target Module/Channel |
+| ---------------- | --------------------- |
+| ```s_acquire```  | 下游 TXREQ 通道           |
+| ```s_rprobe```   | 上游 TileLink B 通道      |
+| ```s_pprobe```   | 上游 TileLink B 通道      |
+| ```s_release```  | MainPipe              |
+| ```s_probeack``` | MainPipe              |
+| ```s_refill```   | MainPipe              |
+| ```s_retry```    | -                     |
+| ```s_cmoresp```  | MainPipe              |
+| ```s_cmometaw``` | MainPipe              |
+| ```s_rcompack``` | 下游 TXRSP 通道           |
+| ```s_wcompack``` | 下游 TXRSP 通道           |
+| ```s_cbwrdata``` | MainPipe              |
+| ```s_reissue```  | -                     |
+| ```s_dct```      | MainPipe              |
 
 ### MainPipe
 
@@ -171,10 +171,10 @@ task to the MainPipe:
 
 1. From replacement task
     - The replacement way selection has been completed
-    - All responses to the upstream Probe have been received
+    - 已经收到向上游的 Probe 的所有回复
     - The replacement read request has received all data from downstream.
 2. From CMO request
-    - All responses to the upstream Probe have been received
+    - 已经收到向上游的 Probe 的所有回复
 
 The writeback request task will require MainPipe to send a request on the TXREQ
 channel:
@@ -223,7 +223,7 @@ When ```s_probeack``` is marked as incomplete, its MSHR state must meet the
 following conditions before it can send a downstream Snoop response task to the
 MainPipe:
 
-- All responses to the upstream Probe have been received
+- 已经收到向上游的 Probe 的所有回复
 
 The downstream Snoop response task will require MainPipe to send messages on the
 TXRSP or TXDAT channel and specify the Snoop Response type in the MSHR. For
@@ -264,7 +264,7 @@ When ```s_refill``` is marked as incomplete, the MSHR state must meet the
 following conditions before it can send a replacement way query and upstream
 Grant response task to the MainPipe:
 
-- All responses to the upstream Probe have been received
+- 已经收到向上游的 Probe 的所有回复
 - The first Comp, CompData, or RespSepData response from downstream has been
   received
 - If required, receive all Comp, CompData, or DataSepResp responses from
@@ -280,7 +280,7 @@ When ```s_cmoresp``` is marked as incomplete, the MSHR state must meet the
 following conditions to send a replacement way query to MainPipe and an upstream
 CBOAck response task:
 
-- All responses to the upstream Probe have been received
+- 已经收到向上游的 Probe 的所有回复
 - A Comp response belonging to ```w_releaseack``` has been received from
   downstream
 - The Comp response from downstream belonging to ```w_grant``` has been received
@@ -396,7 +396,7 @@ update task to MainPipe and perform the following updates:
 - Clear State to Clean
 - Update the permission to TIP
 
-### Upstream TileLink B channel
+### 上游 TileLink B 通道
 
 The request transmission to the upstream TileLink B channel is triggered by the
 state machine items ```s_pprobe``` or ```s_rprobe```. Moreover, ```s_pprobe```
@@ -430,7 +430,7 @@ scenario are listed in the table below:
 |                | Acquire*              | -                       | -                | Probe toN         |
 |                | CBOClean              | -                       | TRUNK            | Probe toB         |
 
-### Downstream TXREQ channel
+### 下游 TXREQ 通道
 
 Requests sent to the downstream TXREQ channel are triggered by the state machine
 entries ```s_acquire``` or ```s_reissue```. Additionally, ```s_acquire``` and
@@ -486,7 +486,7 @@ are as follows:
 |                 |                    |                       | Evict                    | Evict              |
 |                 |                    | CBOInval              | Evict                    | Evict              |
 
-### Downstream TXRSP channel
+### 下游 TXRSP 通道
 
 The message transmission to the downstream TXRSP channel is triggered by the
 state machine items ```s_rcompack``` or ```s_wcompack```. This channel is

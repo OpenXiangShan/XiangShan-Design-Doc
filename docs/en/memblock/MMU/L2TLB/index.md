@@ -25,55 +25,36 @@ the tertiary module section of this document.
 
 ## Function
 
-L2 TLB is a larger page table cache shared by ITLB and DTLB. When an L1 TLB miss
-occurs, a Page Table Walk request is sent to L2 TLB. L2 TLB consists of Page
-Cache (see Section 5.3.7), Page Table Walker (see Section 5.3.8), Last Level
-Page Table Walker (see Section 5.3.9), Hypervisor Page Table Walker (see Section
-5.3.10), Miss Queue (see Section 5.3.11), and Prefetcher (see Section 5.3.12).
+L2 TLB 是更大的页表缓存，由 ITLB 和 DTLB 共享，当 L1 TLB 发生 miss 时，会向 L2 TLB 发送 Page Table Walk
+请求。L2 TLB 分为 Page Cache（参见 5.3.7 节），Page Table Walker（参见 5.3.8 节），Last Level
+Page Table Walker（参见 5.3.9 节）、Hypervisor Page Table Walker（参见 5.3.10）、Miss
+Queue（参见 5.3.11 节）和 Prefetcher（参见 5.3.12 节）六部分。
 
-Requests from L1 TLB first access the Page Cache. For non-two-stage address
-translation requests, if a leaf node is hit, it is directly returned to L1 TLB.
-Otherwise, based on the page table level hit in Page Cache and the availability
-of Page Table Walker and Last Level Page Table Walker, the request enters Page
-Table Walker, Last Level Page Table Walker, or Miss Queue (see Section 5.3.7).
-For two-stage address translation requests: if the request is onlyStage1, it is
-processed the same way as non-two-stage requests; if onlyStage2 and a leaf page
-table is hit, it is directly returned; if not hit, it is sent to Page Table
-Walker for translation; if the request is allStage, since Page Cache can only
-query one page table at a time, it first queries the first-stage page table.
-There are two scenarios: if the first-stage page table hits, it is sent to Page
-Table Walker for subsequent translation; if the first-stage page table does not
-hit a leaf node, it enters Page Table Walker, Last Level Page Table Walker, or
-Miss Queue based on the hit page table level and the availability of Page Table
-Walker and Last Level Page Table Walker. To accelerate page table access, Page
-Cache caches all three levels of page tables separately, allowing simultaneous
-queries (see Section 5.3.7). Page Cache supports ECC verification; if an ECC
-error is detected, the entry is refreshed, and Page Walk is restarted.
+来自 L1 TLB 的请求将首先访问 Page Cache，对于非两阶段地址翻译的请求，若命中叶子节点则直接返回给 L1 TLB，否则根据 Page Cache
+命中的页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table
+Walker、Last Level Page Table Walker 或 Miss Queue（参见 5.3.7 节）。而对于两阶段地址翻译请求，如果该请求是
+onlyStage1 的，则处理方式与非两阶段地址翻译请求一致；如果该请求是 onlyStage2 的，命中叶子页表，则直接返回，没有命中，则发送给 Page
+Table Walker 进行翻译；如果该请求是 allStage 的，由于 Page Cache
+一次只能查询一次页表，所以首先查询第一阶段页表，分两种情况，如果第一阶段页表命中，则发送给 Page Table
+Walker，由其进行接下来的翻译过程，如果第一阶段页表没有命中叶子节点，则根据命中页表等级以及 Page Table Walker 和 Last Level
+Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss
+Queue。为了加快页表访问，Page Cache 将三级页表都分开做了缓存，可以同时查询三级页表（参见 5.3.7 节）。Page Cache 支持 ecc
+校验，如果 ecc 校验出错，则刷新此项，并重新进行 Page Table Walk。
 
-The Page Table Walker handles requests from the Page Cache to perform Hardware
-Page Table Walk. For non-two-stage address translation requests, it only
-accesses the first two levels (1GB and 2MB) of page tables, leaving 4KB page
-table access to the Last Level Page Table Walker. If the Page Table Walker
-reaches a leaf node (large page), it returns the result to the L1 TLB;
-otherwise, it forwards the request to the Last Level Page Table Walker for the
-final level of access. The Page Table Walker can only process one request at a
-time and cannot parallelize access to the first two levels. For two-stage
-address translation requests: (1) If it is an allStage request and the
-first-stage translation hits, PTW sends a second-stage request to the Page
-Cache. If it misses, the request is forwarded to the Hypervisor Page Table
-Walker, and the second-stage result is returned to PTW. (2) If it is an allStage
-request and the first-stage leaf node misses, PTW processing resembles
-non-virtualized requests, except that physical addresses encountered are guest
-physical addresses and require a second-stage translation before memory access
-(see the Page Table Walker module description for details). (3) For onlyStage2
-requests, PTW sends a second-stage translation request externally and returns
-the response to L1TLB. (4) For onlyStage1 requests, PTW handles them internally
-the same way as non-virtualized requests.
+Page Table Walker 接收 Page Cache 的请求，进行 Hardware Page Table
+Walk。对于非两阶段地址翻译的请求，Page Table Walker 只访问前两级（1GB 和 2MB）页表，不访问 4KB 页表，对 4KB
+页表的访问会由 Last Level Page Table Walker 承担。如果 Page Table Walker 访问到叶子节点（大页），则返回给 L1
+TLB，否则需要返回给 Last Level Page Table Walker，由 Last Level Page Table Walker
+进行最后一级页表的访问。Page Table Walker 只能同时处理一个请求，无法并行访问前两级页表。对于两阶段地址翻译的请求，第一种情况，如果是
+allStage 的请求并且第一阶段翻译的页表 hit，PTW 会发送第二阶段请求进入 Page Cache 查询，如果没有命中，则会发送给
+Hypervisor Page Table Walker，第二阶段翻译结果会返回给 PTW；第二种情况，如果是 allStage
+请求并且第一阶段翻译的叶子节点没有命中，则 PTW 翻译过程与非虚拟化请求翻译类似，区别在于 PTW
+翻译过程中出现的物理地址为客户机物理地址，需要进行一次第二阶段地址翻译后才能访存，具体可见 Page Table Walker 的模块介绍；第三种情况，如果是
+onlyStage2 请求，则 PTW 会向外发送第二阶段翻译的请求，接收到 resp 后，返回给 L1TLB；第四种请求是 onlyStage1
+的请求，该请求在 PTW 内部的处理过程与非虚拟化请求的处理过程一致。
 
-The Miss Queue receives requests from the Page Cache and Last Level Page Table
-Walker, waiting for the next access to the Page Cache. The Prefetcher employs
-the Next-Line prefetching algorithm, generating the next prefetch request upon a
-miss or a hit on a prefetched entry.
+Miss Queue 接收来自 Page Cache 和 Last Level Page Table Walker 的请求，等待下次访问 Page
+Cache。Prefetcher 采用 Next-Line 预取算法，当 miss 或者 hit 但命中项为预取项时，产生下一个预取请求。
 
 ### Receives requests from L1 TLB and returns responses
 
@@ -209,49 +190,31 @@ As shown in [@fig:L2TLB-overall], the L2 TLB is divided into six parts: Page
 Cache, Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table
 Walker, Miss Queue, and Prefetcher.
 
-Requests from L1 TLB first access the Page Cache. For non-two-stage address
-translation requests, if a leaf node is hit, it is directly returned to L1 TLB.
-Otherwise, based on the page table level hit in Page Cache and the availability
-of Page Table Walker and Last Level Page Table Walker, the request enters Page
-Table Walker, Last Level Page Table Walker, or Miss Queue (see Section 5.3.7).
-For two-stage address translation requests: if the request is onlyStage1, it is
-processed the same way as non-two-stage requests; if onlyStage2 and a leaf page
-table is hit, it is directly returned; if not hit, it is sent to Page Table
-Walker for translation; if the request is allStage, since Page Cache can only
-query one page table at a time, it first queries the first-stage page table.
-There are two scenarios: if the first-stage page table hits, it is sent to Page
-Table Walker for subsequent translation; if the first-stage page table does not
-hit a leaf node, it enters Page Table Walker, Last Level Page Table Walker, or
-Miss Queue based on the hit page table level and the availability of Page Table
-Walker and Last Level Page Table Walker. To accelerate page table access, Page
-Cache caches all three levels of page tables separately, allowing simultaneous
-queries (see Section 5.3.7). Page Cache supports ECC verification; if an ECC
-error is detected, the entry is refreshed, and Page Walk is restarted.
+来自 L1 TLB 的请求将首先访问 Page Cache，对于非两阶段地址翻译的请求，若命中叶子节点则直接返回给 L1 TLB，否则根据 Page Cache
+命中的页表等级以及 Page Table Walker 和 Last Level Page Table Walker 的空闲情况进入 Page Table
+Walker、Last Level Page Table Walker 或 Miss Queue（参见 5.3.7 节）。而对于两阶段地址翻译请求，如果该请求是
+onlyStage1 的，则处理方式与非两阶段地址翻译请求一致；如果该请求是 onlyStage2 的，命中叶子页表，则直接返回，没有命中，则发送给 Page
+Table Walker 进行翻译；如果该请求是 allStage 的，由于 Page Cache
+一次只能查询一次页表，所以首先查询第一阶段页表，分两种情况，如果第一阶段页表命中，则发送给 Page Table
+Walker，由其进行接下来的翻译过程，如果第一阶段页表没有命中叶子节点，则根据命中页表等级以及 Page Table Walker 和 Last Level
+Page Table Walker 的空闲情况进入 Page Table Walker、Last Level Page Table Walker 或 Miss
+Queue。为了加快页表访问，Page Cache 将三级页表都分开做了缓存，可以同时查询三级页表（参见 5.3.7 节）。Page Cache 支持 ecc
+校验，如果 ecc 校验出错，则刷新此项，并重新进行 Page Walk。
 
-The Page Table Walker handles requests from the Page Cache to perform Hardware
-Page Table Walk. For non-two-stage address translation requests, it only
-accesses the first two levels (1GB and 2MB) of page tables, leaving 4KB page
-table access to the Last Level Page Table Walker. If the Page Table Walker
-reaches a leaf node (large page), it returns the result to the L1 TLB;
-otherwise, it forwards the request to the Last Level Page Table Walker for the
-final level of access. The Page Table Walker can only process one request at a
-time and cannot parallelize access to the first two levels. For two-stage
-address translation requests: (1) If it is an allStage request and the
-first-stage translation hits, PTW sends a second-stage request to the Page
-Cache. If it misses, the request is forwarded to the Hypervisor Page Table
-Walker, and the second-stage result is returned to PTW. (2) If it is an allStage
-request and the first-stage leaf node misses, PTW processing resembles
-non-virtualized requests, except that physical addresses encountered are guest
-physical addresses and require a second-stage translation before memory access
-(see the Page Table Walker module description for details). (3) For onlyStage2
-requests, PTW sends a second-stage translation request externally and returns
-the response to L1TLB. (4) For onlyStage1 requests, PTW handles them internally
-the same way as non-virtualized requests.
+Page Table Walker 接收 Page Cache 的请求，进行 Hardware Page Table
+Walk。对于非两阶段地址翻译的请求，Page Table Walker 只访问前两级（1GB 和 2MB）页表，不访问 4KB 页表，对 4KB
+页表的访问会由 Last Level Page Table Walker 承担。如果 Page Table Walker 访问到叶子节点（大页），则返回给 L1
+TLB，否则需要返回给 Last Level Page Table Walker，由 Last Level Page Table Walker
+进行最后一级页表的访问。Page Table Walker 只能同时处理一个请求，无法并行访问前两级页表。对于两阶段地址翻译的请求，第一种情况，如果是
+allStage 的请求并且第一阶段翻译的页表 hit，PTW 会发送第二阶段请求进入 Page Cache 查询，如果没有命中，则会发送给
+Hypervisor Page Table Walker，第二阶段翻译结果会返回给 PTW；第二种情况，如果是 allStage
+请求并且第一阶段翻译的叶子节点没有命中，则 PTW 翻译过程与非虚拟化请求翻译类似，区别在于 PTW
+翻译过程中出现的物理地址为客户机物理地址，需要进行一次第二阶段地址翻译后才能访存，具体可见 Page Table Walker 的模块介绍；第三种情况，如果是
+onlyStage2 请求，则 PTW 会向外发送第二阶段翻译的请求，接收到 resp 后，返回给 L1TLB；第四种请求是 onlyStage1
+的请求，该请求在 PTW 内部的处理过程与非虚拟化请求的处理过程一致。
 
-The Miss Queue receives requests from the Page Cache and Last Level Page Table
-Walker, waiting for the next access to the Page Cache. The Prefetcher employs
-the Next-Line prefetching algorithm, generating the next prefetch request upon a
-miss or a hit on a prefetched entry.
+Miss Queue 接收来自 Page Cache 和 Last Level Page Table Walker 的请求，等待下次访问 Page
+Cache。Prefetcher 采用 Next-Line 预取算法，当 miss 或者 hit 但命中项为预取项时，产生下一个预取请求。
 
 The diagram involves the following arbiters, named as in the chisel code:
 
@@ -270,11 +233,10 @@ The diagram involves the following arbiters, named as in the chisel code:
   Last Level Page Table Walker, outputting to outArb.
 * mq_arb: A 2-to-1 arbiter with inputs from Page Cache and Last Level Page Table
   Walker; output goes to the Miss Queue.
-* mem_arb: A 3-to-1 arbiter with inputs from Page Table Walker, Last Level Page
-  Table Walker, and Last Level Page Table Walker; output to L2 Cache (Last Level
-  Page Table Walker also has an internal mem_arb that arbitrates all PTW items
-  sent by Last Level Page Table Walker to L2 Cache before passing them to this
-  mem_arb)
+* mem_arb：3 to 1 的仲裁器，输入为 Page Table Walker、Last Level Page Table Walker 和
+  Hypervisor Page Table Walker；输出为 L2 Cache（Last Level Page Table Walker 内部也有一个
+  mem_arb，把所有 Last Level Page Table Walker 向 L2 Cache 发送的 PTW 项做仲裁，之后传到这个
+  mem_arb 里）
 
 ![L2 TLB module hit path](../figure/image36.jpeg){#fig:L2TLB-hit-passthrough}
 
@@ -320,8 +282,7 @@ to L1 TLB. Page Table Walker may generate responses in the following scenarios:
   TLB
 * For requests involving only the second-stage translation, after receiving the
   second-stage translation result
-* For requests involving two-stage translation, both the first-stage leaf page
-  table and the second-stage leaf page table are obtained.
+* 两阶段翻译都有的请求，第一阶段的叶子页表与第二阶段的叶子页表都得到后
 * Second-stage translation results in a Page fault or Access fault
 * PMP or PMA checks result in a Page fault or Access fault, which also needs to
   be returned to L1 TLB
@@ -331,8 +292,7 @@ including the following possibilities:
 
 * Non-two-stage translation requests and single-stage translation requests
   accessing leaf nodes (4KB pages)
-* For requests involving two-stage translation, both the first-stage leaf page
-  table and the second-stage leaf page table are obtained.
+* 两阶段翻译都有的请求，第一阶段的叶子页表与第二阶段的叶子页表都得到后
 * PMP or PMA checks result in an Access fault
 
 ## Interface timing

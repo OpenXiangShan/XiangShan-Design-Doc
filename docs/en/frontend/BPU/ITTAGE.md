@@ -2,17 +2,10 @@
 
 ## Function
 
-ITTAGE receives prediction requests from within the BPU. It consists of a base
-prediction table and multiple history tables, each entry containing a field to
-store the target address of indirect jump instructions. The base prediction
-table is indexed by PC, while history tables are indexed by XORing the PC with a
-folded result of a certain length of branch history. Different history tables
-use varying lengths of branch history. During prediction, a tag is computed by
-XORing the PC with another folded result of the branch history corresponding to
-each history table, then matched against the tag read from the table. A match
-indicates a hit. The final result depends on the outcome from the history table
-with the longest matching history length. Ultimately, ITTAGE outputs the
-prediction result to the composer.
+ITTAGE 接收来自 BPU 内部的预测请求，其内部由一个基预测表和多个历史表组成，每个表项中都有一个用于存储间接跳转指令目标地址的字段。基预测表用 PC
+索引，而历史表用 PC 和一定长度的分支历史折叠后的结果异或索引，不同历史表使用的分支历史长度不同。在预测时，还会用 PC
+和每个历史表对应的分支历史的另一种折叠结果异或计算 tag，与表中读出的 tag
+进行匹配，如果匹配成功则该表命中。最终的结果取决于命中的历史长度最长的预测表的结果。最终，ITTAGE 将预测结果输出至 composer。
 
 ### Prediction of indirect jump instructions
 
@@ -23,22 +16,18 @@ addresses of indirect jump instructions come from runtime-variable registers,
 offering multiple possible choices that require prediction based on branch
 history.
 
-To this end, each entry in ITTAGE includes a predicted jump address field in
-addition to the TAGE entry, ultimately outputting the selected predicted jump
-address rather than the chosen jump direction.
+为此，ITTAGE 的每个表项在 TAGE 表项的基础上加入了所预测的跳转地址项，最后输出结果为选出的命中预测跳转地址而非选出的跳转方向。
 
 Since each FTB entry stores information for at most one indirect jump
 instruction, the ITTAGE predictor can predict the target address of only one
 indirect jump instruction per cycle.
 
-The ITTAGE in Xiangshan Nanhu architecture provides 5 tagged prediction tables
-T1-T5. Basic information about the baseline predictor and tagged prediction
-tables is shown in the table below.
+香山昆明湖 V2R2 架构中的 ITTAGE 提供了 5 个带 tag 的预测表 T1-T5，基准预测器和带 tag 的预测表的基本信息见下表。
 
-| **predictor**           | ** with tag** | ** function **                                                                                            | ** entry composition **                                                                                                                               | **item count**                                           |
-| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Baseline Predictor T0   | No            | Used to provide prediction results when none of the tags in the tagged prediction table match.            | ITTAGE does not implement T0, but directly uses the prediction result from ftb as the baseline prediction result                                      |                                                          |
-| Prediction tables T1-T5 | Yes           | When there is a tag match, the one with the longest history is selected to provide the prediction result. | valid 1bit, tag 9bits, ctr 2bits (the highest bit indicates whether to output this prediction result), us: 1bit (usefulness counter), target: 39 bits | T1-T2 each have 256 entries, T3-T5 each have 512 entries |
+| **predictor**           | ** with tag** | ** function **                                                                                            | ** entry composition **                                                                                                                           | **item count**              |
+| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Baseline Predictor T0   | No            | Used to provide prediction results when none of the tags in the tagged prediction table match.            | ITTAGE does not implement T0, but directly uses the prediction result from ftb as the baseline prediction result                                  |                             |
+| Prediction tables T1-T5 | Yes           | When there is a tag match, the one with the longest history is selected to provide the prediction result. | valid: 1bit; tag: 9bit; sctr: 2bits（表示要不要输出这个预测结果）; useful: 1bit（usefulness 计数器）; target_offset: 20 bits（target 共 50 bits，出于面积考虑，高位 30 bits 分开存储） | T1-T2 各 256 项，T3-T5 各 512 项 |
 
 The BPU module maintains a 256-bit global branch history ghv and separately
 manages folded branch histories for each of ITTAGE's 5 tagged prediction tables,
@@ -49,12 +38,12 @@ indicated by ptr:
 
 | ** history**                                | **index folded branch history length** | **tag folded branch history 1 length** | ** tag folded branch history 2 length** | ** Design principle **                                                |
 | ------------------------------------------- | -------------------------------------- | -------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
-| Global branch history ghv                   | 256 bits                               | None                                   | None                                    | Each bit represents whether the corresponding branch is taken or not. |
-| T1 corresponds to folded branch history     | 4 bits                                 | 4 bits                                 | 4 bits                                  | ghv takes the lower 4 bits of ptr for folded XOR                      |
-| T2 corresponds to folded branch history     | 8-bit                                  | 8-bit                                  | 8-bit                                   | ghv takes the lower 8 bits of ptr for folded XOR                      |
-| T3 corresponds to folded branch history.    | 9-bit                                  | 9-bit                                  | 8-bit                                   | ghv takes the lower 13 bits from ptr, folds, and XORs them.           |
-| T4 corresponds to folded branch history     | 9-bit                                  | 9-bit                                  | 8-bit                                   | ghv takes the lower 16 bits of ptr for folded XOR                     |
-| T5 corresponds to the folded branch history | 9-bit                                  | 9-bit                                  | 8-bit                                   | ghv takes the lower 32 bits of ptr for folded XOR                     |
+| Global branch history ghv                   | 256 bits                               | 无                                      | 无                                       | Each bit represents whether the corresponding branch is taken or not. |
+| T1 corresponds to folded branch history     | 4 比特                                   | 4 比特                                   | 4 比特                                    | ghv takes the lower 4 bits of ptr for folded XOR                      |
+| T2 corresponds to folded branch history     | 8 比特                                   | 8 比特                                   | 8 比特                                    | ghv takes the lower 8 bits of ptr for folded XOR                      |
+| T3 corresponds to folded branch history.    | 9 比特                                   | 9 比特                                   | 8 比特                                    | ghv takes the lower 13 bits from ptr, folds, and XORs them.           |
+| T4 corresponds to folded branch history     | 9 比特                                   | 9 比特                                   | 8 比特                                    | ghv takes the lower 16 bits of ptr for folded XOR                     |
+| T5 corresponds to the folded branch history | 9 比特                                   | 9 比特                                   | 8 比特                                    | ghv takes the lower 32 bits of ptr for folded XOR                     |
 
 ITTAGE requires a 3-cycle delay:
 
@@ -63,86 +52,47 @@ ITTAGE requires a 3-cycle delay:
 * 2-cycle selection of hit result
 * 3-cycle output
 
-  ### Wrbypass
+### 写缓存（WriteBuffer）
 
-Wrbypass contains both Mem and Cam, used to sequence updates. Every ITTAGE
-update writes to this wrbypass and the corresponding prediction table's SRAM.
-During each update, wrbypass is checked; if a hit occurs, the read ITTAGE ctr
-value is used as the old value, discarding the old ctr value previously sent to
-the backend with the branch instruction and returned to the frontend. This
-ensures that if a branch is updated repeatedly, wrbypass guarantees that one
-update will always obtain the final value from the immediately preceding update.
+每个 IttageTable 使用 WriteBuffer 模块实现写缓存，用于在 SRAM 写操作与读操作冲突时，暂存写请求以保证数据一致性。 每次
+ITTAGE 更新时都会写进这个 WriteBuffer；当 SRAM 读端口空闲时，WriteBuffer 会将数据写入 SRAM。
 
-Each prediction table T1~T5 in ITTAGE has a corresponding wrbypass. In the
-wrbypass of each prediction table, Mem contains 4 entries, each storing 1 ctr;
-Cam has 4 entries, where inputting the updated idx and tag retrieves the
-corresponding data's position in Cam. Cam and Mem are written simultaneously, so
-the data's position in Cam is also its position in Mem. Thus, using this Cam, we
-can check during updates whether the data corresponding to the idx is in the
-wrbypass.
 
-#### Predictor training
+### Predictor training
 
 First, define the provider as the prediction table with the longest required
 history length among all those producing tag matches, while the other matching
 prediction tables (if any) are called altpred. When the provider's ctr is 0, the
 altpred's result is chosen as the prediction.
 
-The ITTAGE entry includes a usefulness field. When the provider predicts
-correctly while the altpred predicts incorrectly, the provider's usefulness is
-set to 1, indicating that the entry is useful and will not be allocated as an
-empty entry by the training allocation algorithm. When the provider's prediction
-is confirmed as correct and the provider's prediction differs from the altpred's
-result, the provider's usefulness field is set. If the predicted address matches
-the actual address, the ctr counter of the corresponding provider entry is
-incremented by 1; if the predicted address does not match, the ctr counter is
-decremented by 1. In ITTAGE, the ctr is used to determine whether to adopt the
-predicted jump target result. When ctr is 0, the altpred result is chosen.
+ITTAGE 表项中包含一个 usefulness 域，当 provider 预测正确而 altpred 预测错误时 provider 的 usefulness
+置 1，表示该项是一个有用的项，便不会被训练时的分配算法当作空项分配出去。当 provider 产生的预测被证实为一个正确的预测，且此时的 provider 与
+altpred 的预测结果不同，则 provider 的 usefulness 域被置 1。
 
-Next, if the provider originates from a prediction table that does not have the
-longest required history length, the following entry addition operation is
-performed. The entry addition operation first reads the usefulness field of all
-prediction tables with history lengths longer than the provider. If any table's
-usefulness field value is 0, an entry is allocated in that table; if no table
-meets this condition, allocation fails. When multiple prediction tables (e.g.,
-Tj, Tk) have usefulness fields of 0, entry allocation is random, with certain
-tables masked randomly to prevent repeated allocations to the same table. The
-randomness in entry allocation is achieved using a 64-bit linear feedback shift
-register (LFSR) primitive from Chisel's util package, which generates
-pseudo-random numbers. In the Verilog code, this corresponds to the
-allocLFSR_lfsr register. During training, an 8-bit saturating counter tickCtr
-tracks the difference between allocation failures and successes. When allocation
-failures accumulate sufficiently to saturate the tickCtr counter, a global
-useful bit reset is triggered, clearing all usefulness fields.
+若预测地址与实际一致，则将对应 provider 表项的 ctr 计数器自增 1；若预测地址与实际不一致，则将对应 provider 表项的 ctr 计数器自减
+1。ITTAGE 中，会根据 ctr 判断是否采取这个预测的跳转目标结果。当 ctr 为 0 时，会选择 altpred 的结果。
+
+接下来，若该 provider 所源自的预测表并非所需历史长度最高的预测表，则此时执行如下的表项增添操作。表项增添操作会首先读取所有历史长度长于
+provider 的预测表的 usefulness 域。若此时有某表的 usefulness 域值为 0，则在该表中分配一对应的表项；若没有找到满足
+usefulness 域值为 0 的表，则分配失败。当有多个预测表（如 Tj,Tk 两项）的 usefulness 域均为 0
+时，表项的分配概率是随机的，分配的时候随机把某些 table 给 mask 掉，让它不会每次都分配同一个。这里的表项分配的随机性是通过 chisel 的
+util 包里的 64 位线性反馈移位寄存器原语 LFSR64 生成伪随机数来实现的，在 verilog 代码中对应 allocLFSR_lfsr
+寄存器。在训练时，用 8 位饱和计数器 tickCtr 统计分配失败次数-成功次数，当分配失败的次数足够多，tickCtr 计数器计数到满达到饱和时，触发全局
+useful bit reset，把所有的 usefulness 域清零。
 
 Note: The saturating counter for clearing the usefulness field in ITTAGE is
 named tickCtr, with a length of 8 bits. Both the name and length differ from
 TAGE.
 
-Finally, during initialization or when allocating new entries in the TAGE table,
-all ctr counters in the entries are set to 0, and all usefulness fields are set
-to 0.
+最后，在 ITTAGE 表分配新项时，新表项中的 ctr 计数器均被设置为 2，usefulness 域被设置为 0。
 
 ## Storage structure
 
-* 5 history tables with entries of 256, 256, 512, 512, and 512 respectively.
-  Each table is divided into 2 banks based on the lower bits of the PC, with
-  each bank containing 128 sets. Each set corresponds to a maximum of 1 indirect
-  jump in an FTB entry.
-* Each entry contains 1 valid bit, 9 tag bits, 2 counter bits, 39 target bits,
-  and 1 useful bit. The useful bit is stored independently, and the valid bit is
-  stored separately using a register file.
-* Using FTB results as the base table, equivalent to 2K entries (but the FTB
-  target bit width is insufficient to effectively store far jump addresses)
-* Each bank of the history table has a 4-entry write buffer wrbypass
-
-## Indexing method
-
-* index = pc[8:1] ^ folded_hist(8bit) or pc and folded_hist each 9bit
-* tag = pc[17:9] (or pc[19:10]) ^ folded_hist(9bit) ^ (folded_hist(8bit) << 1)
-  * Here, it might still be better to use the lower bits of the PC rather than
-    another unused segment of the PC index, or...
-* The history employs basic segmented XOR folding.
+* 5 张历史表，项数分别为 256、256、512、512、512，每张表没有分 bank。
+* 每个表项含有 1bit valid，9bit tag，2bit ctr，20bit target_offset，1bit useful，都使用 SRAM
+  统一存储。
+* 以 FTB 结果作为 base table。
+* 每个历史表有 4 项的写缓存（WriteBuffer）。
 
 ## Prediction flow
 
@@ -156,13 +106,9 @@ to 0.
     matches, the target address from the second-longest history result is
     attempted.
   * When no history table hits, the FTB result is used.
-  * When attempting to use the results from the history table, they are only
-    actually used if ctr>1. If ctr<=1, the results are not used.
 * s3 uses the target address and compares it with the s2 result within the BPU
   to determine whether the pipeline needs to be flushed.
 
 ## Training process
 
-Essentially the same as TAGE. For the target field, the new value is only
-replaced when allocating a new entry or when the original ctr is at its minimum
-value of 0; otherwise, it remains unchanged.
+基本和 TAGE 相同，对于 target 字段，仅当分配新表项或者原 ctr 为最小值 0 时，才会替换新值，否则保持原样。

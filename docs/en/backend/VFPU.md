@@ -57,7 +57,7 @@ floating-point unit, it only needs to support calculations in three
 single-precision formats. The input operands and output results of this unit
 should all be $64$-bit, meaning it must support calculations in three formats:
 
-(1) One $f64 = f64 + f64$;
+（1）$1$ 个 $f64 = f64 + f64$；
 
 (2) $1$ $f32 = f32 + f32$;
 
@@ -81,11 +81,11 @@ single-precision formats f32/f16, it can perform 2/4 sets of operations
 simultaneously, maintaining 100% bandwidth utilization. The supported
 single-precision format computations are as follows:
 
-(1) One $f64 = f64 + f64$;
+（1）$1$ 个 $f64 = f64 + f64$；
 
 (2) 2 $f32 = f32 + f32$;
 
-(3) $4$ $f16 = f16 + f16$.
+（3）$4$ 个 $f16 = f16 + f16$。
 
 Performing multiple sets of floating-point additions with the same format
 simultaneously makes hardware design more challenging than scalar operations,
@@ -258,7 +258,7 @@ Table: Optimized Dual-Path Floating-Point Addition Algorithm
 |                         Preprocessing + Exchange                          | Normalized Instruction Subtraction + Swap |
 | Significant Digit Addition Conversion | Rounding | Leading Zero Detection |                 Alignment                 |
 |                               Normalization                               |      Significand addition | Rounding      |
-|                              Selection Path                               |              Selection Path               |
+|                                   选择路径                                    |                   选择路径                    |
 
 In the IEEE round-to-nearest ($RTN$) mode, computing $A+B$ and $A+B+1$ suffices
 to address all normalization possibilities (additional computation of $A+B+2$ is
@@ -279,7 +279,7 @@ subtraction with d > 1 is called the far path, while the path for equivalent
 subtraction with d ≤ 1 is called the close path. Cases involving infinity or NaN
 operands are handled separately and do not belong to the far or close paths.
 
-##### $far$ path
+##### far 路径
 
 The $far$ path algorithm is illustrated in the figure, with the main steps as
 follows:
@@ -345,7 +345,7 @@ final result is selected between the overflow result and the normal computation
 result based on $overflow$. The exception flags in the $far$ path only produce
 overflow and inexact results.
 
-##### $close$ path
+##### close 路径
 
 In the $close$ path, it must be an effective subtraction with $d \leq 1$,
 specifically categorized as $d=0$ or $d=1$. The algorithm is illustrated in the
@@ -579,7 +579,7 @@ and values listed in the table:
 
 Table: Parameter meanings and values under different precisions
 
-|     Parameters     | $f16$ | $f32$ | $f64$ |                                                Meaning                                                 |
+|     Parameters     | $f16$ | $f32$ | $f64$ |                                                   含义                                                   |
 | :----------------: | :---: | :---: | :---: | :----------------------------------------------------------------------------------------------------: |
 | $significandWidth$ | $11$  | $24$  | $53$  |                                        Significant Digit Width                                         |
 |  $exponentWidth$   |  $5$  |  $8$  | $11$  |                                             Exponent width                                             |
@@ -637,13 +637,13 @@ multiplication.
 
 Table: Comparison of Three Algorithms for Unsigned Integer Multiplication
 
-|  Algorithm   | Delay ($ps$) | Area ($um²$) | Pipelining feasibility |
-| :----------: | :----------: | :----------: | :--------------------: |
-|  Method one  |   $285.15$   |  $1458.95$   |           No           |
-|  Method two  |   $320.41$   |  $2426.34$   |          Yes           |
-| Method three |   $302.19$   |  $2042.46$   |          Yes           |
+|  Algorithm   | 延时（$ps$） | 面积（$um²$） | Pipelining feasibility |
+| :----------: | :------: | :-------: | :--------------------: |
+|  Method one  | $285.15$ | $1458.95$ |           No           |
+|  Method two  | $320.41$ | $2426.34$ |           是            |
+| Method three | $302.19$ | $2042.46$ |           是            |
 
-##### $Booth$ encoding
+##### Booth 编码
 
 The purpose of Booth encoding is to reduce the number of partial products in a
 multiplier. Taking the binary unsigned integer multiplication C=A*B as an
@@ -785,7 +785,7 @@ concludes the introduction to Booth encoding. Note that the example uses an
 digits, $f32$ has an even number, requiring slight differences in zero-padding
 the most significant bit. Other steps are similar and thus omitted.
 
-##### $CSA$ Compression
+##### CSA 压缩
 
 $Carry$-$Save$-$Adder$ is a carry-save adder that compresses $n$ addends into
 $m$ addends ($m
@@ -921,21 +921,21 @@ synthesis results for different input XOR gates are shown in the table.
 
 Table: Synthesis Results of Different Input XOR Gates
 
-|     $106$ bits      | Delay ($ps$) | Area ($um²$) |
-| :-----------------: | :----------: | :----------: |
-|       $A$^$B$       |   $13.74$    |  $38.66880$  |
-|     $A$^$B$^$C$     |   $23.01$    |  $63.09120$  |
-|   $A$^$B$^$C$^$D$   |   $24.69$    |  $87.51360$  |
-| $A$^$B$^$C$^$D$^$E$ |   $37.21$    |  $99.72480$  |
+|      $106bit$       | 延时（$ps$） | 面积（$um²$）  |
+| :-----------------: | :------: | :--------: |
+|       $A$^$B$       | $13.74$  | $38.66880$ |
+|     $A$^$B$^$C$     | $23.01$  | $63.09120$ |
+|   $A$^$B$^$C$^$D$   | $24.69$  | $87.51360$ |
+| $A$^$B$^$C$^$D$^$E$ | $37.21$  | $99.72480$ |
 
 The synthesis results of $CSA3\_2$ and $CSA4\_2$ are shown in the table.
 
 Table: Synthesis Results of $CSA3\_2$ and $CSA4\_2$
 
-| $106$ bits | Delay ($ps$) | Area ($um²$) |
-| :--------: | :----------: | :----------: |
-| $CSA3\_2$  |   $23.23$    | $104.42880$  |
-| $CSA4\_2$  |   $40.63$    | $237.86881$  |
+| $106bit$  | 延时（$ps$） |  面积（$um²$）  |
+| :-------: | :------: | :---------: |
+| $CSA3\_2$ | $23.23$  | $104.42880$ |
+| $CSA4\_2$ | $40.63$  | $237.86881$ |
 
 It can be seen that although $CSA4\_2$ theoretically has a delay of three XOR
 gates and $CSA3\_2$ theoretically has a delay of two XOR gates, in actual
@@ -944,7 +944,7 @@ $CSA3\_2$. Therefore, $CSA3\_2$ should be used whenever possible, unless one
 level of $CSA4\_2$ can replace two levels of $CSA3\_2$, such as in $4->2$
 compression or $8->2$ compression.
 
-##### CSAn_2
+##### CSAn\_2
 
 For two unsigned integer multiplications using Booth encoding, the number of
 partial products is ceil((n+1)/2). To ensure correct carry propagation, the
@@ -953,11 +953,11 @@ partial products for each data format are listed in the table.
 
 Table: Partial Product Count and Bit Width for Different Data Formats
 
-| Data Format | Number of significant digits | Number of partial products | Partial product bit width |
-| :---------: | :--------------------------: | :------------------------: | :-----------------------: |
-|   $fp16$    |             $11$             |            $6$             |           $12$            |
-|   $fp32$    |             $24$             |            $13$            |           $25$            |
-|   $fp64$    |             $53$             |            $27$            |            54             |
+|  数据格式  | Number of significant digits | Number of partial products | Partial product bit width |
+| :----: | :--------------------------: | :------------------------: | :-----------------------: |
+| $fp16$ |             $11$             |            $6$             |           $12$            |
+| $fp32$ |             $24$             |            $13$            |           $25$            |
+| $fp64$ |             $53$             |            $27$            |            54             |
 
 Following the principle of prioritizing $CSA3\_2$ unless one level of $CSA4\_2$
 can replace two levels of $CSA3\_2$, the number of $CSA3\_2$ and $CSA4\_2$
@@ -965,11 +965,11 @@ stages used for each data format is listed in the table.
 
 Table: Partial Product $CSA$ Compression Process for Different Data Formats
 
-| Data Format | Number of $CSA3\_2$ Stages | $CSA4\_2$ Stages | Process ($->$ denotes $CSA3\_2$, $-->$ denotes $CSA4\_2$) |
-| :---------: | :------------------------: | :--------------: | :-------------------------------------------------------: |
-|   $fp16$    |            $1$             |       $1$        |                        $6->4-->2$                         |
-|   $fp32$    |            $3$             |       $1$        |                     $13->9->6->4-->2$                     |
-|   $fp64$    |            $3$             |       $2$        |                  $27->18->12->8-->4-->2$                  |
+|  数据格式  | Number of $CSA3\_2$ Stages | $CSA4\_2$ Stages | Process ($->$ denotes $CSA3\_2$, $-->$ denotes $CSA4\_2$) |
+| :----: | :------------------------: | :--------------: | :-------------------------------------------------------: |
+| $fp16$ |            $1$             |       $1$        |                        $6->4-->2$                         |
+| $fp32$ |            $3$             |       $1$        |                     $13->9->6->4-->2$                     |
+| $fp64$ |            $3$             |       $2$        |                  $27->18->12->8-->4-->2$                  |
 
 ##### Exponent processing and right shift
 
@@ -1085,11 +1085,11 @@ floating-point data formats.
 
 Table: Bit Width of $rshift\_value$ Used for Different Floating-Point Formats
 
-| Data Format | $fp\_c\_significand\_cat0$ bit width | Bit Width of $rshift\_value$ | Bit width used |
-| :---------: | :----------------------------------: | :--------------------------: | :------------: |
-|    $f16$    |                 $37$                 |             $6$              |      $6$       |
-|    $f32$    |                 $76$                 |             $9$              |      $7$       |
-|    $f64$    |                $163$                 |             $12$             |      $8$       |
+| 数据格式  | $fp\_c\_significand\_cat0$ bit width | Bit Width of $rshift\_value$ | Bit width used |
+| :---: | :----------------------------------: | :--------------------------: | :------------: |
+| $f16$ |                 $37$                 |             $6$              |      $6$       |
+| $f32$ |                 $76$                 |             $9$              |      $7$       |
+| $f64$ |                $163$                 |             $12$             |      $8$       |
 
 There are three cases based on the value of $rshift\_value$: $rshift\_value <=
 0$ means no right shift is needed, and the $sticky$ result is $0$;
@@ -1138,7 +1138,7 @@ for subtraction). Since $adder$ may be negative, an extra $1$-bit is extended
 solely for sign determination of $adder$, which is later discarded. $adder\_inv$
 inverts $adder$ when it is negative and removes this sign bit.
 
-##### $LZD$, left shift, rounded and unrounded mantissa results
+##### LZD、左移、舍入与未舍入尾数结果
 
 After computing $adder\_inv$, a leading-zero detection must be performed on
 $adder\_inv$ to determine the number of left shifts required, thereby
@@ -1223,7 +1223,7 @@ mantissa's low bits with zeros to align with high-precision floating-point
 operands. After alignment, computation proceeds according to the
 single-precision format.
 
-### Vector floating-point division algorithm
+### 向量浮点除法算法
 
 Division is one of the most representative floating-point functions in modern
 processors. There are two main algorithms for computing division in hardware:
@@ -1530,7 +1530,7 @@ dividend, skipping the digit iteration phase, enabling the division result to be
 output as early as the second cycle. However, additional cycles are still needed
 if the dividend or result is a denormal number.
 
-#### Vector floating-point division algorithm
+#### 向量浮点除法算法
 
 For vector floating-point division, the RISC-V vector instruction set extension
 does not support mixed-precision floating-point division, thus only the
@@ -1540,7 +1540,7 @@ following needs to be supported:
 
 (2) $2$ $f32 = f32 + f32$;
 
-(3) $4$ $f16 = f16 + f16$.
+（3）$4$ 个 $f16 = f16 + f16$。
 
 Considering that vector division involves multiple division computations
 simultaneously, and early termination can cause asynchronous output of results
@@ -1586,7 +1586,7 @@ $4$ $f16$, $2$ $f32$, or $1$ $f64$.
 
 ## Hardware Design
 
-### Vector Floating-Point Adder
+### 向量浮点加法器
 
 #### Scalar single-precision floating-point adder
 
@@ -1668,7 +1668,7 @@ floating-point adder.
 ![Scalar Mixed-Precision Floating-Point Adder Architecture
 Diagram](./figure/ScalarMixedPrecisionFloating-pointAdder.svg)
 
-#### Vector Floating-Point Adder
+#### 向量浮点加法器
 
 The diagram below shows the architecture of the vector floating-point adder. To
 meet timing requirements, it is composed of four modules: $FloatAdderF64Widen$
@@ -1716,7 +1716,7 @@ bits, and the $close$ path inserts registers after $Mux1H$.
 
 ![FloatAdderF16 Pipeline Partitioning](./figure/FloatAdderF16Pipeline.svg)
 
-#### Interface Description
+#### 接口说明
 
 The previously introduced vector floating-point adder has a width of $64$ bits,
 requiring both operands to be in vector form. However, $RVV$ not only specifies
@@ -1745,24 +1745,24 @@ operand; $vfclass$ has only one vector register as the source operand.
 
 Table: $VFALU$ Opcode
 
-| $op\_code$ | Corresponding instruction | Operand format |           Meaning           |
-| :--------: | :-----------------------: | :------------: | :-------------------------: |
-|    $0$     |        $vf(w)add$         |    $vv,vf$     |          Addition           |
-|    $1$     |        $vf(w)sub$         |    $vv,vf$     |         Subtraction         |
-|    $2$     |          $vfmin$          |    $vv,vf$     |   Find the minimum value    |
-|    $3$     |          $vfmax$          |    $vv,vf$     |        Find Maximum         |
-|    $4$     |         $vfmerge$         |     $vfm$      |        Data merging         |
-|    $5$     |         $vfmove$          |     $v.f$      |        Data movement        |
-|    $6$     |         $vfsgnj$          |    $vv,vf$     |       Sign Injection        |
-|    $7$     |         $vfsgnjn$         |    $vv,vf$     |  Sign inversion injection   |
-|    $8$     |         $vfsgnjx$         |    $vv,vf$     |     XOR sign injection      |
-|    $9$     |          $vmfeq$          |    $vv,vf$     |        Whether equal        |
-|    $10$    |          $vmfnq$          |    $vv,vf$     |          Not Equal          |
-|    $11$    |          $vmflt$          |    $vv,vf$     |   Whether it is less than   |
-|    $12$    |          $vmfle$          |    $vv,vf$     |    Less than or equal to    |
-|    $13$    |          $vmfgt$          |      $vf$      |    Whether greater than     |
-|    $14$    |          $vmfge$          |      $vf$      | Is greater than or equal to |
-|     15     |         $vfclass$         |      $v$       |       Classification        |
+| $op\_code$ |    对应指令    |  操作数形式  |             含义              |
+| :--------: | :--------: | :-----: | :-------------------------: |
+|    $0$     | $vf(w)add$ | $vv,vf$ |          Addition           |
+|    $1$     | $vf(w)sub$ | $vv,vf$ |         Subtraction         |
+|    $2$     |  $vfmin$   | $vv,vf$ |   Find the minimum value    |
+|    $3$     |  $vfmax$   | $vv,vf$ |        Find Maximum         |
+|    $4$     | $vfmerge$  |  $vfm$  |        Data merging         |
+|    $5$     |  $vfmove$  |  $v.f$  |        Data movement        |
+|    $6$     |  $vfsgnj$  | $vv,vf$ |       Sign Injection        |
+|    $7$     | $vfsgnjn$  | $vv,vf$ |  Sign inversion injection   |
+|    $8$     | $vfsgnjx$  | $vv,vf$ |     XOR sign injection      |
+|    $9$     |  $vmfeq$   | $vv,vf$ |        Whether equal        |
+|    $10$    |  $vmfnq$   | $vv,vf$ |          Not Equal          |
+|    $11$    |  $vmflt$   | $vv,vf$ |   Whether it is less than   |
+|    $12$    |  $vmfle$   | $vv,vf$ |    Less than or equal to    |
+|    $13$    |  $vmfgt$   |  $vf$   |    Whether greater than     |
+|    $14$    |  $vmfge$   |  $vf$   | Is greater than or equal to |
+|     15     | $vfclass$  |   $v$   |       Classification        |
 
 The table below defines the $VFALU$ interface. Compared to the vector
 floating-point adder, it adds two mixed-precision data sources, $widen\_a$ and
@@ -1777,23 +1777,23 @@ performed.
 
 Table: $VFALU$ interface and meanings
 
-|    Interface    | Direction | Bit Width |                            Meaning                            |
-| :-------------: | :-------: | :-------: | :-----------------------------------------------------------: |
-|      fp_a       |  $input$  |   $64$    |                     Source operand $vs2$                      |
-|     $fp\_b$     |  $input$  |   $64$    |                     Source operand $vs1$                      |
-|   $widen\_a$    |  $input$  |   $64$    |                         $widen\_vs2$                          |
-|   $widen\_b$    |  $input$  |   $64$    |                         $widen\_vs1$                          |
-|     $frs1$      |  $input$  |   $64$    |                 Floating-Point Register Data                  |
-|   $is\_frs1$    |  $input$  |   $64$    |       Addend sourced from floating-point register data        |
-|     $mask$      |  $input$  |    $4$    |        Participate in $merge$ instruction computation         |
-|   $uop\_idx$    |  $input$  |    $1$    |             Select upper/lower half when $widen$              |
-|  $round\_mode$  |  $input$  |    $3$    |                         Rounding mode                         |
-|  $fp\_format$   |  $input$  |    $2$    |                     Floating-point format                     |
-| $res\_widening$ |  $input$  |    $1$    |                      $widen$ instruction                      |
-| $opb\_widening$ |  $input$  |    $1$    | Is the source operand $vs1$ in the same format as the result? |
-|   $op\_code$    |  $input$  |    $5$    |                            Opcode                             |
-|    fp_result    | $output$  |   $64$    |                      Computation result                       |
-|    $fflags$     | $output$  |   $20$    |                           Flag bits                           |
+|       接口        |    方向    |  位宽  |                              含义                               |
+| :-------------: | :------: | :--: | :-----------------------------------------------------------: |
+|     $fp\_a$     | $input$  | $64$ |                           源操作数$vs2$                           |
+|     $fp\_b$     | $input$  | $64$ |                           源操作数$vs1$                           |
+|   $widen\_a$    | $input$  | $64$ |                         $widen\_vs2$                          |
+|   $widen\_b$    | $input$  | $64$ |                         $widen\_vs1$                          |
+|     $frs1$      | $input$  | $64$ |                            浮点寄存器数据                            |
+|   $is\_frs1$    | $input$  | $64$ |                          加数来自浮点寄存器数据                          |
+|     $mask$      | $input$  | $4$  |        Participate in $merge$ instruction computation         |
+|   $uop\_idx$    | $input$  | $1$  |                       $widen$ 时选择高/低半部分                       |
+|  $round\_mode$  | $input$  | $3$  |                             舍入模式                              |
+|  $fp\_format$   | $input$  | $2$  |                             浮点格式                              |
+| $res\_widening$ | $input$  | $1$  |                          $widen$ 指令                           |
+| $opb\_widening$ | $input$  | $1$  | Is the source operand $vs1$ in the same format as the result? |
+|   $op\_code$    | $input$  | $5$  |                              操作码                              |
+|  $fp\_result$   | $output$ | $64$ |                             计算结果                              |
+|    $fflags$     | $output$ | $20$ |                              标志位                              |
 
 ### Vector Floating-Point Fused Multiply-Add Unit
 
@@ -1847,7 +1847,7 @@ $IEEE-754$ specifies two methods for detecting underflow: $before \quad
 rounding$ and $after \quad rounding$. This design uses the $after \quad
 rounding$ method selected by $RISC-V$ to detect underflow.
 
-#### Interface Description
+#### 接口说明
 
 According to the $RVV$ instruction definitions, vector floating-point fused
 multiply-add units can be reused for multiplication calculations, controlled by
@@ -1862,17 +1862,17 @@ register $frs1$.
 
 Table: $VFMA$ Opcode
 
-| $op\_code$ | Corresponding instruction | Operand format | Meaning                              |
-| ---------- | ------------------------- | -------------- | ------------------------------------ |
-| $0$        | $vf(w)mul$                | $vv,vf$        | $vd[i] = vs[2] × vs1[i]$             |
-| $1$        | $vf(w)macc$               | $vv,vf$        | $vd[i] = +(vs1[i] × vs2[i]) + vd[i]$ |
-| $2$        | $vf(w)nmacc$              | $vv,vf$        | $vd[i] = -(vs1[i] × vs2[i]) - vd[i]$ |
-| $3$        | $vf(w)msac$               | $vv,vf$        | $vd[i] = +(vs1[i] × vs2[i]) - vd[i]$ |
-| $4$        | $vf(w)nmsac$              | $vv,vf$        | $vd[i] = -(vs1[i] × vs2[i]) + vd[i]$ |
-| $5$        | $vfmadd$                  | $vv,vf$        | $vd[i] = +(vs1[i] × vd[i]) + vs2[i]$ |
-| $6$        | $vfnamdd$                 | $vv,vf$        | $vd[i] = -(vs1[i] × vd[i]) - vs2[i]$ |
-| $7$        | $vfmsub$                  | $vv,vf$        | $vd[i] = +(vs1[i] × vd[i]) - vs2[i]$ |
-| $8$        | $vfnmsub$                 | $vv,vf$        | $vd[i] = -(vs1[i] × vd[i]) + vs2[i]$ |
+| $op\_code$ | 对应指令         | 操作数形式   | 含义                                   |
+| ---------- | ------------ | ------- | ------------------------------------ |
+| $0$        | $vf(w)mul$   | $vv,vf$ | $vd[i] = vs[2] × vs1[i]$             |
+| $1$        | $vf(w)macc$  | $vv,vf$ | $vd[i] = +(vs1[i] × vs2[i]) + vd[i]$ |
+| $2$        | $vf(w)nmacc$ | $vv,vf$ | $vd[i] = -(vs1[i] × vs2[i]) - vd[i]$ |
+| $3$        | $vf(w)msac$  | $vv,vf$ | $vd[i] = +(vs1[i] × vs2[i]) - vd[i]$ |
+| $4$        | $vf(w)nmsac$ | $vv,vf$ | $vd[i] = -(vs1[i] × vs2[i]) + vd[i]$ |
+| $5$        | $vfmadd$     | $vv,vf$ | $vd[i] = +(vs1[i] × vd[i]) + vs2[i]$ |
+| $6$        | $vfnamdd$    | $vv,vf$ | $vd[i] = -(vs1[i] × vd[i]) - vs2[i]$ |
+| $7$        | $vfmsub$     | $vv,vf$ | $vd[i] = +(vs1[i] × vd[i]) - vs2[i]$ |
+| $8$        | $vfnmsub$    | $vv,vf$ | $vd[i] = -(vs1[i] × vd[i]) + vs2[i]$ |
 
 The table below shows the $VFMA$ interface. To simplify control logic
 complexity, the three operands sent to $VFMA$ are fixed in the order $vs2$,
@@ -1884,24 +1884,24 @@ $widen\_b$. $frs1$ and $is\_frs1$ are used to support $vf$ instructions.
 
 Table: $VFMA$ Interface and Meanings
 
-|    Interface    | Direction | Bit Width |                     Meaning                      |
-| :-------------: | :-------: | :-------: | :----------------------------------------------: |
-|      fp_a       |  $input$  |   $64$    |               Source operand $vs2$               |
-|     $fp\_b$     |  $input$  |   $64$    |               Source operand $vs1$               |
-|     $fp\_c$     |  $input$  |   $64$    |               Source operand $vd$                |
-|   $widen\_a$    |  $input$  |   $64$    |                   $widen\_vs2$                   |
-|   $widen\_b$    |  $input$  |   $64$    |                   $widen\_vs1$                   |
-|     $frs1$      |  $input$  |   $64$    |           Floating-Point Register Data           |
-|   $is\_frs1$    |  $input$  |   $64$    | Addend sourced from floating-point register data |
-|   $uop\_idx$    |  $input$  |    $1$    |       Select upper/lower half when $widen$       |
-|  $round\_mode$  |  $input$  |    $3$    |                  Rounding mode                   |
-|  $fp\_format$   |  $input$  |    $2$    |              Floating-point format               |
-| $res\_widening$ |  $input$  |    $1$    |               $widen$ instruction                |
-|   $op\_code$    |  $input$  |    $5$    |                      Opcode                      |
-|    fp_result    | $output$  |   $64$    |                Computation result                |
-|    $fflags$     | $output$  |   $20$    |                    Flag bits                     |
+|       接口        |    方向    |  位宽  |         含义          |
+| :-------------: | :------: | :--: | :-----------------: |
+|     $fp\_a$     | $input$  | $64$ |      源操作数$vs2$      |
+|     $fp\_b$     | $input$  | $64$ |      源操作数$vs1$      |
+|     $fp\_c$     | $input$  | $64$ | Source operand $vd$ |
+|   $widen\_a$    | $input$  | $64$ |    $widen\_vs2$     |
+|   $widen\_b$    | $input$  | $64$ |    $widen\_vs1$     |
+|     $frs1$      | $input$  | $64$ |       浮点寄存器数据       |
+|   $is\_frs1$    | $input$  | $64$ |     加数来自浮点寄存器数据     |
+|   $uop\_idx$    | $input$  | $1$  |  $widen$ 时选择高/低半部分  |
+|  $round\_mode$  | $input$  | $3$  |        舍入模式         |
+|  $fp\_format$   | $input$  | $2$  |        浮点格式         |
+| $res\_widening$ | $input$  | $1$  |     $widen$ 指令      |
+|   $op\_code$    | $input$  | $5$  |         操作码         |
+|  $fp\_result$   | $output$ | $64$ |        计算结果         |
+|    $fflags$     | $output$ | $20$ |         标志位         |
 
-### Vector floating-point divider
+### 向量浮点除法器
 
 #### Scalar Floating-Point Divider
 
@@ -1961,13 +1961,13 @@ $12$ to $14$ cycles.
 
 Table: Scalar Divider Calculation Cycles
 
-| Data Format | Normalized Number | Denormal number | Early termination |
-| :---------: | :---------------: | :-------------: | :---------------: |
-|    $f16$    |       $5+1$       |      $6+1$      |       $1+1$       |
-|    $f32$    |       $7+1$       |      $8+1$      |       $1+1$       |
-|    $f64$    |      $12+1$       |     $13+1$      |       $1+1$       |
+| 数据格式  | Normalized Number | Denormal number | Early termination |
+| :---: | :---------------: | :-------------: | :---------------: |
+| $f16$ |       $5+1$       |      $6+1$      |       $1+1$       |
+| $f32$ |       $7+1$       |      $8+1$      |       $1+1$       |
+| $f64$ |      $12+1$       |     $13+1$      |       $1+1$       |
 
-#### Vector floating-point divider
+#### 向量浮点除法器
 
 The figure below shows the architecture of the vector floating-point divider.
 Compared to the scalar floating-point divider, since vector division computes
@@ -1981,11 +1981,11 @@ divider is fixed based on the input data format, as shown in the table below.
 
 Table: Vector Divider Calculation Cycles
 
-| Data Format | Calculation Cycle |
-| :---------: | :---------------: |
-|    $f16$    |        $7$        |
-|    $f32$    |       $11$        |
-|    $f64$    |       $14$        |
+| 数据格式  | Calculation Cycle |
+| :---: | :---------------: |
+| $f16$ |        $7$        |
+| $f32$ |       $11$        |
+| $f64$ |       $14$        |
 
 In hardware design, aside from the $Radix-64$ iteration module, the vector
 floating-point divider employs logic reuse, utilizing four signal groups for
@@ -1998,7 +1998,7 @@ path, optimized for timing while minimizing area. The first $Radix-4$ iteration
 uses 7 independent $CSA$ and quotient selection units, while the second and
 third iterations reuse 4 $CSA$ and quotient selection units.
 
-#### Interface Description
+#### 接口说明
 
 The $RVV$ specification defines three vector floating-point division
 instructions:
@@ -2019,25 +2019,25 @@ $VFDIV$, with the interfaces as shown in the table below.
 
 Table: $VFDIV$ Interface and Meanings
 
-| Interface          | Direction | Bit Width | Meaning                                            |
-| ------------------ | --------- | --------- | -------------------------------------------------- |
-| $start\_valid\_i$  | $input$   | $1$       | Handshake signal                                   |
-| $finish\_ready\_i$ | $input$   | $1$       | Handshake signal                                   |
-| $flush\_i$         | $input$   | $1$       | Flush signal                                       |
-| $fp\_format\_i$    | $input$   | $2$       | Floating-point format                              |
-| $opa\_i$           | $input$   | $64$      | Dividend                                           |
-| $opb\_i$           | $input$   | $64$      | Divisor                                            |
-| $frs2\_i$          | $input$   | $64$      | Dividend comes from floating-point register data   |
-| $frs1\_i$          | $input$   | $64$      | Divisor sourced from floating-point register data  |
-| $is\_frs2\_i$      | $input$   | $1$       | Dividend sourced from floating-point register      |
-| $is\_frs1\_i$      | $input$   | $1$       | The divisor comes from the floating-point register |
-| $rm\_i$            | $input$   | $3$       | Rounding mode                                      |
-| $start\_ready\_o$  | $output$  | $1$       | Handshake signal                                   |
-| $finish\_valid\_o$ | $output$  | $1$       | Handshake signal                                   |
-| $fpdiv\_res\_o$    | $output$  | $64$      | Computation result                                 |
-| $fflags\_o$        | $output$  | $20$      | Flag bits                                          |
+| 接口                 | 方向       | 位宽   | 含义                                                 |
+| ------------------ | -------- | ---- | -------------------------------------------------- |
+| $start\_valid\_i$  | $input$  | $1$  | 握手信号                                               |
+| $finish\_ready\_i$ | $input$  | $1$  | 握手信号                                               |
+| $flush\_i$         | $input$  | $1$  | Flush signal                                       |
+| $fp\_format\_i$    | $input$  | $2$  | 浮点格式                                               |
+| $opa\_i$           | $input$  | $64$ | Dividend                                           |
+| $opb\_i$           | $input$  | $64$ | Divisor                                            |
+| $frs2\_i$          | $input$  | $64$ | Dividend comes from floating-point register data   |
+| $frs1\_i$          | $input$  | $64$ | Divisor sourced from floating-point register data  |
+| $is\_frs2\_i$      | $input$  | $1$  | Dividend sourced from floating-point register      |
+| $is\_frs1\_i$      | $input$  | $1$  | The divisor comes from the floating-point register |
+| $rm\_i$            | $input$  | $3$  | 舍入模式                                               |
+| $start\_ready\_o$  | $output$ | $1$  | 握手信号                                               |
+| $finish\_valid\_o$ | $output$ | $1$  | 握手信号                                               |
+| $fpdiv\_res\_o$    | $output$ | $64$ | 计算结果                                               |
+| $fflags\_o$        | $output$ | $20$ | 标志位                                                |
 
-### Vector format conversion module $VCVT$
+### 向量格式转换模块 VCVT
 
 The $VCVT$ module is a three-stage pipelined vector floating-point format
 conversion module. It instantiates two $VectorCvt$ submodules capable of
@@ -2077,7 +2077,7 @@ conversion process to a certain extent.
 Building on this, $VFCVT64$ is divided into 5 categories: $int -> fp$, $fp ->
 fp$ widen, $fp -> fp$ narrow, estimate7 ($rsqrt7$ & $rec7$), and $fp -> int$.
 
-#### $FuopType$ decoding logic
+#### FuopType 译码逻辑
 
 For the $cvt$ instruction: its $fuopType$ consists of $9$ bits, with each bit
 representing the following information:
