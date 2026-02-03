@@ -10,14 +10,14 @@ Page Cache refers to the following module:
 3. Supports receiving PTW requests from the Miss Queue.
 4. Support returning hit results to the L1 TLB and sending PTW replies
 5. Supports returning miss results to L2 TLB and forwarding PTW requests
-6. Supports Page Cache refill
-7. Supports ECC verification
-8. Support sfence refresh
+6. 支持 Page Cache 的重填
+7. 支持 ecc 校验
+8. 支持 sfence 刷新
 9. Supports exception handling mechanism
-10. Supports TLB compression
-11. Supports dividing each level of page tables into three types
-12. Supports receiving second-stage translation requests (hptw requests)
-13. Supports hfence refresh
+10. 支持 TLB 压缩
+11. 支持各级页表分为三种类型
+12. 支持接收第二阶段翻译请求（hptw 请求）
+13. 支持 hfence 刷新
 
 ## Function
 
@@ -33,67 +33,56 @@ access width is 512 bits (i.e., 8 page table entries), each Page Cache entry
 contains 8 page tables (1 virtual page number corresponding to 8 physical page
 numbers and 8 permission bits).
 
-In the Page Cache, entries are cached separately based on the level of the page
-table, divided into l1, l2, l3, and sp items. The l1, l2, and l3 items only
-store valid page table entries, corresponding to first-level, second-level, and
-third-level page tables, respectively. The l1 cache contains 16 entries with a
-fully associative structure; the l2 cache contains 64 entries with a 2-way
-set-associative structure; the l3 cache contains 512 entries with a 4-way
-set-associative structure. The sp cache is a 16-entry fully associative
-structure, storing large pages (first-level or second-level page tables that are
-leaf nodes) and invalid entries (page tables with the V bit set to 0, or page
-tables with the W bit set to 1 and the R bit set to 0, or misaligned page
-tables). When storing, the l1 and l2 items do not need to store permission bits,
-while the l3 and sp items do.
+在 Page Cache 中根据页表的等级分别缓存，分为 l3，l2，l1，l0，sp 五项。l3、l2、l1、l0 项中只存储有效的页表项，分别存储 Sv48
+根页表（512GB）、Sv39 根页表（1GB）、中间级页表（2MB）和叶子页表（4KB）。l3、l2 各包含 16 项，为全相联结构；l1 包含 8 项 2
+路组相联，l0 包含 256 项 4 路组相联。sp 为 16 项全相联结构，存储大页（是叶子节点的 2MB、1GB、512GB 页表），以及无效（页表中 V
+位为 0，或页表中 W 位为 1、R 位为 0，或页表非对齐）的一级、二级页表。在存储时，l1 、l2 和 l3 项不需要存储权限位，l0 和 sp
+项需要存储权限位。
 
 The configuration items of Page Cache are as shown in [@tbl:PageCache-config].
 
 Table: Page Cache Entry Configuration {#tbl:PageCache-config}
 
-| **entry** | **item count** |       **组织结构**        | **Implementation method** | **Replacement Algorithm** |                                  **stored content**                                   |
-| :-------: | :------------: | :-------------------: | :-----------------------: | :-----------------------: | :-----------------------------------------------------------------------------------: |
-|    l1     |       16       |   Fully associative   |       Register File       |           PLRU            |      Valid first-level (1GB size) page table, no need to store permission bits.       |
-|    l2     |       64       | 2-way set-associative |           SRAM            |           PLRU            | A valid second-level (2MB-sized) page table does not require storage permission bits. |
-|    l3     |      512       | 4-way set-associative |           SRAM            |           PLRU            |      Valid three-level (4KB size) page tables require storage of permission bits      |
-|    sp     |       16       |   Fully associative   |       Register File       |           PLRU            |                         大页（是叶子节点的一级、二级页表）、无效的一级、二级页表，需要存储权限位                          |
+| **entry** | **item count** |       **组织结构**        | **Implementation method** | **Replacement Algorithm** |                **stored content**                |
+| :-------: | :------------: | :-------------------: | :-----------------------: | :-----------------------: | :----------------------------------------------: |
+|    l0     |  256（64组×4路）   | 4-way set-associative |           SRAM            |           PLRU            |                 4KB 大小页表，需要存储权限位                 |
+|    l1     |    8（4组×2路）    | 2-way set-associative |           SRAM            |           PLRU            |                2MB 大小页表，不需要存储权限位                 |
+|    l2     |       16       |          全相联          |           寄存器堆            |           PLRU            |                1GB 大小页表，不需要存储权限位                 |
+|    l3     |       16       |          全相联          |           寄存器堆            |           PLRU            |               512GB 大小页表，不需要存储权限位                |
+|    sp     |       16       |          全相联          |           寄存器堆            |           PLRU            | 大页（是叶子节点的 2MB、1GB、512GB 页表）及无效页表项，需要存储权限位和 level |
 
-Information stored in a Page Cache entry includes: tag, asid, ppn, perm
-(optional), level (optional), prefetch. The H extension adds vmid and h (used to
-distinguish the three types of page tables). For l1 and sp entries, which use a
-fully associative structure, the tag bits are vpnnlen (9) and 2 \* vpnnlen (18)
-respectively. Since the second-stage translation address has two more bits than
-the first stage, the tag requires two additional bits. l2 and l3 use a
-set-associative structure, requiring consideration of the number of sets and the
-fact that each virtual page number can index 8 page table entries. l2 is 2-way
-set-associative, so the tag bits are 2 \* vpnnlen(18) - log2(64) - log2(8) +
-log2(2) = 10 bits; l3 is 4-way set-associative, so the tag bits are 3 *
-vpnnlen(27) - log2(512) - log2(8) + log2(4) = 17 bits. For l3 and sp entries,
-which store leaf nodes, the perm field is required, whereas l1 and l2 entries do
-not need it. The perm field stores the D, A, G, U, X, W, R bits as specified in
-the RISC-V manual, omitting the V bit. The sp entry requires the level field to
-indicate the page table level (first or second). The prefetch field indicates
-the page table entry was obtained via a prefetch request. vmid is only used for
-VS-stage and G-stage page tables, asid is unused for G-stage page tables, and h
-is a 2-bit register distinguishing these three page table types, with encoding
-consistent with s2xlate. The information stored in a Page Cache entry is shown
-in [@tbl:PageCache-store-info], and the page table attribute bits are shown in
-[@tbl:PageCache-item-attribute]:
+Page Cache 项需要存储的信息包括：tag、asid、ppn、perm（可选）、level（可选）、prefetch，H 拓展新增了 vmid 和
+h（用来区别三种类型页表）。其中，各项存储信息与地址翻译模式（Sv39 或 Sv48）相关，具体如下： l3 项仅存在于 Sv48 模式，采用全相联结构，tag
+位数为 vpnnlen（9）+ H扩展位（2）= 11 位。 l2 项采用全相联结构，Sv39 模式下，tag 位数为 vpnnlen（9）+ H扩展位（2）=
+11 位；Sv48 模式下，tag 位数为 2 * vpnnlen（18）+ H扩展位（2）= 20 位。 l1 项采用 2
+路组相联结构（4组×2路），Sv39 模式下，tag 位数为 2 * vpnnlen(18) - log₂(4) - log₂(8) + H扩展位（2） =
+18 - 2 - 3 + 2 = 15 位；Sv48 模式下，tag 位数为 3 * vpnnlen(27) - log₂(4) - log₂(8) +
+H扩展位（2） = 27 - 2 - 3 + 2 = 24 位。 l0 项采用 4 路组相联结构（64组×4路），Sv39 模式下，tag 位数为 3 *
+vpnnlen(27) - log₂(64) - log₂(8) + H扩展位（2） = 27 - 6 - 3 + 2 = 20 位；Sv48 模式下，tag
+位数为 4 * vpnnlen(36) - log₂(64) - log₂(8) + H扩展位（2） = 36 - 6 - 3 + 2 = 29 位。 sp
+项采用全相联结构Sv39 模式下，tag 位数为 3 * vpnnlen(27) + H扩展位（2） = 29 位；Sv48 模式下，tag 位数为 4 *
+vpnnlen(36) + H扩展位（2） = 38 位。 对于 l3 和 sp 项，由于存储叶子节点，因此需要存储 perm 项，而 l1 和 l2
+项不需要，perm 项存储 riscv 手册规定的 D、A、G、U、X、W、R 位，无需存储 V 位。对于 sp 项，需要存储
+level，表示页表的等级（一级还是二级）。prefetch 表示该页表项是由预取的请求得到的，vmid 只在 VS 阶段页表和 G 阶段页表使用，asid 在
+G 阶段页表不使用，h 是个两比特的寄存器，区别这三种页表，编码与 s2xlate 一致。Page Cache 项需要存储的信息如
+[@tbl:PageCache-store-info] 所示，页表的属性位如 [@tbl:PageCache-item-attribute] 所示：
 
 Table: Information to be stored in Page Cache entries
 {#tbl:PageCache-store-info}
 
-| **entry** |        **tag**         | **asid** | **vmid** | **ppn** | **perm** | **level** | **prefetch** | **h** |
-| :-------: | :--------------------: | :------: | :------: | :-----: | :------: | :-------: | :----------: | :---: |
-|    l1     |   Yes, 9-bit + 2-bit   |   Yes    |   Yes    |   Yes   |    NO    |    NO     |     Yes      |  Yes  |
-|    l2     |     Yes，10 位 + 2 位     |   Yes    |   Yes    |   Yes   |    NO    |    NO     |     Yes      |  Yes  |
-|    l3     | Yes, 17 bits + 2 bits  |   Yes    |   Yes    |   Yes   |   Yes    |    NO     |     Yes      |  Yes  |
-|    sp     | Yes, 18 bits + 2 bits. |   Yes    |   Yes    |   Yes   |   Yes    |    Yes    |     Yes      |  Yes  |
+| **entry** | **tag（Sv39 / Sv48）** | **asid** | **vmid** | **ppn** | **perm** | **level** | **prefetch** | **h** |
+| :-------: | :------------------: | :------: | :------: | :-----: | :------: | :-------: | :----------: | :---: |
+|    l0     |     20 位 / 29 位      |   Yes    |   Yes    |   Yes   |   YES    |    NO     |     Yes      |  Yes  |
+|    l1     |     15 位 / 24 位      |   Yes    |   Yes    |   Yes   |    NO    |    NO     |     Yes      |  Yes  |
+|    l2     |     11 位 / 20 位      |   Yes    |   Yes    |   Yes   |    NO    |    NO     |     Yes      |  Yes  |
+|    l3     |      0 位 / 11 位      |   Yes    |   Yes    |   Yes   |    NO    |    NO     |     Yes      |  Yes  |
+|    sp     |     29 位 / 38 位      |   Yes    |   Yes    |   Yes   |   Yes    |    Yes    |     Yes      |  Yes  |
 
 <!-- -->
 
 Table: Attribute Bits of Page Table Entries {#tbl:PageCache-item-attribute}
 
-| ** bit ** | **field** |                                                                    **Description**                                                                     |
+| ** bit ** | **field** |                                                                         **描述**                                                                         |
 | :-------: | :-------: | :----------------------------------------------------------------------------------------------------------------------------------------------------: |
 |     7     |     D     |                            Dirty, indicates that since the last time the D bit was cleared, the virtual page has been read.                            |
 |     6     |     A     |                      Accessed, indicating that since the last A bit clear, this virtual page has been read, written, or fetched.                       |
@@ -108,7 +97,7 @@ Table: Attribute Bits of Page Table Entries {#tbl:PageCache-item-attribute}
 
 Table: h Encoding Description
 
-| **h** |         **Description**          |
+| **h** |              **描述**              |
 | :---: | :------------------------------: |
 |  00   |    noS2xlate, host page table    |
 |  01   | onlyStage1, VS-stage page tables |
@@ -127,15 +116,15 @@ the following two conditions, and the page table is updated by software.
 Table: Possible combinations and meanings of X, W, R bits in page table entries
 {#tbl:PageCache-item-xwr}
 
-| **X** | **W** | **R** |                                                      **Description**                                                       |
+| **X** | **W** | **R** |                                                           **描述**                                                           |
 | :---: | :---: | :---: | :------------------------------------------------------------------------------------------------------------------------: |
 |   0   |   0   |   0   | Indicates that the page table entry is not a leaf node and requires indexing the next-level page table through this entry. |
 |   0   |   0   |   1   |                                              Indicates the page is read-only                                               |
-|   0   |   1   |   0   |                                                          Reserved                                                          |
+|   0   |   1   |   0   |                                                             保留                                                             |
 |   0   |   1   |   1   |                                     Indicates that the page is readable and writable.                                      |
 |   1   |   0   |   0   |                                                         表示该页是只可执行的                                                         |
 |   1   |   0   |   1   |                                                        表示该页是可读、可执行的                                                        |
-|   1   |   1   |   0   |                                                          Reserved                                                          |
+|   1   |   1   |   0   |                                                             保留                                                             |
 |   1   |   1   |   1   |                                  Indicates the page is readable, writable, and executable                                  |
 
 ### Receives PTW requests and returns results
@@ -149,17 +138,11 @@ onlyStage1 page tables are queried. The second-stage translation is handled by
 PTW or LLPTW after the request is forwarded to them. The Page Cache query
 process is as follows:
 
-* 第 0 拍：对 l1、l2、l3、sp 四项发出读请求，进行同时查询
-* Cycle 1: The results read from the register file (l1, sp entries) and SRAM
-  (for l2, l3 entries) are obtained, but due to timing constraints, they are not
-  used immediately in the same cycle. Instead, they are processed in the next
-  cycle.
-* Cycle 2: Compare the tags stored in each item of the Page Cache with the tags
-  from the incoming request, and compare the h registers with the incoming
-  s2xlate (allStage is converted to query onlyStage1). Simultaneously, perform
-  matching queries in the l1, l2, l3, and sp items, and also conduct ECC checks.
-* Cycle 3: Summarize the matching results from the l1, l2, l3, and sp items,
-  along with the ECC check results.
+* 第 0 拍：对 l0、l1、l2、l3、sp 五项发出读请求，进行同时查询
+* 第 1 拍：得到寄存器堆（l2、l3、sp 项）以及 SRAM（对于 l0、l1 项）读出的结果，但由于时序原因并不在当拍直接使用，等待下一拍再进行后续操作
+* 第 2 拍：比对 Page Cache 中各项存储的 tag 和传入请求的 tag，比对各项 h 寄存器与传入的 s2xlate（allStage
+  转换成查询 onlyStage1），在 l0、l1、l2、l3、sp 项中同时进行是否匹配的查询，另外还需要进行 ecc 检查
+* 第 3 拍：将 l0、l1、l2、l3、sp 五项匹配得到的结果，以及 ecc 检查的结果做汇总
 
 After the aforementioned Page Cache lookup process, if a leaf node is found in
 the Page Cache, it is returned to the L1 TLB (for allStage requests, if the
@@ -211,51 +194,34 @@ with no sequential dependencies. The serialized flowchart is shown in
 
 ### Refill Cache
 
-When a PTW or LLPTW request sent to memory receives a response, a refill request
-is simultaneously sent to the Page Cache. The information passed to the Page
-Cache includes: page table entry, page table level, virtual page number, page
-table type, etc. After this information is fed into the Cache, it is filled into
-the l1, l2, l3, or sp entries based on the refill page table level and page
-table attribute bits. If the page table is valid, it is filled into the l1, l2,
-l3, or sp entries according to its level; if the page table is invalid and is a
-level-1 or level-2 page table, it is filled into the sp entry. For replaced Page
-Cache entries, the replacement policy can be selected via ReplacementPolicy.
-Currently, Xiangshan's Page Cache employs the PLRU replacement strategy.
+当 PTW 或 LLPTW 向 mem 发送的 PTW 请求得到回复时，同时会向 Page Cache 发送 refill 请求。传入 Page Cache
+的信息包括：页表项、页表的等级、虚拟页号、页表类型等。在这些信息传入 Cache 后，会根据回填页表的等级以及页表的属性位填入 l0、l1、l2、l3 或 sp
+项中。如果页表有效，则根据页表的不同等级分别填入 l0、l1、l2、l3、sp 五项中；如果页表无效，同时页表不是叶子节点页表，则填入 sp 项中。对于替换的
+Page Cache 项，可以通过 ReplacementPolicy 选定替换策略，目前香山的 Page Cache 采用 PLRU 替换策略。
 
 ### Supports bypass access
 
-When a Page Cache request misses but data for the requested address is currently
-being written into the Cache, the request is bypassed. In this case, the data
-being written into the Cache is not directly forwarded to the Page Cache
-request. Instead, the Page Cache sends a miss signal to L2 TLB along with a
-bypass signal, indicating that the request is a bypass request and needs to
-access the Page Cache again to obtain the result. Bypassed PTW requests do not
-proceed to PTW but go directly to the MissQueue, waiting for the next Page Cache
-access to retrieve the result. However, it should be noted that hptw req
-(second-stage translation requests from PTW and LLPTW) may also encounter bypass
-scenarios. Since hptw req does not enter the miss queue, to avoid duplicate
-refills into the Page Cache, the signal sent by the Page Cache to HPTW includes
-a bypassed signal. When this signal is active, the results of memory accesses
-performed by HPTW for this request will not be refilled into the Page Cache.
+当 Page Cache 的请求发生 miss，但同时对于请求的地址有数据正在写入 Cache，此时会对 Page Cache 的请求做
+bypass。如果出现这种情况，并不会直接将写入 Cache 的数据直接交给访问 Page Cache 的请求，Page Cache 会向 L2 TLB 发送
+miss 信号，同时向 L2 TLB 发送 bypass 信号，表示该请求是一个 bypass 请求，需要再次访问 Page Cache
+以获得结果。bypass 的 PTW 请求并不会进入 PTW，而会直接进入 MissQueue，等待下一次访问 Page Cache
+得到结果。但需要注意的是，对于 hptw req（来自 PTW 和 LLPTW）的第二阶段翻译请求，也可能出现 bypass，但 hptw req 不进入
+miss queue，所以为了避免重复填入 Page Cache，Page Cache 发送给 HPTW 的信号有 bypassed
+信号，该信号有效的时候，这个请求进入 HPTW 后进行的访存的结果不会被重填进入 Page Cache。
 
-### Supports ECC verification
+### 支持 ecc 校验
 
-Page Cache 支持 ecc 校验，当访问 l2 或 l3 项时会同时进行 ecc 检查。如果 ecc 检查报错，并不会报例外，而是会向 L2 TLB
+Page Cache 支持 ecc 校验，当访问 l0 或 l1 项时会同时进行 ecc 检查。如果 ecc 检查报错，并不会报例外，而是会向 L2 TLB
 发送该请求 miss 信号。同时 Page Cache 将 ecc 报错的项刷新，重新发送 PTW 请求。其余行为和 Page Cache miss
 时相同。ecc 检查采用 secded 策略。
 
-### Support sfence refresh
+### 支持 sfence 刷新
 
-When the sfence signal is active, the Page Cache refreshes its entries based on
-the rs1 and rs2 signals of sfence and the current virtualization mode.
-Refreshing the Page Cache is done by clearing the v bit of the corresponding
-cache line. Since l2 and l3 entries are stored in SRAM and cannot perform asid
-comparison in the same cycle, refreshing l2 and l3 entries ignores asid (vmid is
-handled similarly to asid). For details about the sfence signal, refer to the
-RISC-V manual. In virtualization mode, sfence refreshes the page tables of the
-VS stage (first-stage translation, where vmid must be considered); in
-non-virtualization mode, sfence refreshes the page tables of the G stage
-(second-stage translation, where vmid is not considered).
+当 sfence 信号有效时，Page Cache 会根据 sfence 的 rs1 和 rs2 信号以及当前的虚拟化模式对 Cache 项进行刷新。对
+Page Cache 的刷新通过将相应 Cache line 的 v 位置 0 进行。由于 l0、l1 项由 SRAM 储存，无法在当拍进行 asid
+比较，因此对于 l0、l1 的刷新会忽略 asid（vmid 与 asid 的处理相同），而是使用哈希值进行部分匹配；l2、l3 和 sp
+项由寄存器堆储存，可以进行完整的 asid/vmid 比较。关于 sfence 信号的有关信息，参见 riscv 手册。虚拟化情况下，sfence 刷新 VS
+阶段（第一阶段翻译）的页表（此时需要考虑 vmid）；非虚拟化情况下，sfence 刷新 G 阶段（第二阶段翻译）的页表（此时不考虑 vmid）。
 
 ### Support for exception handling
 
@@ -263,7 +229,7 @@ ECC verification errors may occur in the Page Cache, in which case the Page
 Cache invalidates the current entry, returns a miss result, and reinitiates the
 Page Walk. Refer to Section 6 of this document: Exception Handling Mechanism.
 
-### Supports TLB compression
+### 支持 TLB 压缩
 
 To support TLB compression, when the Page Cache hits a 4KB page, it must return
 8 consecutive page table entries. In fact, due to the 512-bit memory access
@@ -271,7 +237,7 @@ width, each Page Cache entry inherently contains 8 page tables, which can be
 directly returned. Unlike the L1TLB, the L2TLB still uses TLB compression under
 the H extension.
 
-### Supports dividing each level of page tables into three types
+### 支持各级页表分为三种类型
 
 In the H extension, there are three types of page tables, managed by vsatp,
 hgatp, and satp, respectively. The Page Cache adds an h register to distinguish
@@ -279,7 +245,7 @@ these page tables: onlyStage1 represents those related to vsatp, onlyStage2
 represents those related to hgatp (where asid is invalid), and noS2xlate
 represents those related to satp (where vmid is invalid).
 
-### Supports receiving second-stage translation requests (hptw requests)
+### 支持接收第二阶段翻译请求（hptw 请求）
 
 In L2TLB, PTW and LLPTW send second-stage translation requests (indicated by the
 isHptwReq signal). These requests first query the Page Cache, following the same
@@ -292,18 +258,13 @@ bypassed. If such a request proceeds to HPTW for translation, none of the page
 tables obtained by HPTW's memory accesses will be refilled into the Page Cache.
 HptwReq requests also support l1Hit and l2Hit functionality.
 
-### Supports hfence refresh
+### 支持 hfence 刷新
 
-The hfence instruction can only be executed in non-virtualization mode. There
-are two types of such instructions, responsible for refreshing the VS-stage page
-tables (first-stage translation, h field is onlyStage1) and the G-stage page
-tables (second-stage translation, h field is onlyStage2), respectively. The
-refresh content is determined by the rs1 and rs2 of hfence, along with the
-additional vmid and h fields. Similarly, since asid and vmid are stored in SRAM
-for l3 and l2, refreshing l3 and l2 does not consider vmid and asid.
-Additionally, for refreshing l3, a simple approach is adopted by directly
-refreshing the VS or G-stage page tables (further refinement can be made to
-refresh the set containing the addr if necessary in the future).
+hfence 指令只能在非虚拟化模式下执行，该类型指令有两条，分别负责刷新 VS 阶段页表（第一阶段翻译，h 字段为 onlyStage1）和 G
+阶段页表（第二阶段翻译，h 字段为 onlyStage2）。根据 hfence 的 rs1 和 rs2 以及新增的 vmid 和 h
+字段来判断刷新的内容，同样由于 asid 和 vmid 在 l0 和 l1 中在 SRAM 中存储，所以刷新 l0 和 l1 不考虑 vmid 和
+asid。此外对于刷新 l0 和 l1 的实现，采用了简单的做法，直接刷新 VS 或者 G 阶段页表（未来有必要的时候可以进一步细化刷新 addr 所在的
+set）。
 
 ## Overall Block Diagram
 

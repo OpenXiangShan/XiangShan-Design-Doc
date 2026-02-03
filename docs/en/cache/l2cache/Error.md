@@ -18,7 +18,7 @@
 | ECC          | Error Correction Code                    | Error Check Code                                         |
 | SECDED.      | Single Error Correct Double Error Detect | Single-bit error correction, double-bit error detection. |
 | TL           | Tile Link.                               | Tile Link Bus Protocol                                   |
-| CHI.         |                                          | CHI 总线协议                                                 |
+| CHI.         | Coherent Hub Interface                   | CHI 总线协议                                                 |
 
 ## Design specifications
 
@@ -43,16 +43,13 @@ the error status corresponding to the address is saved/propagated.
 L2 Cache 目前默认的 ECC 校验码为 SECDED。同时，L2 Cache 支持 parity、SEC 等校验码，可在 Configs
 中修改，编译时进行配置。相关[校验算法参考](https://github.com/OpenXiangShan/Utility/blob/master/src/main/scala/utility/ECC.scala)
 
-SECDED requires that for an n-bit data, the number of parity bits r must
-satisfy: 2^r ≥ n + r + 1
+SECDED 要求对于一个 $n$ 位的数据，所需的校验位数 $r$ 需要满足： $ 2^r \geq n + r + 1 $
 
 #### ECC processing flow
 
-The L2 Cache supports ECC functionality. When the MainPipe refills data to the
-Directory and DataStorage in stage s3, it calculates the check codes for the tag
-and data. The former is stored in the tagArray (SRAM) of the Directory along
-with the tag, while the latter is stored in the array (SRAM) of the DataStorage
-along with the data.
+L2 Cache 支持 ECC 功能。当 MainPipe 在 s3 向 Directory 和 DataStorage 重填数据时，会计算 tag 和
+data 的校验码，前者与 tag 一起存入 Directory 中的 tagArray（SRAM），后者与 data 一起存入 DataStorage 中的
+array（SRAM）
 
 1. For tags, ECC encoding/decoding is performed directly on the tag as a unit.
 2. For data, based on physical design and the need for better error detection,
@@ -124,7 +121,7 @@ When the L2 Cache transfers data to the L3 Cache:
    NDERR，将 poison 置为全 1
 4. If no errors are detected in the L2 Cache, respErr is set to OK and poison is
    set to all 0s.
-5. The dataCheck field is filled with a parity check code for the data.
+5. dataCheck 域填充对 data 进行奇校验的校验码
 
 * In the current version, the L2-supported Write/Snoop transactions do not allow
   respErr to be NDERR in the relevant data packet transmissions (thus, respErr
@@ -165,4 +162,4 @@ TL to CHI (TXDAT).
 
 1. When corrupt = 1, set respErr to DERR and poison to all 1s
 2. When corrupt = 0, set respErr to OK and poison to all 0s
-3. The dataCheck field is filled with a parity check code for the data.
+3. dataCheck 域填充对 data 进行奇校验的校验码

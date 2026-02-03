@@ -2,8 +2,8 @@
 
 - Version: V2R2
 - Status: OK
-- Date: 2025/02/27
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/02/02
+- commit：[0f639b5a](https://github.com/OpenXiangShan/XiangShan/commit/0f639b5a43c370bc57c7b58a83c7039febd102f3)
 
 ## Basic Information
 
@@ -11,7 +11,7 @@
 
 Table: Terminology Explanation
 
-| Abbreviation | Full name                    | Description                       |
+| Abbreviation | Full name                    | 描述                                |
 | ------------ | ---------------------------- | --------------------------------- |
 | HPM          | Hardware performance monitor | Hardware Performance Counter Unit |
 
@@ -19,7 +19,7 @@ Table: Terminology Explanation
 
 Table: Submodule List
 
-| Submodule    | Description                 |
+| Submodule    | 描述                          |
 | ------------ | --------------------------- |
 | HPerfCounter | Single Counter Module       |
 | HPerfMonitor | Counter organization module |
@@ -167,8 +167,7 @@ Supervisor-mode Performance Counter Access Enable Register (scounteren) is a
 32-bit WARL register primarily used to control user-mode access permissions for
 performance monitoring counters in HU-mode/VU-mode.
 
-Table: Supervisor Mode Performance Event Counter Access Authorization Register
-Description
+Table: 监督模式性能事件计数器访问授权寄存器说明
 
 +--------+--------+-------+------------------------------------------------+----------+
 | Name | Bits | R/W | Behavior | Reset |
@@ -197,8 +196,7 @@ The Virtualization Mode Performance Event Counter Access Authorization Register
 performance monitoring counter access permissions in guest virtual machines
 (VS-mode/VU-mode).
 
-Table: Supervisor Mode Performance Event Counter Access Authorization Register
-Description
+Table: 监督模式性能事件计数器访问授权寄存器说明
 
 +--------+--------+-------+------------------------------------------------+----------+
 | Name | Bitfield | R/W | Behavior | Reset Value |
@@ -228,7 +226,7 @@ primarily used to manage timer interrupts (STIP) in supervisor mode.
 
 STIMECMP Register Behavior Description:
 
-* Reset value is a 64-bit unsigned number 64'hffff_ffff_ffff_ffff.
+* 复位值为64位无符号数 64'hffff_ffff_ffff_ffff。
 * When menvcfg.STCE is 0 and the current privilege level is below M-mode
   (HS-mode/VS-mode/HU-mode/VU-mode), accessing the stimecmp register triggers an
   illegal instruction exception and does not generate an STIP interrupt.
@@ -245,7 +243,7 @@ primarily used to manage timer interrupts (STIP) in guest supervisor mode.
 
 VSTIMECMP Register Behavior Description:
 
-* Reset value is a 64-bit unsigned number 64'hffff_ffff_ffff_ffff.
+* 复位值为64位无符号数 64'hffff_ffff_ffff_ffff。
 * When henvcfg.STCE is 0 or hcounteren.TM is set, accessing the vstimecmp
   register via the stimecmp register triggers a virtual illegal instruction
   exception without generating a VSTIP interrupt.
@@ -323,347 +321,390 @@ from the aforementioned sources:
 
 Table: Kunming Lake Frontend Performance Event Index Table
 
-| Index | Event                   |
-| ----- | ----------------------- |
-| 0     | noEvent                 |
-| 1     | frontendFlush           |
-| 2     | ifu_req                 |
-| 3     | ifu_miss                |
-| 4     | ifu_req_cacheline_0     |
-| 5     | ifu_req_cacheline_1     |
-| 6     | ifu_req_cacheline_0_hit |
-| 7     | ifu_req_cacheline_1_hit |
-| 8     | only_0_hit              |
-| 9     | only_0_miss             |
-| 10    | hit_0_hit_1             |
-| 11    | hit_0_miss_1            |
-| 12    | miss_0_hit_1            |
-| 13    | miss_0_miss_1           |
-| 14    | IBuffer_Flushed         |
-| 15    | IBuffer_hungry          |
-| 16    | IBuffer_1_4_valid       |
-| 17    | IBuffer_2_4_valid       |
-| 18    | IBuffer_3_4_valid       |
-| 19    | IBuffer_4_4_valid       |
-| 20    | IBuffer_full            |
-| 21    | Front_Bubble            |
-| 22    | Fetch_Latency_Bound     |
-| 23    | icache_miss_cnt         |
-| 24    | icache_miss_penalty     |
-| 25    | bpu_s2_redirect         |
-| 26    | bpu_s3_redirect         |
-| 27    | bpu_to_ftq_stall        |
-| 28    | mispredictRedirect      |
-| 29    | replayRedirect          |
-| 30    | predecodeRedirect       |
-| 31    | to_ifu_bubble           |
-| 32    | from_bpu_real_bubble    |
-| 33    | BpInstr                 |
-| 34    | BpBInstr                |
-| 35    | BpRight                 |
-| 36    | BpWrong                 |
-| 37    | BpBRight                |
-| 38    | BpBWrong                |
-| 39    | BpJRight                |
-| 40    | BpJWrong                |
-| 41    | BpIRight                |
-| 42    | BpIWrong                |
-| 43    | BpCRight                |
-| 44    | BpCWrong                |
-| 45    | BpRRight                |
-| 46    | BpRWrong                |
-| 47    | ftb_false_hit           |
-| 48    | ftb_hit                 |
-| 49    | fauftb_commit_hit       |
-| 50    | fauftb_commit_miss      |
-| 51    | tage_tht_hit            |
-| 52    | sc_update_on_mispred    |
-| 53    | sc_update_on_unconf     |
-| 54    | ftb_commit_hits         |
-| 55    | ftb_commit_misses       |
+| 索引  | 事件                      |
+| --- | ----------------------- |
+| 0   | noEvent                 |
+| 1   | frontendFlush           |
+| 2   | ifu_req                 |
+| 3   | ifu_miss                |
+| 4   | ifu_req_cacheline_0     |
+| 5   | ifu_req_cacheline_1     |
+| 6   | ifu_req_cacheline_0_hit |
+| 7   | ifu_req_cacheline_1_hit |
+| 8   | only_0_hit              |
+| 9   | only_0_miss             |
+| 10  | hit_0_hit_1             |
+| 11  | hit_0_miss_1            |
+| 12  | miss_0_hit_1            |
+| 13  | miss_0_miss_1           |
+| 14  | IBuffer_Flushed         |
+| 15  | IBuffer_hungry          |
+| 16  | IBuffer_1_4_valid       |
+| 17  | IBuffer_2_4_valid       |
+| 18  | IBuffer_3_4_valid       |
+| 19  | IBuffer_4_4_valid       |
+| 20  | IBuffer_full            |
+| 21  | Front_Bubble            |
+| 22  | Fetch_Latency_Bound     |
+| 23  | icache_miss_cnt         |
+| 24  | icache_miss_penalty     |
+| 25  | bpu_s2_redirect         |
+| 26  | bpu_s3_redirect         |
+| 27  | bpu_to_ftq_stall        |
+| 28  | mispredictRedirect      |
+| 29  | replayRedirect          |
+| 30  | predecodeRedirect       |
+| 31  | to_ifu_bubble           |
+| 32  | from_bpu_real_bubble    |
+| 33  | BpInstr                 |
+| 34  | BpBInstr                |
+| 35  | BpRight                 |
+| 36  | BpWrong                 |
+| 37  | BpBRight                |
+| 38  | BpBWrong                |
+| 39  | BpJRight                |
+| 40  | BpJWrong                |
+| 41  | BpIRight                |
+| 42  | BpIWrong                |
+| 43  | BpCRight                |
+| 44  | BpCWrong                |
+| 45  | BpRRight                |
+| 46  | BpRWrong                |
+| 47  | ftb_false_hit           |
+| 48  | ftb_hit                 |
+| 49  | fauftb_commit_hit       |
+| 50  | fauftb_commit_miss      |
+| 51  | tage_tht_hit            |
+| 52  | sc_update_on_mispred    |
+| 53  | sc_update_on_unconf     |
+| 54  | ftb_commit_hits         |
+| 55  | ftb_commit_misses       |
+| 56  | itlb_access             |
+| 57  | itlb_miss               |
 
 Table: Kunming Lake Backend Performance Event Index Table
 
-| Index | Event                                                        |
-| ----- | ------------------------------------------------------------ |
-| 0     | noEvent                                                      |
-| 1     | decoder_fused_instr                                          |
-| 2     | decoder_waitInstr                                            |
-| 3     | decoder_stall_cycle                                          |
-| 4     | decoder_utilization                                          |
-| 5     | INST_SPEC                                                    |
-| 6     | RECOVERY_BUBBLE                                              |
-| 7     | rename_in                                                    |
-| 8     | rename_waitinstr                                             |
-| 9     | rename_stall                                                 |
-| 10    | rename_stall_cycle_walk                                      |
-| 11    | rename_stall_cycle_dispatch                                  |
-| 12    | rename_stall_cycle_int                                       |
-| 13    | rename_stall_cycle_fp                                        |
-| 14    | rename_stall_cycle_vec                                       |
-| 15    | rename_stall_cycle_v0                                        |
-| 16    | rename_stall_cycle_vl                                        |
-| 17    | me_freelist_1_4_valid                                        |
-| 18    | me_freelist_2_4_valid                                        |
-| 19    | me_freelist_3_4_valid                                        |
-| 20    | me_freelist_4_4_valid                                        |
-| 21    | std_freelist_1_4_valid                                       |
-| 22    | std_freelist_2_4_valid                                       |
-| 23    | std_freelist_3_4_valid                                       |
-| 24    | std_freelist_4_4_valid                                       |
-| 25    | std_freelist_1_4_valid                                       |
-| 26    | std_freelist_2_4_valid                                       |
-| 27    | std_freelist_3_4_valid                                       |
-| 28    | std_freelist_4_4_valid                                       |
-| 29    | std_freelist_1_4_valid                                       |
-| 30    | std_freelist_2_4_valid                                       |
-| 31    | std_freelist_3_4_valid                                       |
-| 32    | std_freelist_4_4_valid                                       |
-| 33    | std_freelist_1_4_valid                                       |
-| 34    | std_freelist_2_4_valid                                       |
-| 35    | std_freelist_3_4_valid                                       |
-| 36    | std_freelist_4_4_valid                                       |
-| 37    | dispatch_in                                                  |
-| 38    | dispatch_empty                                               |
-| 39    | dispatch_utili                                               |
-| 40    | dispatch_waitinstr                                           |
-| 41    | dispatch_stall_cycle_lsq                                     |
-| 42    | dispatch_stall_cycle_rob                                     |
-| 43    | dispatch_stall_cycle_int_dq                                  |
-| 44    | dispatch_stall_cycle_fp_dq                                   |
-| 45    | dispatch_stall_cycle_ls_dq                                   |
-| 46    | rob_interrupt_num                                            |
-| 47    | rob_exception_num                                            |
-| 48    | rob_flush_pipe_num                                           |
-| 49    | rob_replay_inst_num                                          |
-| 50    | rob_commitUop                                                |
-| 51    | rob_commitInstr                                              |
-| 52    | rob_commitInstrFused                                         |
-| 53    | rob_commitInstrLoad                                          |
-| 54    | rob_commitInstrBranch                                        |
-| 55    | rob_commitInstrStore                                         |
-| 56    | rob_walkInstr                                                |
-| 57    | rob_walkCycle                                                |
-| 58    | rob_1_4_valid                                                |
-| 59    | rob_2_4_valid                                                |
-| 60    | rob_3_4_valid                                                |
-| 61    | rob_4_4_valid                                                |
-| 62    | BR_MIS_PRED                                                  |
-| 63    | TOTAL_FLUSH                                                  |
-| 64    | EXEC_STALL_CYCLE                                             |
-| 65    | MEMSTALL_STORE                                               |
-| 66    | MEMSTALL_L1MISS                                              |
-| 67    | MEMSTALL_L2MISS                                              |
-| 68    | MEMSTALL_L3MISS                                              |
-| 69    | issueQueue_enq_fire_cnt                                      |
-| 70    | IssueQueueAluMulBkuBrhJmp_full                               |
-| 71    | IssueQueueAluMulBkuBrhJmp_full                               |
-| 72    | IssueQueueAluBrhJmpI2fVsetriwiVsetriwvfI2v_full              |
-| 73    | IssueQueueAluCsrFenceDiv_full                                |
-| 74    | issueQueue_enq_fire_cnt                                      |
-| 75    | IssueQueueFaluFcvtF2vFmacFdiv_full                           |
-| 76    | IssueQueueFaluFmacFdiv_full                                  |
-| 77    | IssueQueueFaluFmac_full                                      |
-| 78    | issueQueue_enq_fire_cnt                                      |
-| 79    | IssueQueueVfmaVialuFixVimacVppuVfaluVfcvtVipuVsetrvfwvf_full |
-| 80    | IssueQueueVfmaVialuFixVfalu_full                             |
-| 81    | IssueQueueVfdivVidiv_full                                    |
-| 82    | issueQueue_enq_fire_cnt                                      |
-| 83    | IssueQueueStaMou_full                                        |
-| 84    | IssueQueueStaMou_full                                        |
-| 85    | IssueQueueLdu_full                                           |
-| 86    | IssueQueueLdu_full                                           |
-| 87    | IssueQueueLdu_full                                           |
-| 88    | IssueQueueVlduVstuVseglduVsegstu_full                        |
-| 89    | IssueQueueVlduVstu_full                                      |
-| 90    | IssueQueueStdMoud_full                                       |
-| 91    | IssueQueueStdMoud_full                                       |
+| 索引  | 事件                                                           |
+| --- | ------------------------------------------------------------ |
+| 0   | noEvent                                                      |
+| 1   | decoder_fused_instr                                          |
+| 2   | decoder_waitInstr                                            |
+| 3   | decoder_stall_cycle                                          |
+| 4   | decoder_utilization                                          |
+| 5   | frontend_stall_cycle                                         |
+| 6   | backend_stall_cycle                                          |
+| 7   | INST_SPEC                                                    |
+| 8   | RECOVERY_BUBBLE                                              |
+| 9   | rename_in                                                    |
+| 10  | rename_waitinstr                                             |
+| 11  | rename_stall                                                 |
+| 12  | rename_stall_cycle_walk                                      |
+| 13  | rename_stall_cycle_dispatch                                  |
+| 14  | rename_stall_cycle_int                                       |
+| 15  | rename_stall_cycle_fp                                        |
+| 16  | rename_stall_cycle_vec                                       |
+| 17  | rename_stall_cycle_v0                                        |
+| 18  | rename_stall_cycle_vl                                        |
+| 19  | me_freelist_1_4_valid                                        |
+| 20  | me_freelist_2_4_valid                                        |
+| 21  | me_freelist_3_4_valid                                        |
+| 22  | me_freelist_4_4_valid                                        |
+| 23  | std_freelist_1_4_valid                                       |
+| 24  | std_freelist_2_4_valid                                       |
+| 25  | std_freelist_3_4_valid                                       |
+| 26  | std_freelist_4_4_valid                                       |
+| 27  | std_freelist_1_4_valid                                       |
+| 28  | std_freelist_2_4_valid                                       |
+| 29  | std_freelist_3_4_valid                                       |
+| 30  | std_freelist_4_4_valid                                       |
+| 31  | std_freelist_1_4_valid                                       |
+| 32  | std_freelist_2_4_valid                                       |
+| 33  | std_freelist_3_4_valid                                       |
+| 34  | std_freelist_4_4_valid                                       |
+| 35  | std_freelist_1_4_valid                                       |
+| 36  | std_freelist_2_4_valid                                       |
+| 37  | std_freelist_3_4_valid                                       |
+| 38  | std_freelist_4_4_valid                                       |
+| 39  | dispatch_in                                                  |
+| 40  | dispatch_empty                                               |
+| 41  | dispatch_utili                                               |
+| 42  | dispatch_waitinstr                                           |
+| 43  | dispatch_stall_cycle_lsq                                     |
+| 44  | dispatch_stall_cycle_rob                                     |
+| 45  | dispatch_stall_cycle_int_dq                                  |
+| 46  | dispatch_stall_cycle_fp_dq                                   |
+| 47  | dispatch_stall_cycle_ls_dq                                   |
+| 48  | rob_interrupt_num                                            |
+| 49  | rob_exception_num                                            |
+| 50  | rob_flush_pipe_num                                           |
+| 51  | rob_replay_inst_num                                          |
+| 52  | rob_commitUop                                                |
+| 53  | rob_commitInstr                                              |
+| 54  | rob_commitInstrFused                                         |
+| 55  | rob_commitInstrLoad                                          |
+| 56  | rob_commitInstrBranch                                        |
+| 57  | rob_commitInstrStore                                         |
+| 58  | rob_walkInstr                                                |
+| 59  | rob_walkCycle                                                |
+| 60  | rob_1_4_valid                                                |
+| 61  | rob_2_4_valid                                                |
+| 62  | rob_3_4_valid                                                |
+| 63  | rob_4_4_valid                                                |
+| 64  | BRANCH_JUMP                                                  |
+| 65  | BR_MIS_PRED                                                  |
+| 66  | TOTAL_FLUSH                                                  |
+| 67  | EXEC_STALL_CYCLE                                             |
+| 68  | MEMSTALL_STORE                                               |
+| 69  | MEMSTALL_L1MISS                                              |
+| 70  | MEMSTALL_L2MISS                                              |
+| 71  | MEMSTALL_L3MISS                                              |
+| 72  | issueQueue_enq_fire_cnt                                      |
+| 73  | IssueQueueAluMulBkuBrhJmp_full                               |
+| 74  | IssueQueueAluMulBkuBrhJmp_full                               |
+| 75  | IssueQueueAluBrhJmpI2fVsetriwiVsetriwvfI2v_full              |
+| 76  | IssueQueueAluCsrFenceDiv_full                                |
+| 77  | issueQueue_enq_fire_cnt                                      |
+| 78  | IssueQueueFaluFcvtF2vFmacFdiv_full                           |
+| 79  | IssueQueueFaluFmacFdiv_full                                  |
+| 80  | IssueQueueFaluFmac_full                                      |
+| 81  | issueQueue_enq_fire_cnt                                      |
+| 82  | IssueQueueVfmaVialuFixVimacVppuVfaluVfcvtVipuVsetrvfwvf_full |
+| 83  | IssueQueueVfmaVialuFixVfalu_full                             |
+| 84  | IssueQueueVfdivVidiv_full                                    |
+| 85  | issueQueue_enq_fire_cnt                                      |
+| 86  | IssueQueueStaMou_full                                        |
+| 87  | IssueQueueStaMou_full                                        |
+| 88  | IssueQueueLdu_full                                           |
+| 89  | IssueQueueLdu_full                                           |
+| 90  | IssueQueueLdu_full                                           |
+| 91  | IssueQueueVlduVstuVseglduVsegstu_full                        |
+| 92  | IssueQueueVlduVstu_full                                      |
+| 93  | IssueQueueStdMoud_full                                       |
+| 94  | IssueQueueStdMoud_full                                       |
 
 Table: Kunminghu Memory Access Performance Event Index Table
 
-| Index | Event                     |
-| ----- | ------------------------- |
-| 0     | noEvent                   |
-| 1     | load_s0_in_fire           |
-| 2     | load_to_load_forward      |
-| 3     | stall_dcache              |
-| 4     | load_s1_in_fire           |
-| 5     | load_s1_tlb_miss          |
-| 6     | load_s2_in_fire           |
-| 7     | load_s2_dcache_miss       |
-| 8     | load_s0_in_fire           |
-| 9     | load_to_load_forward      |
-| 10    | stall_dcache              |
-| 11    | load_s1_in_fire           |
-| 12    | load_s1_tlb_miss          |
-| 13    | load_s2_in_fire           |
-| 14    | load_s2_dcache_miss       |
-| 15    | load_s0_in_fire           |
-| 16    | load_to_load_forward      |
-| 17    | stall_dcache              |
-| 18    | load_s1_in_fire           |
-| 19    | load_s1_tlb_miss          |
-| 20    | load_s2_in_fire           |
-| 21    | load_s2_dcache_miss       |
-| 22    | sbuffer_req_valid         |
-| 23    | sbuffer_req_fire          |
-| 24    | sbuffer_merge             |
-| 25    | sbuffer_newline           |
-| 26    | dcache_req_valid          |
-| 27    | dcache_req_fire           |
-| 28    | sbuffer_idle              |
-| 29    | sbuffer_flush             |
-| 30    | sbuffer_replace           |
-| 31    | mpipe_resp_valid          |
-| 32    | replay_resp_valid         |
-| 33    | coh_timeout               |
-| 34    | sbuffer_1_4_valid         |
-| 35    | sbuffer_2_4_valid         |
-| 36    | sbuffer_3_4_valid         |
-| 37    | sbuffer_full_valid        |
-| 38    | MEMSTALL_ANY_LOAD         |
-| 39    | enq                       |
-| 40    | ld_ld_violation           |
-| 41    | enq                       |
-| 42    | stld_rollback             |
-| 43    | enq                       |
-| 44    | deq                       |
-| 45    | deq_block                 |
-| 46    | replay_full               |
-| 47    | replay_rar_nack           |
-| 48    | replay_raw_nack           |
-| 49    | replay_nuke               |
-| 50    | replay_mem_amb            |
-| 51    | replay_tlb_miss           |
-| 52    | replay_bank_conflict      |
-| 53    | replay_dcache_replay      |
-| 54    | replay_forward_fail       |
-| 55    | replay_dcache_miss        |
-| 56    | full_mask_000             |
-| 57    | full_mask_001             |
-| 58    | full_mask_010             |
-| 59    | full_mask_011             |
-| 60    | full_mask_100             |
-| 61    | full_mask_101             |
-| 62    | full_mask_110             |
-| 63    | full_mask_111             |
-| 64    | nuke_rollback             |
-| 65    | nack_rollback             |
-| 66    | mmioCycle                 |
-| 67    | mmioCnt                   |
-| 68    | mmio_wb_success           |
-| 69    | mmio_wb_blocked           |
-| 70    | stq_1_4_valid             |
-| 71    | stq_2_4_valid             |
-| 72    | stq_3_4_valid             |
-| 73    | stq_4_4_valid             |
-| 74    | dcache_wbq_req            |
-| 75    | dcache_wbq_1_4_valid      |
-| 76    | dcache_wbq_2_4_valid      |
-| 77    | dcache_wbq_3_4_valid      |
-| 78    | dcache_wbq_4_4_valid      |
-| 79    | dcache_mp_req             |
-| 80    | dcache_mp_total_penalty   |
-| 81    | dcache_missq_req          |
-| 82    | dcache_missq_1_4_valid    |
-| 83    | dcache_missq_2_4_valid    |
-| 84    | dcache_missq_3_4_valid    |
-| 85    | dcache_missq_4_4_valid    |
-| 86    | dcache_probq_req          |
-| 87    | dcache_probq_1_4_valid    |
-| 88    | dcache_probq_2_4_valid    |
-| 89    | dcache_probq_3_4_valid    |
-| 90    | dcache_probq_4_4_valid    |
-| 91    | load_req                  |
-| 92    | load_replay               |
-| 93    | load_replay_for_data_nack |
-| 94    | load_replay_for_no_mshr   |
-| 95    | load_replay_for_conflict  |
-| 96    | load_req                  |
-| 97    | load_replay               |
-| 98    | load_replay_for_data_nack |
-| 99    | load_replay_for_no_mshr   |
-| 100   | load_replay_for_conflict  |
-| 101   | load_req                  |
-| 102   | load_replay               |
-| 103   | load_replay_for_data_nack |
-| 104   | load_replay_for_no_mshr   |
-| 105   | load_replay_for_conflict  |
-| 106   | PTW_tlbllptw_incount      |
-| 107   | PTW_tlbllptw_inblock      |
-| 108   | PTW_tlbllptw_memcount     |
-| 109   | PTW_tlbllptw_memcycle     |
-| 110   | PTW_access                |
-| 111   | PTW_l2_hit                |
-| 112   | PTW_l1_hit                |
-| 113   | PTW_l0_hit                |
-| 114   | PTW_sp_hit                |
-| 115   | PTW_pte_hit               |
-| 116   | PTW_rwHazard              |
-| 117   | PTW_out_blocked           |
-| 118   | PTW_fsm_count             |
-| 119   | PTW_fsm_busy              |
-| 120   | PTW_fsm_idle              |
-| 121   | PTW_resp_blocked          |
-| 122   | PTW_mem_count             |
-| 123   | PTW_mem_cycle             |
-| 124   | PTW_mem_blocked           |
-| 125   | ldDeqCount                |
-| 126   | stDeqCount                |
+| 索引  | 事件                        |
+| --- | ------------------------- |
+| 0   | noEvent                   |
+| 1   | load_s0_in_fire           |
+| 2   | load_to_load_forward      |
+| 3   | stall_dcache              |
+| 4   | load_s1_in_fire           |
+| 5   | load_s1_tlb_miss          |
+| 6   | load_s2_in_fire           |
+| 7   | load_s2_dcache_miss       |
+| 8   | l1D_load_hw_prf_access    |
+| 9   | l1D_load_hw_prf_miss      |
+| 10  | load_s0_in_fire           |
+| 11  | load_to_load_forward      |
+| 12  | stall_dcache              |
+| 13  | load_s1_in_fire           |
+| 14  | load_s1_tlb_miss          |
+| 15  | load_s2_in_fire           |
+| 16  | load_s2_dcache_miss       |
+| 17  | l1D_load_hw_prf_access    |
+| 18  | l1D_load_hw_prf_miss      |
+| 19  | load_s0_in_fire           |
+| 20  | load_to_load_forward      |
+| 21  | stall_dcache              |
+| 22  | load_s1_in_fire           |
+| 23  | load_s1_tlb_miss          |
+| 24  | load_s2_in_fire           |
+| 25  | load_s2_dcache_miss       |
+| 26  | l1D_load_hw_prf_access    |
+| 27  | l1D_load_hw_prf_miss      |
+| 28  | sbuffer_req_valid         |
+| 29  | sbuffer_req_fire          |
+| 30  | sbuffer_merge             |
+| 31  | sbuffer_newline           |
+| 32  | dcache_req_valid          |
+| 33  | dcache_req_fire           |
+| 34  | sbuffer_idle              |
+| 35  | sbuffer_flush             |
+| 36  | sbuffer_replace           |
+| 37  | mpipe_resp_valid          |
+| 38  | replay_resp_valid         |
+| 39  | coh_timeout               |
+| 40  | sbuffer_1_4_valid         |
+| 41  | sbuffer_2_4_valid         |
+| 42  | sbuffer_3_4_valid         |
+| 43  | sbuffer_full_valid        |
+| 44  | MEMSTALL_ANY_LOAD         |
+| 45  | enq                       |
+| 46  | ld_ld_violation           |
+| 47  | enq                       |
+| 48  | stld_rollback             |
+| 49  | enq                       |
+| 50  | deq                       |
+| 51  | deq_block                 |
+| 52  | replay_full               |
+| 53  | replay_rar_nack           |
+| 54  | replay_raw_nack           |
+| 55  | replay_nuke               |
+| 56  | replay_mem_amb            |
+| 57  | replay_tlb_miss           |
+| 58  | replay_bank_conflict      |
+| 59  | replay_dcache_replay      |
+| 60  | replay_forward_fail       |
+| 61  | replay_dcache_miss        |
+| 62  | full_mask_000             |
+| 63  | full_mask_001             |
+| 64  | full_mask_010             |
+| 65  | full_mask_011             |
+| 66  | full_mask_100             |
+| 67  | full_mask_101             |
+| 68  | full_mask_110             |
+| 69  | full_mask_111             |
+| 70  | nuke_rollback             |
+| 71  | nack_rollback             |
+| 72  | mmioCycle                 |
+| 73  | mmioCnt                   |
+| 74  | mmio_wb_success           |
+| 75  | mmio_wb_blocked           |
+| 76  | stq_1_4_valid             |
+| 77  | stq_2_4_valid             |
+| 78  | stq_3_4_valid             |
+| 79  | stq_4_4_valid             |
+| 80  | dcache_wbq_req            |
+| 81  | dcache_wbq_1_4_valid      |
+| 82  | dcache_wbq_2_4_valid      |
+| 83  | dcache_wbq_3_4_valid      |
+| 84  | dcache_wbq_4_4_valid      |
+| 85  | l1D_write_dcache_access   |
+| 86  | l1D_write_dcache_miss     |
+| 87  | dcache_mp_req             |
+| 88  | dcache_mp_total_penalty   |
+| 89  | dcache_missq_req          |
+| 90  | dcache_missq_1_4_valid    |
+| 91  | dcache_missq_2_4_valid    |
+| 92  | dcache_missq_3_4_valid    |
+| 93  | dcache_missq_4_4_valid    |
+| 94  | dcache_probq_req          |
+| 95  | dcache_probq_1_4_valid    |
+| 96  | dcache_probq_2_4_valid    |
+| 97  | dcache_probq_3_4_valid    |
+| 98  | dcache_probq_4_4_valid    |
+| 99  | load_req                  |
+| 100 | load_replay               |
+| 101 | load_replay_for_data_nack |
+| 102 | load_replay_for_no_mshr   |
+| 103 | load_replay_for_conflict  |
+| 104 | l1D_read_dcache_access    |
+| 105 | l1D_read_dcache_miss      |
+| 106 | load_req                  |
+| 107 | load_replay               |
+| 108 | load_replay_for_data_nack |
+| 109 | load_replay_for_no_mshr   |
+| 110 | load_replay_for_conflict  |
+| 111 | l1D_read_dcache_access    |
+| 112 | l1D_read_dcache_miss      |
+| 113 | load_req                  |
+| 114 | load_replay               |
+| 115 | load_replay_for_data_nack |
+| 116 | load_replay_for_no_mshr   |
+| 117 | load_replay_for_conflict  |
+| 118 | l1D_read_dcache_access    |
+| 119 | l1D_read_dcache_miss      |
+| 120 | dtlb_ld_access            |
+| 121 | dtlb_ld_miss              |
+| 122 | dtlb_st_access            |
+| 123 | dtlb_st_miss              |
+| 124 | PTW_tlbllptw_incount      |
+| 125 | PTW_tlbllptw_inblock      |
+| 126 | PTW_tlbllptw_memcount     |
+| 127 | PTW_tlbllptw_memcycle     |
+| 128 | PTW_access                |
+| 129 | PTW_l2_hit                |
+| 130 | PTW_l1_hit                |
+| 131 | PTW_l0_hit                |
+| 132 | PTW_sp_hit                |
+| 133 | PTW_pte_hit               |
+| 134 | PTW_rwHazard              |
+| 135 | PTW_out_blocked           |
+| 136 | PTW_fsm_count             |
+| 137 | PTW_fsm_busy              |
+| 138 | PTW_fsm_idle              |
+| 139 | PTW_resp_blocked          |
+| 140 | PTW_mem_count             |
+| 141 | PTW_mem_cycle             |
+| 142 | PTW_mem_blocked           |
+| 143 | ldDeqCount                |
+| 144 | stDeqCount                |
 
 Table: Kunming Lake Cache Performance Event Index Table
 
-| Index | Event                           |
-| ----- | ------------------------------- |
-| 0     | noEvent                         |
-| 1     | Slice0_l2_cache_refill          |
-| 2     | Slice0_l2_cache_rd_refill       |
-| 3     | Slice0_l2_cache_wr_refill       |
-| 4     | Slice0_l2_cache_long_miss       |
-| 5     | Slice0_l2_cache_access          |
-| 6     | Slice0_l2_cache_l2wb            |
-| 7     | Slice0_l2_cache_l1wb            |
-| 8     | Slice0_l2_cache_wb_victim       |
-| 9     | Slice0_l2_cache_wb_cleaning_coh |
-| 10    | Slice0_l2_cache_access_rd       |
-| 11    | Slice0_l2_cache_access_wr       |
-| 12    | Slice0_l2_cache_inv             |
-| 13    | Slice1_l2_cache_refill          |
-| 14    | Slice1_l2_cache_rd_refill       |
-| 15    | Slice1_l2_cache_wr_refill       |
-| 16    | Slice1_l2_cache_long_miss       |
-| 17    | Slice1_l2_cache_access          |
-| 18    | Slice1_l2_cache_l2wb            |
-| 19    | Slice1_l2_cache_l1wb            |
-| 20    | Slice1_l2_cache_wb_victim       |
-| 21    | Slice1_l2_cache_wb_cleaning_coh |
-| 22    | Slice1_l2_cache_access_rd       |
-| 23    | Slice1_l2_cache_access_wr       |
-| 24    | Slice1_l2_cache_inv             |
-| 25    | Slice2_l2_cache_refill          |
-| 26    | Slice2_l2_cache_rd_refill       |
-| 27    | Slice2_l2_cache_wr_refill       |
-| 28    | Slice2_l2_cache_long_miss       |
-| 29    | Slice2_l2_cache_access          |
-| 30    | Slice2_l2_cache_l2wb            |
-| 31    | Slice2_l2_cache_l1wb            |
-| 32    | Slice2_l2_cache_wb_victim       |
-| 33    | Slice2_l2_cache_wb_cleaning_coh |
-| 34    | Slice2_l2_cache_access_rd       |
-| 35    | Slice2_l2_cache_access_wr       |
-| 36    | Slice2_l2_cache_inv             |
-| 37    | Slice3_l2_cache_refill          |
-| 38    | Slice3_l2_cache_rd_refill       |
-| 39    | Slice3_l2_cache_wr_refill       |
-| 40    | Slice3_l2_cache_long_miss       |
-| 41    | Slice3_l2_cache_access          |
-| 42    | Slice3_l2_cache_l2wb            |
-| 43    | Slice3_l2_cache_l1wb            |
-| 44    | Slice3_l2_cache_wb_victim       |
-| 45    | Slice3_l2_cache_wb_cleaning_coh |
-| 46    | Slice3_l2_cache_access_rd       |
-| 47    | Slice3_l2_cache_access_wr       |
-| 48    | Slice3_l2_cache_inv             |
+| 索引  | 事件                              |
+| --- | ------------------------------- |
+| 0   | noEvent                         |
+| 1   | Slice0_l2_cache_refill          |
+| 2   | Slice0_l2_cache_rd_refill       |
+| 3   | Slice0_l2_cache_wr_refill       |
+| 4   | Slice0_l2_cache_long_miss       |
+| 5   | Slice0_l2_cache_hit             |
+| 6   | Slice0_l2_cache_miss            |
+| 7   | Slice0_l2_cache_access          |
+| 8   | Slice0_l2_cache_l2wb            |
+| 9   | Slice0_l2_cache_l1wb            |
+| 10  | Slice0_l2_cache_wb_victim       |
+| 11  | Slice0_l2_cache_wb_cleaning_coh |
+| 12  | Slice0_l2_cache_prefetch_access |
+| 13  | Slice0_l2_cache_prefetch_miss   |
+| 14  | Slice0_l2_cache_access_rd       |
+| 15  | Slice0_l2_cache_access_wr       |
+| 16  | Slice0_l2_cache_miss_rd         |
+| 17  | Slice0_l2_cache_inv             |
+| 18  | Slice1_l2_cache_refill          |
+| 19  | Slice1_l2_cache_rd_refill       |
+| 20  | Slice1_l2_cache_wr_refill       |
+| 21  | Slice1_l2_cache_long_miss       |
+| 22  | Slice1_l2_cache_hit             |
+| 23  | Slice1_l2_cache_miss            |
+| 24  | Slice1_l2_cache_access          |
+| 25  | Slice1_l2_cache_l2wb            |
+| 26  | Slice1_l2_cache_l1wb            |
+| 27  | Slice1_l2_cache_wb_victim       |
+| 28  | Slice1_l2_cache_wb_cleaning_coh |
+| 29  | Slice1_l2_cache_prefetch_access |
+| 30  | Slice1_l2_cache_prefetch_miss   |
+| 31  | Slice1_l2_cache_access_rd       |
+| 32  | Slice1_l2_cache_access_wr       |
+| 33  | Slice1_l2_cache_miss_rd         |
+| 34  | Slice1_l2_cache_inv             |
+| 35  | Slice2_l2_cache_refill          |
+| 36  | Slice2_l2_cache_rd_refill       |
+| 37  | Slice2_l2_cache_wr_refill       |
+| 38  | Slice2_l2_cache_long_miss       |
+| 39  | Slice2_l2_cache_hit             |
+| 40  | Slice2_l2_cache_miss            |
+| 41  | Slice2_l2_cache_access          |
+| 42  | Slice2_l2_cache_l2wb            |
+| 43  | Slice2_l2_cache_l1wb            |
+| 44  | Slice2_l2_cache_wb_victim       |
+| 45  | Slice2_l2_cache_wb_cleaning_coh |
+| 46  | Slice2_l2_cache_prefetch_access |
+| 47  | Slice2_l2_cache_prefetch_miss   |
+| 48  | Slice2_l2_cache_access_rd       |
+| 49  | Slice2_l2_cache_access_wr       |
+| 50  | Slice2_l2_cache_miss_rd         |
+| 51  | Slice2_l2_cache_inv             |
+| 52  | Slice3_l2_cache_refill          |
+| 53  | Slice3_l2_cache_rd_refill       |
+| 54  | Slice3_l2_cache_wr_refill       |
+| 55  | Slice3_l2_cache_long_miss       |
+| 56  | Slice3_l2_cache_hit             |
+| 57  | Slice3_l2_cache_miss            |
+| 58  | Slice3_l2_cache_access          |
+| 59  | Slice3_l2_cache_l2wb            |
+| 60  | Slice3_l2_cache_l1wb            |
+| 61  | Slice3_l2_cache_wb_victim       |
+| 62  | Slice3_l2_cache_wb_cleaning_coh |
+| 63  | Slice3_l2_cache_prefetch_access |
+| 64  | Slice3_l2_cache_prefetch_miss   |
+| 65  | Slice3_l2_cache_access_rd       |
+| 66  | Slice3_l2_cache_access_wr       |
+| 67  | Slice3_l2_cache_miss_rd         |
+| 68  | Slice3_l2_cache_inv             |
 
 ### Topdown PMU
 
@@ -787,11 +828,11 @@ counters, and user-mode event counters.
 
 Table: Machine Mode Event Counter List
 
-| Name            | Index       | Read/Write | Introduction                             | Reset value |
-| --------------- | ----------- | ---------- | ---------------------------------------- | ----------- |
-| MCYCLE          | 0xB00       | RW         | Machine Mode Clock Cycle Counter         | -           |
-| MINSTRET        | 0xB02       | RW         | Machine-mode retired instruction counter | -           |
-| MHPMCOUNTER3-31 | 0XB03-0XB1F | RW         | Machine-mode Performance Event Counter   | 0           |
+| 名称              | 索引          | 读写  | 介绍                                       | 复位值 |
+| --------------- | ----------- | --- | ---------------------------------------- | --- |
+| MCYCLE          | 0xB00       | RW  | Machine Mode Clock Cycle Counter         | -   |
+| MINSTRET        | 0xB02       | RW  | Machine-mode retired instruction counter | -   |
+| MHPMCOUNTER3-31 | 0XB03-0XB1F | RW  | Machine-mode Performance Event Counter   | 0   |
 
 The corresponding MHPMCOUNTERx counter is controlled by MHPMEVENTx, specifying
 the counting of relevant performance events.
@@ -823,9 +864,9 @@ register, controlled by xcounteren:
 
 Table: User Mode Event Counter List
 
-| Name           | Index       | Read/Write | Introduction                                          | Reset value |
-| -------------- | ----------- | ---------- | ----------------------------------------------------- | ----------- |
-| CYCLE          | 0xC00       | RO         | User-mode read-only copy of mcycle register           | -           |
-| TIME           | 0xC01       | RO         | Memory-mapped register mtime user-mode read-only copy | -           |
-| INSTRET        | 0xC02       | RO         | User-mode read-only copy of minstret register         | -           |
-| HPMCOUNTER3-31 | 0XC03-0XC1F | RO         | mhpmcounter3-31 寄存器用户模式只读副本                           | 0           |
+| 名称             | 索引          | 读写  | 介绍                                                    | 复位值 |
+| -------------- | ----------- | --- | ----------------------------------------------------- | --- |
+| CYCLE          | 0xC00       | RO  | User-mode read-only copy of mcycle register           | -   |
+| TIME           | 0xC01       | RO  | Memory-mapped register mtime user-mode read-only copy | -   |
+| INSTRET        | 0xC02       | RO  | User-mode read-only copy of minstret register         | -   |
+| HPMCOUNTER3-31 | 0XC03-0XC1F | RO  | mhpmcounter3-31 寄存器用户模式只读副本                           | 0   |

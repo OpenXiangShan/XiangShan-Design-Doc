@@ -43,7 +43,7 @@ The overall design specifications of the MMU module are as follows:
 5. Supports dynamic and static PMA checks
 6. Supports ASID
 7. Support Sfence.vma
-8. Support software updates for A/D bits
+8. 支持软件更新 A/D 位
 9. Supports two-stage address translation with the H extension.
 10. Supports the Sv39x4 paging mechanism
 11. Supports VMID
@@ -51,20 +51,13 @@ The overall design specifications of the MMU module are as follows:
 
 ## Functional Description
 
-The MMU module of Xiangshan consists of L1 TLB, Repeater, L2 TLB, PMP, and PMA
-modules, with the L2TLB module further divided into Page Cache, Page Table
-Walker, Last Level Page Table Walker, Miss Queue, and Prefetcher. Before memory
-read/write operations within the core, including frontend instruction fetch and
-backend memory access, address translation is performed by the MMU module.
-Frontend instruction fetch and backend memory access perform address translation
-via ITLB and DTLB, respectively, both using non-blocking access. The TLB must
-return whether a request misses to the request source, which then schedules a
-resend of the TLB query until a hit occurs. For missed Load requests, the
-Kunming Lake architecture supports TLB Hint, meaning that when the L2 TLB
-refills the page table into the L1 TLB, it can precisely wake up Load
-instructions blocked due to TLB misses for that virtual address. When L1 TLB
-(ITLB or DTLB) misses, it accesses the L2 TLB. If the L2 TLB also misses, the
-Page Table Walker accesses the page table in memory.
+香山的 MMU 模块由 L1 TLB，Repeater，L2 TLB，PMP 和 PMA 模块组成，其中 L2TLB 模块又分为 Page Cache、Page
+Table Walker、Last Level Page Table Walker、Miss Queue 和 Prefetcher
+五部分。在核内进行内存读写，包括前端取指和后端访存之前，都需要由 MMU 模块进行地址翻译。前端取指和后端访存分别通过 ITLB 和 DTLB
+进行地址翻译，均为非阻塞式访问，特别地，对 MMIO 使用阻塞式 ITLB 进行地址翻译。TLB 需要返回请求是否
+miss，返回给请求来源，并由请求来源调度重新发送 TLB 查询请求，直至命中。对于 miss 的 Load 请求，昆明湖架构支持 TLB Hint，即当 L2
+TLB refill 页表至 L1 TLB 时，可以精准唤醒因该虚拟地址 TLB miss 而导致阻塞的 Load 指令。当 L1 TLB（ITLB 和
+DTLB）发生 miss 时，会访问 L2 TLB。如果 L2 TLB 依然 miss，则会通过 Page Table Walker 访问内存中的页表。
 
 The Repeater serves as a request buffer between the L1 TLB and L2 TLB, adding
 pipeline stages due to the significant physical distance between them. Since
@@ -106,11 +99,9 @@ both frontend instruction fetch and backend memory access employ non-blocking
 TLB access—when a request misses, the miss information is returned, and the
 request source schedules a resend of the TLB query until a hit occurs.
 
-Additionally, the memory access features 2 Load pipelines, 2 Store pipelines,
-along with an SMS prefetcher and an L1 Load stream & stride prefetcher. To
-handle numerous requests, the two Load pipelines and the L1 Load stream & stride
-prefetcher utilize the Load DTLB, the two Store pipelines use the Store DTLB,
-and prefetch requests employ the Prefetch DTLB, totaling 3 DTLBs.
+同时，访存拥有 3 个 Load 流水线，2 个 Store 流水线，以及 SMS 预取器、L1 Load stream & stride
+预取器。为应对众多请求，两条 Load 流水线及 L1 Load stream & stride 预取器使用 Load DTLB，两条 Store 流水线使用
+Store DTLB，预取请求使用 Prefetch DTLB，共 3 个 DTLB。
 
 To avoid duplicate entries in the TLB, the ITLB repeater and DTLB repeater
 receive requests from the ITLB and DTLB respectively, filtering out duplicate
@@ -324,7 +315,7 @@ Table: HGATP Register Format {#tbl:MMU-CSR_HGATP}
 |  [57:44]  |   VMID    |                                                 Virtual machine identifier. For the Sv39x4 address translation mode adopted by the Xiangshan Kunminghu architecture, the maximum VMID length is 14.                                                  |
 |  [43:0]   |    PPN    |                                               Represents the physical page number of the root page table for the second-stage translation, obtained by right-shifting the physical address by 12 bits.                                               |
 
-### Support software updates for A/D bits
+### 支持软件更新 A/D 位
 
 Xiangshan supports software management of A/D bits in page tables. The A bit
 indicates that the page has been read, written, or fetched since the last time
@@ -355,17 +346,17 @@ Mechanism](#sec:MMU-exception).
 
 Table: Types of Exceptions Returned by TLB
 
-| **type**  |     **destination**      |                     **Description**                     |
-| :-------: | :----------------------: | :-----------------------------------------------------: |
-| pf_instr  |         Frontend         |    Indicates an instruction page fault has occurred.    |
-| af_instr  |         Frontend         |     Indicates an instruction access fault occurred      |
-| gpf_instr |         Frontend         | Indicates an instruction guest page fault has occurred. |
-|   pf_ld   | LoadUnit or AtomicsUnit  |          Indicates a load page fault occurred           |
-|   af_ld   | LoadUnit or AtomicsUnit  |         indicates a load access fault occurred          |
-|  gpf_ld   | LoadUnit or AtomicsUnit  |     Indicates a load guest page fault has occurred.     |
-|   pf_st   | StoreUnit or AtomicsUnit |          Indicates a store page fault occurred          |
-|   af_st   | StoreUnit or AtomicsUnit |         Indicates a store access fault occurred         |
-|  gpf_st   | StoreUnit or AtomicsUnit |    Indicates a store guest page fault has occurred.     |
+| **type**  |     **destination**     |                     **Description**                     |
+| :-------: | :---------------------: | :-----------------------------------------------------: |
+| pf_instr  |        Frontend         |    Indicates an instruction page fault has occurred.    |
+| af_instr  |        Frontend         |     Indicates an instruction access fault occurred      |
+| gpf_instr |        Frontend         | Indicates an instruction guest page fault has occurred. |
+|   pf_ld   | LoadUnit 或 AtomicsUnit  |          Indicates a load page fault occurred           |
+|   af_ld   | LoadUnit 或 AtomicsUnit  |         indicates a load access fault occurred          |
+|  gpf_ld   | LoadUnit 或 AtomicsUnit  |     Indicates a load guest page fault has occurred.     |
+|   pf_st   | StoreUnit 或 AtomicsUnit |          Indicates a store page fault occurred          |
+|   af_st   | StoreUnit 或 AtomicsUnit |         Indicates a store access fault occurred         |
+|  gpf_st   | StoreUnit 或 AtomicsUnit |    Indicates a store guest page fault has occurred.     |
 
 ## Exception Handling Mechanism {#sec:MMU-exception}
 
@@ -397,24 +388,24 @@ Possible exceptions and the MMU module's handling process are shown in
 
 Table: Possible MMU exceptions and handling procedures {#tbl:MMU-exceptions}
 
-| **module** |     **Possible Exceptions**     |                                 ** processing flow **                                  |
-| :--------: | :-----------------------------: | :------------------------------------------------------------------------------------: |
-|    ITLB    |                                 |                                                                                        |
-|            |    Generate inst page fault     |            Deliver to Icache or IFU for processing based on request source             |
-|            | Generate inst guest page fault  |            Deliver to Icache or IFU for processing based on request source             |
-|            |   Generate inst access fault    |            Deliver to Icache or IFU for processing based on request source             |
-|    DTLB    |                                 |                                                                                        |
-|            |   Generates a load page fault   |                         Hand over to LoadUnits for processing.                         |
-|            | Generate load guest page fault  |                         Hand over to LoadUnits for processing.                         |
-|            |    Generate store page fault    | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|            | Generate store guest page fault | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|            |  Generate a load access fault   |                         Hand over to LoadUnits for processing.                         |
-|            |   Generate store access fault   | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|   L2 TLB   |                                 |                                                                                        |
-|            |    Generate guest page fault    |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |       Generate page fault       |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |      Generate access fault      |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |         ECC check error         |       Invalidate the current entry, return a miss result, and restart Page Walk.       |
+| **module** |     **Possible Exceptions**     |                           ** processing flow **                            |
+| :--------: | :-----------------------------: | :------------------------------------------------------------------------: |
+|    ITLB    |                                 |                                                                            |
+|            |    Generate inst page fault     |                        根据请求来源，分别交付给 Icache 或 IFU 处理                        |
+|            | Generate inst guest page fault  |                        根据请求来源，分别交付给 Icache 或 IFU 处理                        |
+|            |   Generate inst access fault    |                        根据请求来源，分别交付给 Icache 或 IFU 处理                        |
+|    DTLB    |                                 |                                                                            |
+|            |   Generates a load page fault   |                             交付给 LoadUnits 进行处理                             |
+|            | Generate load guest page fault  |                             交付给 LoadUnits 进行处理                             |
+|            |    Generate store page fault    |                  根据请求来源，分别交付给 StoreUnits 或 AtomicsUnit 处理                  |
+|            | Generate store guest page fault |                  根据请求来源，分别交付给 StoreUnits 或 AtomicsUnit 处理                  |
+|            |  Generate a load access fault   |                             交付给 LoadUnits 进行处理                             |
+|            |   Generate store access fault   |                  根据请求来源，分别交付给 StoreUnits 或 AtomicsUnit 处理                  |
+|   L2 TLB   |                                 |                                                                            |
+|            |    Generate guest page fault    |                        交付给 L1 TLB，L1 TLB 根据请求来源交付处理                        |
+|            |       Generate page fault       |                        交付给 L1 TLB，L1 TLB 根据请求来源交付处理                        |
+|            |      Generate access fault      |                        交付给 L1 TLB，L1 TLB 根据请求来源交付处理                        |
+|            |         ECC check error         | Invalidate the current entry, return a miss result, and restart Page Walk. |
 
 
 ## Overall Design {#sec:MMU-overall}
@@ -423,17 +414,11 @@ The overall architecture of the MMU is shown in [@fig:MMU-arch-overall].
 
 ![MMU Module Overall Block Diagram](figure/image9.jpeg){#fig:MMU-arch-overall}
 
-The ITLB receives PTW requests from the Frontend, while the DTLB receives PTW
-requests from the Memblock. PTW requests from the Frontend include 3 requests
-from the ICache and 1 request from the IFU. PTW requests from the Memblock
-include 2 requests from the LoadUnit (with the AtomicsUnit occupying one of the
-LoadUnit's request channels), 1 request from the L1 Load stream & stride
-prefetcher, 2 requests from the StoreUnit, and 1 request from the SMSPrefetcher.
-The ITLB and DTLB connect to the L2 TLB via Repeaters, both supporting
-non-blocking access. These Repeaters, in addition to their pipelining function,
-incorporate a duplicate request filtering mechanism to eliminate redundant
-requests sent from the L1 TLB to the L2 TLB, preventing duplicates in the L1
-TLB.
+ITLB 接收来自 Frontend 的 PTW 请求，DTLB 接收来自 Memblock 的 PTW 请求。来自 Frontend 的 PTW 请求包括
+ICache 的 2 个请求和 IFU 的 1 个请求，来自 Memblock 的 PTW 请求包括 LoadUnit 的 3 个请求（AtomicsUnit
+占用 LoadUnit 的 1 个请求通道），L1 Load stream & stride 预取器的 1 个请求，StoreUnit 的 2 个请求，以及
+SMSPrefetcher 的 1 个请求。ITLB、DTLB 通过 Repeater 与 L2 TLB 连接，均为非阻塞式访问。这些 Repeater
+在加拍功能的基础上，增加了过滤重复请求的功能，可以过滤掉 L1 TLB 向 L2 TLB 发送的重复请求，避免 L1 TLB 中出现重复项。
 
 Requests from the ITLB and DTLB are first arbitrated (via a 2-to-1 Arbiter) and
 then access the Page Cache. For non-two-stage address translation requests, if a

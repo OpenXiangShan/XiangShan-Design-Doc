@@ -12,7 +12,7 @@ The Last Level Page Table Walker refers to the following module:
 3.  Support sending PTW requests to memory
 4.  Supports sending refill signals to the Page Cache.
 5.  Supports exception handling mechanism
-6.  Supports second-stage translation.
+6.  支持第二阶段翻译
 
 ## Function
 
@@ -78,7 +78,7 @@ An access fault exception may occur in the Last Level Page Table Walker and will
 be delivered to the L1 TLB. The L1 TLB handles it based on the request source.
 Refer to Section 6 of this document: Exception Handling Mechanism.
 
-### Supports second-stage translation.
+### 支持第二阶段翻译
 
 Four new states have been added: state_hptw_req, state_hptw_resp,
 state_last_hptw_req, and state_last_hptw_resp. When a two-stage translation

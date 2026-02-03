@@ -12,7 +12,7 @@ The repeater consists of the following modules:
 1. Supports the transmission of PTW requests and responses between the L1 TLB
    and L2 TLB.
 2. Support filtering duplicate requests
-3. Support TLB Hint mechanism
+3. 支持 TLB Hint 机制
 
 ## Function
 
@@ -26,19 +26,14 @@ duplicate requests. The filter can eliminate redundant requests, preventing
 duplicates in the L1 TLB. The number of entries in the filter partially
 determines the parallelism of the L2 TLB (see Section 5.1.1.2).
 
-In the Kunminghu architecture, the L2 TLB is located in the memblock module but
-is physically distant from both the ITLB and DTLB. Xiangshan's MMU includes
-three ITLB repeaters and one DTLB repeater to pipeline stages between the L1 TLB
-and L2 TLB, with handshaking via valid-ready signals. The ITLB sends PTW
-requests and virtual page numbers to itlbRepeater1, which arbitrates and
-forwards them to itlbRepeater2, then to itlbRepeater3, which transmits the PTW
-requests to the L2 TLB. The L2 TLB returns the virtual page number, resolved
-physical page number, page table permissions, page table level, and exception
-signals to itlbRepeater3 and itlbRepeater2, ultimately returning them to the
-ITLB via itlbRepeater1. The DTLB interacts with the DTLB repeater similarly. The
-dtlbRepeater and itlbRepeater1 are filter modules that merge duplicate requests
-from the L1 TLB. Since the ITLB and DTLB in Kunminghu support non-blocking
-access, these repeaters are also non-blocking.
+昆明湖架构中，L2 TLB 位于 memblock 模块中，但与 ITLB 和 DTLB 均有一定距离。香山的 MMU 包含三个 itlbRepeater
+和一个 dtlbRepeater，起到在 L1 TLB 与 L2 TLB 之间加拍的效果，两级 Repeater 之间通过 valid-ready
+信号进行交互。ITLB 将 PTW 请求以及虚拟页号发送给 itlbRepeater1，进行仲裁后发送给 itlbRepeater2，并发送给
+itlbRepeater3，通过 itlbRepeater3 向 L2 TLB 传递 PTW 请求。L2 TLB 将 PTW 请求对应的虚拟页号，查找 L2
+TLB 得到的物理页号、页表的权限位、页表等级、是否发生异常等信号返回给 itlbRepeater3、itlbRepeater2，通过
+itlbRepeater1 最终返回给 ITLB。DTLB 与 dtlbRepeater 的交互和 ITLB 类似，dtlbRepeater 和
+itlbRepeater1 是 Filter 模块，可以合并 L1 TLB 中重复的请求。由于昆明湖架构中 ITLB 和 DTLB 均为非阻塞式访问，因此这些
+repeater 也均为非阻塞式 Repeater。
 
 ### Filter duplicate requests
 
@@ -61,7 +56,7 @@ duplicates at the entry level—only ensuring no duplicates within the same DTLB
 (load, store, or prefetch). However, requests from different DTLBs (e.g., load
 and store) sent to the L2 TLB may still overlap.
 
-### Support TLB Hint mechanism
+### 支持 TLB Hint 机制
 
 ![TLB Hint schematic](./figure/image28.png)
 
