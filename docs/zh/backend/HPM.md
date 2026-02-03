@@ -2,8 +2,8 @@
 
 - 版本：V2R2
 - 状态：OK
-- 日期：2025/02/27
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/02/02
+- commit：[0f639b5a](https://github.com/OpenXiangShan/XiangShan/commit/0f639b5a43c370bc57c7b58a83c7039febd102f3)
 
 ## 基本信息
 
