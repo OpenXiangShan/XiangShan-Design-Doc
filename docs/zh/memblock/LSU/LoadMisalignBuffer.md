@@ -15,7 +15,7 @@ LoadMisalignBuffer 会收集由自身发出的 Load 访存，等两条 Load 访�
 
 ### 特性 1：支持跨越 16Byte 边界的非对齐 Load 进行拆分访存
 
-根据已经执行完的 flow 进行不同的变化。转态机会再第一条 flow 写回后再进入 s_req 状态，发送第二条 flow。
+根据已经执行完的 flow 进行不同的变化。转态机会在第一条 flow 写回后再进入 s_req 状态，发送第二条 flow。
 如果第一次 flow 携带异常写回至 LoadMisalignBuffer，则直接携带异常信息写回给后端，无需进行第二条 flow 的执行。
 任意一条 flow 写回时都有可能产生任意原因的 replay，LoadMisalignBuffer 选择重新发送该 flow 至 LoadUnit，无论是什么原因的 replay。
 
