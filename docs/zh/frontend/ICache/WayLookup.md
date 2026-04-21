@@ -1,6 +1,6 @@
 # WayLookup 子模块文档
 
-WayLookup 为 FIFO 结构，暂存 IPrefetchPipe 查询 MetaArray 和 ITLB 得到的元数据，以备 MainPipe 使用。同时监听 MSHR 写入 SRAM 的 cacheline，对命中信息进行更新。更新逻辑与 IPrefetchPipe 中相同，见 [IPrefetchPipe 子模块文档中的“命中信息的更新”](IPrefetchPipe.md#sec:IPrefetchPipe-hit-update)一节。
+WayLookup 为 FIFO 结构，暂存 PrefetchPipe 查询 MetaArray 和 ITLB 得到的元数据，以备 MainPipe 使用。同时监听 MSHR 写入 SRAM 的 cacheline，对命中信息进行更新。更新逻辑与 PrefetchPipe 中相同，见 [PrefetchPipe 子模块文档中的“命中信息的更新”](PrefetchPipe.md#sec:PrefetchPipe-hit-update)一节。
 
 ![WayLookup 队列结构](../figure/ICache/WayLookup/waylookup_structure_rw.png)
 
@@ -19,4 +19,4 @@ WayLookup 为 FIFO 结构，暂存 IPrefetchPipe 查询 MetaArray 和 ITLB 得�
 
 1. 考虑双行请求，`gpaddr` 只需要存一份（若第一行发生 gpf，则第二行肯定也在错误路径上，不必存储），但 gpf 信号本身仍然需要存两份，因为 ifu 需要判断是否是跨行异常。
 2. `readPtr===gpfPtr` 这一条件可能导致 flush 来的比较慢时 `readPtr` 转了一圈再次与 `gpfPtr` 相等，从而错误地再次读出 gpf，但如前所述，此时工作在错误路径上，因此即使再次读出 gpf 也无所谓。
-3. 需要注意一个特殊情况：一个跨页的取指块，其 32B 在前一页且无异常，后 2B 在后一页且发生 gpf，若前 32B 正好是 16 条 RVC 压缩指令，则 IFU 会将后 2B 及对应的异常信息丢弃，此时可能导致下一个取指块的 `gpaddr` 丢失。需要在 WayLookup 中已有一个未被 MainPipe 取走的 gpf 及相关信息时阻塞 WayLookup 的入队（即 IPrefetchPipe s1 流水级），见 PR#3719。
+3. 需要注意一个特殊情况：一个跨页的取指块，其 32B 在前一页且无异常，后 2B 在后一页且发生 gpf，若前 32B 正好是 16 条 RVC 压缩指令，则 IFU 会将后 2B 及对应的异常信息丢弃，此时可能导致下一个取指块的 `gpaddr` 丢失。需要在 WayLookup 中已有一个未被 MainPipe 取走的 gpf 及相关信息时阻塞 WayLookup 的入队（即 PrefetchPipe s1 流水级），见 PR#3719。

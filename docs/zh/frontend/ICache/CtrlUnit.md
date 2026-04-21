@@ -79,4 +79,4 @@ CtrlUnit 内部使用一个状态机控制错误注入过程，其 status （注
 
 在 `writeMeta` 或 `writeData` 状态下，CtrlUnit 向 MetaArray/DataArray 写入任意数据，同时拉高 `poison` 位，写入完成后状态机进入 `idle` 状态。
 
-ICache 顶层中实现了一个 Mux，当 CtrlUnit 的状态机不为 `idle` 时，将 MetaArray/DataArray 的读写口连接到 CtrlUnit，而非 MainPipe/IPrefetchPipe/MissUnit。当状态机 `idle` 时反之。
+ICache 顶层中实现了一个 Mux，当 CtrlUnit 的状态机不为 `idle` 时，将 MetaArray/DataArray 的读写口连接到 CtrlUnit，而非 MainPipe/PrefetchPipe/MissUnit。当状态机 `idle` 时反之。

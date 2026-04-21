@@ -28,7 +28,7 @@
 | Submodule                         | Description                                                                        |
 | --------------------------------- | ---------------------------------------------------------------------------------- |
 | [MainPipe](MainPipe.md)           | Main Pipeline                                                                      |
-| [IPrefetchPipe](IPrefetchPipe.md) | Prefetch Pipeline                                                                  |
+| [PrefetchPipe](PrefetchPipe.md) | Prefetch Pipeline                                                                  |
 | [WayLookup](WayLookup.md)         | Metadata buffer queue                                                              |
 | MetaArray                         | Metadata SRAM                                                                      |
 | DataArray                         | Data SRAM                                                                          |
@@ -86,14 +86,14 @@ Document](../FTQ/index.md).
 ![FTQ pointer illustration](../figure/ICache/ICache/ftq_pointer.png)
 
 The ICache structure is shown in the figure below. It has two pipelines:
-MainPipe and IPrefetchPipe. MainPipe receives instruction fetch requests from
-FTQ, while IPrefetchPipe receives hardware/software prefetch requests from
+MainPipe and PrefetchPipe. MainPipe receives instruction fetch requests from
+FTQ, while PrefetchPipe receives hardware/software prefetch requests from
 FTQ/MemBlock. For prefetch requests, IPrefetch queries the MetaArray and stores
 the metadata (which way hit, ECC check code, whether an exception occurred,
 etc.) in WayLookup. If the request misses, it is sent to MissUnit for
 prefetching. For instruction fetch requests, MainPipe first reads the hit
 information from WayLookup. If no information is available in WayLookup,
-MainPipe will block until IPrefetchPipe writes the information into WayLookup.
+MainPipe will block until PrefetchPipe writes the information into WayLookup.
 This scheme separates access to MetaArray and DataArray, accessing only a single
 way of DataArray at a time, achieving lower power consumption at the cost of a
 one-cycle redirect latency.
@@ -101,7 +101,7 @@ one-cycle redirect latency.
 ![ICache Structure](../figure/ICache/ICache/icache_structure.png)
 
 MissUnit handles fetch requests from MainPipe and prefetch requests from
-IPrefetchPipe, managed through MSHR. All MSHRs share a set of data registers to
+PrefetchPipe, managed through MSHR. All MSHRs share a set of data registers to
 reduce area.
 
 Replacer serves as the replacement unit, defaulting to the PLRU replacement
@@ -124,23 +124,23 @@ access requires 34 bytes of instruction data, necessitating access to 5 banks
 The FTQ sends fetch/prefetch requests to the respective fetch/prefetch pipelines
 for processing. As mentioned earlier, IPrefetch queries the MetaArray and ITLB,
 storing metadata (such as hit way, ECC code, exception occurrence, etc.) in
-WayLookup during the IPrefetchPipe s1 stage for MainPipe s0 to read.
+WayLookup during the PrefetchPipe s1 stage for MainPipe s0 to read.
 
 During power-on reset/redirection, since WayLookup is empty and FTQ's
 prefetchPtr and fetchPtr reset to the same position, the MainPipe s0 stage has
-to stall waiting for the IPrefetchPipe s1 stage to write, introducing an
+to stall waiting for the PrefetchPipe s1 stage to write, introducing an
 additional cycle of redirection delay. However, as BPU fills prediction blocks
 into FTQ and MainPipe/IFU stalls for various reasons (e.g., miss, IBuffer full),
-IPrefetchPipe will work ahead of MainPipe (`prefetchPtr &gt; fetchPtr`), and
+PrefetchPipe will work ahead of MainPipe (`prefetchPtr &gt; fetchPtr`), and
 WayLookup will have sufficient metadata. At this point, the MainPipe s0 stage
-and IPrefetchPipe s0 stage will operate in parallel.
+and PrefetchPipe s0 stage will operate in parallel.
 
 ![Relationship between ICache's two
 pipelines](../figure/ICache/ICache/icache_stages.png)
 
 For detailed instruction fetch procedures, refer to the [MainPipe submodule
-documentation](MainPipe.md), [IPrefetchPipe submodule
-documentation](IPrefetchPipe.md), and [WayLookup submodule
+documentation](MainPipe.md), [PrefetchPipe submodule
+documentation](PrefetchPipe.md), and [WayLookup submodule
 documentation](WayLookup.md).
 
 #### Hardware prefetch and software prefetch
@@ -283,7 +283,7 @@ When backend/IFU redirection, BPU redirection, or `fence.i` instruction
 execution occurs, the storage structures and pipeline stages in the ICache need
 to be flushed as appropriate. Possible flush targets/actions include:
 
-1. All pipeline stages of MainPipe and IPrefetchPipe
+1. All pipeline stages of MainPipe and PrefetchPipe
     - During flush, simply set `s0/1/2_valid` to `false.B`.
 2. Valid in MetaArray
     - During flushing, directly set `valid` to `false.B`.
@@ -320,18 +320,18 @@ override the prediction of the simple predictor (BPU s0 provides results).
 Clearly, its redirect request arrives at the ICache at the latest 1-2 cycles
 after the prefetch request, so only the following is needed:
 
-    BPU s2 redirect：冲刷 IPrefetchPipe s0
+    BPU s2 redirect：冲刷 PrefetchPipe s0
 
-    BPU s3 redirect：冲刷 IPrefetchPipe s0/1
+    BPU s3 redirect：冲刷 PrefetchPipe s0/1
 
-    当 IPrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
+    当 PrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
 
-    当 IprefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
+    当 PrefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
 
 [^redirect_tab_fencei]: `fence.i` logically requires flushing the MainPipe and
-IPrefetchPipe (as the data in the pipeline may be invalid at this point), but in
+PrefetchPipe (as the data in the pipeline may be invalid at this point), but in
 practice, `io.fencei` being asserted is always accompanied by a backend
-redirect, making it unnecessary to flush the MainPipe and IPrefetchPipe in the
+redirect, making it unnecessary to flush the MainPipe and PrefetchPipe in the
 current implementation.
 
 When the ICache is being flushed, it does not accept fetch/prefetch requests
@@ -357,7 +357,7 @@ If the ITLB's `gpf` cache is not flushed before receiving a request with a
 different `ITLB.req.vaddr`, and another `gpf` occurs, it will cause the core to
 hang.
 
-Therefore, whenever flushing the s1 pipeline stage of IPrefetchPipe, regardless
+Therefore, whenever flushing the s1 pipeline stage of PrefetchPipe, regardless
 of the flush reason, it is necessary to synchronously flush the `gpf` cache of
 ITLB (i.e., assert `ITLB.flushPipe`).
 

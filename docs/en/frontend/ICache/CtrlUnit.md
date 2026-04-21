@@ -99,5 +99,5 @@ machine transitions to the `idle` state.
 
 The ICache top level implements a Mux. When the CtrlUnit's state machine is not
 in `idle`, it connects the read/write ports of MetaArray/DataArray to CtrlUnit
-instead of MainPipe/IPrefetchPipe/MissUnit. When the state machine is in `idle`,
+instead of MainPipe/PrefetchPipe/MissUnit. When the state machine is in `idle`,
 the opposite occurs.

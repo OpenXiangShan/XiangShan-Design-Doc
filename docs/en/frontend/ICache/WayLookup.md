@@ -1,11 +1,11 @@
 # WayLookup Submodule Documentation
 
 WayLookup is a FIFO structure that temporarily stores metadata obtained by
-IPrefetchPipe from querying MetaArray and ITLB for MainPipe's use. It also
+PrefetchPipe from querying MetaArray and ITLB for MainPipe's use. It also
 monitors MSHR writes to the SRAM cacheline and updates hit information. The
-update logic is the same as in IPrefetchPipe—see the section ["Hit Information
-Updates" in the IPrefetchPipe Submodule
-Documentation](IPrefetchPipe.md#sec:IPrefetchPipe-hit-update).
+update logic is the same as in PrefetchPipe—see the section ["Hit Information
+Updates" in the PrefetchPipe Submodule
+Documentation](PrefetchPipe.md#sec:PrefetchPipe-hit-update).
 
 ![WayLookup Queue
 Structure](../figure/ICache/WayLookup/waylookup_structure_rw.png)
@@ -54,4 +54,4 @@ gpfPtr`, it reads gpf_entry; otherwise, it reads all zeros. Note:
    instructions, the IFU will discard the last 2B and its corresponding
    exception information. This may cause the `gpaddr` of the next fetch block to
    be lost. When WayLookup already has an unclaimed gpf and related information,
-   it must block enqueuing (i.e., the IPrefetchPipe s1 stage). See PR#3719.
+   it must block enqueuing (i.e., the PrefetchPipe s1 stage). See PR#3719.

@@ -12,7 +12,7 @@ In the S0 pipeline stage, retrieves metadata from WayLookup, including way hit
 information and ITLB query results, and accesses a single way of DataArray. The
 pipeline stalls if DataArray is being written or if WayLookup has no valid
 entries. After each redirect, the same request from FTQ is sent simultaneously
-to MainPipe and IPrefetchPipe. MainPipe always waits for IPrefetchPipe to write
+to MainPipe and PrefetchPipe. MainPipe always waits for PrefetchPipe to write
 the query information into WayLookup before proceeding, resulting in a 1-cycle
 redirect latency. This latency is hidden when prefetching outpaces instruction
 fetching.
@@ -22,7 +22,7 @@ fetching.
 1. Updates the replacer by sending a touch request to it.
 2. PMP check: sends a PMP request and receives the response in the same cycle,
    then registers the result for processing in the next pipeline stage.
-   - It should be noted that the IPrefetchPipe s1 pipeline stage also performs
+   - It should be noted that the PrefetchPipe s1 pipeline stage also performs
      PMP checks, which are identical to those performed here. Separate checks
      are conducted to optimize timing (avoiding the excessively long
      combinational logic path: `ITLB(reg) -&gt; ITLB.resp -&gt; PMP.req -&gt;
@@ -36,7 +36,7 @@ fetching.
 
 1. DataArray ECC verification: checks the code registered in the S1 pipeline
    stage. Reports errors to BEU if verification fails.
-2. MetaArray ECC verification. After IPrefetchPipe reads data from MetaArray, it
+2. MetaArray ECC verification. After PrefetchPipe reads data from MetaArray, it
    directly performs verification and enqueues the verification result along
    with hit information into WayLookup. This then flows through the MainPipe to
    the S2 stage, where it is reported to BEU together with the ECC verification

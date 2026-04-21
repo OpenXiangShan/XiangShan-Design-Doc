@@ -28,7 +28,7 @@
 | 子模块 | 描述 |
 | --- | --- |
 | [MainPipe](MainPipe.md) | 主流水线 |
-| [IPrefetchPipe](IPrefetchPipe.md) | 预取流水线 |
+| [PrefetchPipe](PrefetchPipe.md) | 预取流水线 |
 | [WayLookup](WayLookup.md) | 元数据缓冲队列 |
 | MetaArray | 元数据 SRAM |
 | DataArray | 数据 SRAM |
@@ -76,11 +76,11 @@ FTQ 中存储着 BPU 生成的预测块，fetchPtr 指向取指预测块，prefe
 
 ![FTQ 指针示意](../figure/ICache/ICache/ftq_pointer.png)
 
-ICache 结构如下图所示。有 MainPipe 和 IPrefetchPipe 两个流水线，MainPipe 接收来自 FTQ 的取指请求，IPrefetchPipe 接收来自 FTQ/MemBlock 的硬/软件预取请求。对于预取请求，IPrefetch 对 MetaArray 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）存储到 WayLookup 中，如果该请求缺失，就发送至 MissUnit 进行预取。对于取指请求，MainPipe 首先从 WayLookup 中读取命中信息，如果 WayLookup 中没有可用信息，MainPipe 就会阻塞，直至 IPrefetchPipe 将信息写入 WayLookup 中，该方案将 MetaArray 和 DataArray 的访问分离，一次只访问 DataArray 单路，实现了较低的功耗，代价是产生了一个周期的重定向延迟。
+ICache 结构如下图所示。有 MainPipe 和 PrefetchPipe 两个流水线，MainPipe 接收来自 FTQ 的取指请求，PrefetchPipe 接收来自 FTQ/MemBlock 的硬/软件预取请求。对于预取请求，IPrefetch 对 MetaArray 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）存储到 WayLookup 中，如果该请求缺失，就发送至 MissUnit 进行预取。对于取指请求，MainPipe 首先从 WayLookup 中读取命中信息，如果 WayLookup 中没有可用信息，MainPipe 就会阻塞，直至 PrefetchPipe 将信息写入 WayLookup 中，该方案将 MetaArray 和 DataArray 的访问分离，一次只访问 DataArray 单路，实现了较低的功耗，代价是产生了一个周期的重定向延迟。
 
 ![ICache 结构](../figure/ICache/ICache/icache_structure.png)
 
-MissUnit 处理来自 MainPipe 的取指请求和来自 IPrefetchPipe 的预取请求，通过 MSHR 进行管理，所有 MSHR 公用一组数据寄存器以减少面积。
+MissUnit 处理来自 MainPipe 的取指请求和来自 PrefetchPipe 的预取请求，通过 MSHR 进行管理，所有 MSHR 公用一组数据寄存器以减少面积。
 
 Replacer 为替换器，默认采用 PLRU 替换策略，接收来自 MainPipe 的命中更新，向 MissUnit 提供待替换的 waymask。
 
@@ -92,13 +92,13 @@ DataArray 中的 cacheline 默认分为 8 个 bank 存储，每个 bank 中存�
 
 ### （预）取指请求
 
-FTQ 分别把（预）取指请求发送到（预）取指流水线进行处理。如前所述，由 IPrefetch 对 MetaArray 和 ITLB 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）在 IPrefetchPipe s1 流水级存储到 WayLookup 中，以供 MainPipe s0 流水级读取。
+FTQ 分别把（预）取指请求发送到（预）取指流水线进行处理。如前所述，由 IPrefetch 对 MetaArray 和 ITLB 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）在 PrefetchPipe s1 流水级存储到 WayLookup 中，以供 MainPipe s0 流水级读取。
 
-在上电解复位/重定向时，由于 WayLookup 为空，而 FTQ 的 prefetchPtr、fetchPtr 复位到同一位置，MainPipe s0 流水级不得不阻塞等待 IPrefetchPipe s1 流水级的写入，这引入了一拍的额外重定向延迟。但随着 BPU 向 FTQ 填充预测块的进行和 MainPipe/IFU 因各种原因阻塞（e.g. miss、IBuffer 满），IPrefetchPipe 将工作在 MainPipe 前（`prefetchPtr > fetchPtr`），而 WayLookup 中也会有足够的元数据，此时 MainPipe s0 级和 IPrefetchPipe s0 级的工作将是并行的。
+在上电解复位/重定向时，由于 WayLookup 为空，而 FTQ 的 prefetchPtr、fetchPtr 复位到同一位置，MainPipe s0 流水级不得不阻塞等待 PrefetchPipe s1 流水级的写入，这引入了一拍的额外重定向延迟。但随着 BPU 向 FTQ 填充预测块的进行和 MainPipe/IFU 因各种原因阻塞（e.g. miss、IBuffer 满），PrefetchPipe 将工作在 MainPipe 前（`prefetchPtr > fetchPtr`），而 WayLookup 中也会有足够的元数据，此时 MainPipe s0 级和 PrefetchPipe s0 级的工作将是并行的。
 
 ![ICache 两条流水线的关系](../figure/ICache/ICache/icache_stages.png)
 
-详细的取指过程见[MainPipe 子模块文档](MainPipe.md)、[IPrefetchPipe 子模块文档](IPrefetchPipe.md)和[WayLookup 子模块文档](WayLookup.md)。
+详细的取指过程见[MainPipe 子模块文档](MainPipe.md)、[PrefetchPipe 子模块文档](PrefetchPipe.md)和[WayLookup 子模块文档](WayLookup.md)。
 
 #### 硬件预取与软件预取
 
@@ -174,7 +174,7 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
 
 在后端/IFU 重定向、BPU 重定向、`fence.i` 指令执行时，需要视情况对 ICache 内的存储结构和流水级进行冲刷。可能的冲刷目标/动作有：
 
-1. MainPipe、IPrefetchPipe 所有流水级
+1. MainPipe、PrefetchPipe 所有流水级
     - 冲刷时直接将 `s0/1/2_valid` 置为 `false.B` 即可
 2. MetaArray 中的 valid
     - 冲刷时直接将 `valid` 置为 `false.B` 即可
@@ -198,15 +198,15 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
 
 [^redirect_tab_bpu]: BPU 精确预测器（BPU s2/s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 1- 2 拍之后就到达 ICache，因此仅需要：
 
-    BPU s2 redirect：冲刷 IPrefetchPipe s0
+    BPU s2 redirect：冲刷 PrefetchPipe s0
 
-    BPU s3 redirect：冲刷 IPrefetchPipe s0/1
+    BPU s3 redirect：冲刷 PrefetchPipe s0/1
 
-    当 IPrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
+    当 PrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
 
-    当 IprefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
+    当 PrefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
 
-[^redirect_tab_fencei]: `fence.i` 在逻辑上需要冲刷 MainPipe 和 IPrefetchPipe（因为此时流水级中的数据可能无效），但实际上`io.fencei`拉高必然伴随一个后端重定向，因此目前的实现中没有冲刷 MainPipe 和 IPrefetchPipe 的必要。
+[^redirect_tab_fencei]: `fence.i` 在逻辑上需要冲刷 MainPipe 和 PrefetchPipe（因为此时流水级中的数据可能无效），但实际上`io.fencei`拉高必然伴随一个后端重定向，因此目前的实现中没有冲刷 MainPipe 和 PrefetchPipe 的必要。
 
 ICache 进行冲刷时不接收取指/预取请求（`io.req.ready === false.B`）
 
@@ -219,7 +219,7 @@ ITLB 的冲刷比较特殊，其缓存的页表项仅需要在执行 `sfence.vma
 
 若 ITLB 的 `gpf` 缓存未被冲刷，就收到了不同 `ITLB.req.vaddr` 的请求，且再次发生 `gpf`，将导致核卡死。
 
-因此，每当冲刷 IPrefetchPipe 的 s1 流水级时，无论冲刷原因为何，都需要同步冲刷 ITLB 的 `gpf` 缓存（即拉高 `ITLB.flushPipe`）。
+因此，每当冲刷 PrefetchPipe 的 s1 流水级时，无论冲刷原因为何，都需要同步冲刷 ITLB 的 `gpf` 缓存（即拉高 `ITLB.flushPipe`）。
 
 ### ECC {#sec:icache-ecc}
 

@@ -1,8 +1,8 @@
-# IPrefetchPipe 子模块文档
+# PrefetchPipe 子模块文档
 
-IPrefetchPipe 为预取的流水线，为两级流水设计，负责预取请求的过滤。
+PrefetchPipe 为预取的流水线，为两级流水设计，负责预取请求的过滤。
 
-![IPrefetchPipe 结构](../figure/ICache/IPrefetchPipe/iprefetchpipe_structure.png)
+![PrefetchPipe 结构](../figure/ICache/PrefetchPipe/PrefetchPipe_structure.png)
 
 ## S0 流水级
 
@@ -21,15 +21,15 @@ IPrefetchPipe 为预取的流水线，为两级流水设计，负责预取请求
   - 若当前请求是软件预取，不会尝试入队 WayLookup，因为该请求不需要进入 MainPipe/IFU 乃至被执行
 - 在 `enterS2` 状态，尝试将请求流入下一流水级，流入后回到 `idle`
 
-![IPrefetchPipe S1 状态机](../figure/ICache/IPrefetchPipe/iprefetchpipe_s1_fsm.png)
+![PrefetchPipe S1 状态机](../figure/ICache/PrefetchPipe/PrefetchPipe_s1_fsm.png)
 
 ## S2 流水级
 
 综合该请求的命中结果、ITLB 异常、PMP 异常，判断是否需要预取，只有不存在异常时才进行预取，因为同一个预测块可能对应两个 cacheline，所以通过 Arbiter 依次将请求发送至 MissUnit。
 
-## 命中信息的更新 {#sec:IPrefetchPipe-hit-update}
+## 命中信息的更新 {#sec:PrefetchPipe-hit-update}
 
-在 S1 流水级中得到命中信息后，距离命中信息真正在 MainPipe 中被使用要经过两个阶段，分别是在 IPrefetchPipe 中等待入队 WayLookup 阶段和在 WayLookup 中等待出队阶段，在等待期间可能会发生 MSHR 对 Meta/DataArray 的更新，因此需要对 MSHR 的响应进行监听，分为两种情况：
+在 S1 流水级中得到命中信息后，距离命中信息真正在 MainPipe 中被使用要经过两个阶段，分别是在 PrefetchPipe 中等待入队 WayLookup 阶段和在 WayLookup 中等待出队阶段，在等待期间可能会发生 MSHR 对 Meta/DataArray 的更新，因此需要对 MSHR 的响应进行监听，分为两种情况：
 
 1. 请求在 MetaArray 中未命中，监听到 MSHR 将该请求对应的 cacheline 写入了 SRAM，需要将命中信息更新为命中状态。
 2. 请求在 MetaArray 中已经命中，监听到同样的位置发生了其它 cacheline 的写入，原有数据被覆盖，需要将命中信息更新为缺失状态。

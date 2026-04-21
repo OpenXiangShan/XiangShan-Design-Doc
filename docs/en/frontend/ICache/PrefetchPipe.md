@@ -1,10 +1,10 @@
-# IPrefetchPipe submodule documentation
+# PrefetchPipe submodule documentation
 
-The IPrefetchPipe is a prefetch pipeline designed as a two-stage pipeline,
+The PrefetchPipe is a prefetch pipeline designed as a two-stage pipeline,
 responsible for filtering prefetch requests.
 
-![IPrefetchPipe
-structure](../figure/ICache/IPrefetchPipe/iprefetchpipe_structure.png)
+![PrefetchPipe
+structure](../figure/ICache/PrefetchPipe/PrefetchPipe_structure.png)
 
 ## S0 pipeline stage
 
@@ -47,8 +47,8 @@ Controlled by the state machine:
 - In the `enterS2` state, it attempts to flow the request to the next pipeline
   stage. After flowing, it returns to `idle`.
 
-![IPrefetchPipe S1 state
-machine](../figure/ICache/IPrefetchPipe/iprefetchpipe_s1_fsm.png)
+![PrefetchPipe S1 state
+machine](../figure/ICache/PrefetchPipe/PrefetchPipe_s1_fsm.png)
 
 ## S2 pipeline stage
 
@@ -58,11 +58,11 @@ performed when no exceptions exist. Since the same prediction block may
 correspond to two cachelines, the requests are sequentially sent to the MissUnit
 via the Arbiter.
 
-## Hit information update {#sec:IPrefetchPipe-hit-update}
+## Hit information update {#sec:PrefetchPipe-hit-update}
 
 After obtaining the hit information in the S1 pipeline stage, it takes two
 stages before the hit information is actually used in the MainPipe: the stage
-waiting to be enqueued into WayLookup in the IPrefetchPipe and the stage waiting
+waiting to be enqueued into WayLookup in the PrefetchPipe and the stage waiting
 to be dequeued in WayLookup. During this waiting period, updates to the
 Meta/DataArray by the MSHR may occur, so the MSHR responses need to be
 monitored, divided into two scenarios:
