@@ -2,11 +2,18 @@
 
 目前 CtrlUnit 主要负责 ECC 校验使能/错误注入等功能
 
+## 参数列表
+
+见 `Parameters.scala` 中 `case class ICacheCtrlUnitParameters` 的定义，部分参数的描述如下表所示：
+
+| 参数 | 默认值 | 描述 | 要求 |
+| --- | --- | --- | --- |
+| Address | AddressSet(0x38022080, 0x7f) | CtrlUnit 的 mmio-mapped CSR 地址范围 | 见后文 |
+| BeatBytes | 8 | CtrlUnit 的总线位宽 | 2 的幂次且 <= 8 |
+
 ## mmio-mapped CSR
 
-CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地址可由参数 `cacheCtrlAddressOpt` 配置，默认地址为`0x38022080`。总大小为 128B。
-
-当参数 `cacheCtrlAddressOpt` 为 `None` 时，CtrlUnit **不会实例化**。此时 ECC 校验使能**默认开启**，软件不可控制关闭；软件不可控制错误注入。
+CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地址可由参数 `Address` 配置，默认地址为`0x38022080`。总大小为 128B。
 
 目前实现的 CSR 如下：
 

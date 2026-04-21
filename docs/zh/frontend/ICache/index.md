@@ -1,18 +1,18 @@
 # XiangShan ICache 设计文档
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/03/07
-- commit：[4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345](https://github.com/OpenXiangShan/XiangShan/tree/4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345)
+- 版本：V3
+- 状态：draft
+- 日期：2026/04/21
+- commit：TODO
 
 ## 术语说明
 
 | 缩写 | 全称 | 描述 |
 | --- | --- | --- |
 | ICache/I$ | Instruction Cache | L1 指令缓存 |
-| DCache/D$ | Data Cache | L1 数据缓存 |
 | L2 Cache/L2$ | Level Two Cache | L2 缓存 |
-| IFU | Instruction Fetch Unit | 取指单元 |
+| FTQ | Fetch Target Queue | 取指目标队列，见 [FTQ 设计文档](../FTQ/index.md) |
+| IFU | Instruction Fetch Unit | 取指单元，见 [IFU 设计文档](../IFU/index.md) |
 | ITLB | Instruction Translation Lookaside Buffer | 地址翻译缓冲 |
 | PMP | Physical Memory Protection | 物理内存保护模块 |
 | PMA | Physical Memory Attribute | 物理内存属性模块（是 PMP 的一部分） |
@@ -27,8 +27,8 @@
 
 | 子模块 | 描述 |
 | --- | --- |
-| [MainPipe](MainPipe.md) | 主流水线 |
 | [PrefetchPipe](PrefetchPipe.md) | 预取流水线 |
+| [MainPipe](MainPipe.md) | 主流水线 |
 | [WayLookup](WayLookup.md) | 元数据缓冲队列 |
 | MetaArray | 元数据 SRAM |
 | DataArray | 数据 SRAM |
@@ -59,16 +59,27 @@
 
 ## 参数列表
 
+见 `Parameters.scala` 中 `case class ICacheParams` 的定义，部分参数的描述如下表所示：
+
 | 参数 | 默认值 | 描述 | 要求 |
 | --- | --- | --- | --- |
 | nSets | 256 | SRAM set 数量 | 2 的幂次 |
 | nWays | 4 | SRAM way 数量 | |
-| nFetchMshr | 4 | 取指 MSHR 的数量 | |
-| nPrefetchMshr | 10 | 预取 MSHR 的数量 | |
-| nWayLookupSize | 32 | WayLookup 深度，同时可以反压限制预取最大距离 | |
-| DataCodeUnit | 64 | 校验单元大小，单位为 bit，每 64bit 对应 1bit 的校验位 | |
-| ICacheDataBanks | 8 | cacheline 划分 bank 数量 | |
-| ICacheDataSRAMWidth | 66 | DataArray 基本 SRAM 的宽度 | 大于每 bank 的 data 和 code 宽度之和 |
+| rowBits | 64 | 每个 bank 的 data 位宽 | (blockBytes * 8) 的因子 |
+| blockBytes | 64 | 每个缓存行的字节数 | RVA23 profile 要求固定 64B |
+| Replacer | "setplru" | 替换算法 | rocket-chip 的 ReplacementPolicy 支持的算法，目前包括 "random", "setlru", "setplru" |
+| NumFetchMshr | 4 | 取指 MSHR 的数量 | |
+| NumPrefetchMshr | 10 | 预取 MSHR 的数量 | |
+| WayLookupSize | 32 | WayLookup 深度，同时可以反压限制预取最大距离 | |
+| MetaEcc | "parity" | MetaArray 的 ECC 类型 | "parity" 或 "secded" |
+| DataEcc | "parity" | DataArray 的 ECC 类型 | "parity" 或 "secded" |
+| DataEccUnit | 64 | 校验单元大小，单位为 bit，每多少 bit 的数据使用 1bit 的校验位保护 | rowBits 的因子 |
+| NumInterleavedBank | 2 | MetaArray 中 interleave 的数量 | 2 的幂次且 >= 2 |
+| MetaWaySplit | 2 | MetaArray 中物理 SRAM 按 way 拆分的数量，用于 SRAM 选型优化 PPA | nWays 的因子 |
+| MetaDataSplit | 1 | MetaArray 中物理 SRAM 按数据拆分的数量，用于 SRAM 选型优化 PPA | |
+| DataPaddingBits | 1 | DataArray 中每项额外的 padding 位数，用于 SRAM 选型优化 PPA | |
+| EnableCtrlUnit | true | 是否实例化 CtrlUnit，如果为 false，则 ECC 相关功能无法被软件控制 | |
+| ctrlUnitParameters | - | CtrlUnit 的参数 | 见 [CtrlUnit 文档](./CtrlUnit.md) |
 
 ## 功能概述
 
