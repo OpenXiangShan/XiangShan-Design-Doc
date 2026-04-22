@@ -1,22 +1,27 @@
 # WayLookup 子模块文档
 
-WayLookup 为 FIFO 结构，暂存 PrefetchPipe 查询 MetaArray 和 ITLB 得到的元数据，以备 MainPipe 使用。同时监听 MSHR 写入 SRAM 的 cacheline，对命中信息进行更新。更新逻辑与 PrefetchPipe 中相同，见 [PrefetchPipe 子模块文档中的“命中信息的更新”](PrefetchPipe.md#sec:PrefetchPipe-hit-update)一节。
+wayLookup 为环形队列结构，暂存 prefetchPipe 查询 metaArray 和 ITLB 得到的元数据，以备 mainPipe 使用。同时监听 missUnit 的重填广播，对命中信息进行更新。更新逻辑与 PrefetchPipe 中相同，见 [@sec:icache-hit-update] [PrefetchPipe 子模块文档中的“命中信息的更新”](PrefetchPipe.md#命中信息的更新-secicache-hit-update) 一节。
 
-![WayLookup 队列结构](../figure/ICache/WayLookup/waylookup_structure_rw.png)
+## 指针更新
 
-![WayLookup 命中信息更新](../figure/ICache/WayLookup/waylookup_structure_update.png)
+当 prefetchPipe 向 wayLookup 写入时，`writePtr++`；当 mainPipe 从 wayLookup 读取时，`readPtr++`。当队列满时（`writePtr.flag =/= readPtr.flag && writePtr.value === readPtr.value`），不再接收新的入队请求。
 
-允许 bypass（即，当 WayLookup 为空时，直接将入队请求出队），为了不将更新逻辑的延迟引入到 DataArray 的访问路径上，在 MSHR 有新的写入时禁止出队，MainPipe 的 S0 流水级也需要访问 DataArray，当 MSHR 有新的写入时无法向下走，所以该措施并不会带来额外影响。
+wayLookup 支持 bypass，即当 wayLook 空（`writePtr === readPtr`）时，将 prefetchPipe 本拍即将写入的数据立即出队到 mainPipe。为了简化指针更新逻辑，bypass 时 `writePtr` 和 `readPtr` 同时更新（`writePtr++` 和 `readPtr++`），因此在 bypass 后队列仍然是空的。
 
-## GPaddr 省面积机制
+## BPU 冲刷
 
-由于 `gpaddr` 仅在 guest page fault 发生时有用，并且每次发生 gpf 后前端实际上工作在错误路径上，后端保证会送一个 redirect（WayLookup flush）到前端（无论是发生 gpf 前就已经预测错误/发生异常中断导致的；还是 gpf 本身导致的），因此在 WayLookup 中只需存储 reset/flush 后第一个 gpf 有效时的 gpaddr。对双行请求，只需存储第一个有 gpf 的行的 `gpaddr。`
+由于 BPU/FTQ 流水上的一些减拍，相比 V2R2，FTQ 向 ICache 发送预取请求的实际更早了一拍，这导致一个取指块被 BPU s3 override 时，该取指块可能已经入队 wayLookup，因此 wayLookup 也需要处理 BPU 冲刷请求。好在，需要被冲刷的请求一定刚刚入队 wayLookup（最快的情况下，BPU s1 = prefetchPipe s0，BPU s2 = prefetchPipe s1 = wayLookup.io.write，BPU s3 = wayLookup `entries[writePtr - 1]`），因此只需要考虑队尾一项是否需要冲刷。
 
-在实现上，把 gpf 相关信号（目前只有 `gpaddr`）与其它信号（`paddr`，etc.）拆成两个 bundle，其它信号实例化 nWayLookupSize 个，gpf 相关只实例化一个寄存器。同时另用一个 `gpfPtr` 指针。总计可以节省$(\text{nWayLookupSize}*2-1)* \text{GPAddrBits} - \log_2{(\text{nWayLookupSize})} - 1$bit 的寄存器。
-当 prefetch 向 WayLookup 写入时，若有 gpf 发生，且 WayLookup 中没有已经存在的 gpf，则将 gpf/gpaddr 写入 `gpf_entry` 寄存器，同时将 `gpfPtr` 设置为此时的 `writePtr。`
-当 MainPipe 从 WayLookup 读取时，若 bypass，则仍然直接将 prefetch 入队的数据出队；否则，若 `readPtr === gpfPtr`，则读出 gpf_entry；否则读出全 0。
-需要指出：
+具体来说，wayLookup 记录队尾项对应的 `ftqIdx`，当收到 BPU s3 override 请求时，若 `ftqIdx` 匹配，且 `writePtr` > `readPtr`（即队尾项还没有被 mainPipe 读走），则冲刷队尾项（`writePtr--`）
 
-1. 考虑双行请求，`gpaddr` 只需要存一份（若第一行发生 gpf，则第二行肯定也在错误路径上，不必存储），但 gpf 信号本身仍然需要存两份，因为 ifu 需要判断是否是跨行异常。
-2. `readPtr===gpfPtr` 这一条件可能导致 flush 来的比较慢时 `readPtr` 转了一圈再次与 `gpfPtr` 相等，从而错误地再次读出 gpf，但如前所述，此时工作在错误路径上，因此即使再次读出 gpf 也无所谓。
-3. 需要注意一个特殊情况：一个跨页的取指块，其 32B 在前一页且无异常，后 2B 在后一页且发生 gpf，若前 32B 正好是 16 条 RVC 压缩指令，则 IFU 会将后 2B 及对应的异常信息丢弃，此时可能导致下一个取指块的 `gpaddr` 丢失。需要在 WayLookup 中已有一个未被 MainPipe 取走的 gpf 及相关信息时阻塞 WayLookup 的入队（即 PrefetchPipe s1 流水级），见 PR#3719。
+## 异常处理
+
+由于 `gpaddr` 等信号仅在相应异常发生时有用，并且每次发生异常后前端实际上工作在错误路径上，后端保证会送一个重定向到前端（无论是发生异常前就已经预测错误/发生异常中断导致的；还是异常本身导致的），因此在 wayLookup 中只需存储 reset/flush 后第一个异常有效时的相关信号，节省存储面积。
+
+在实现上，把这些信号（`itlbException`，`gpaddr`，etc.）与其它信号（`waymask`，etc.）拆成两个 Bundle，其它信号实例化 nWayLookupSize 个，异常相关只实例化一个寄存器。用一个 `exceptionPtr` 指示异常对应的项。
+
+当 prefetchPipe 向 wayLookup 写入时，若有异常发生，则将相关信号写入 `exceptionEntry` 寄存器，同时将 `exceptionPtr` 设置为此时的 `writePtr`。
+
+当 mainPipe 从 wayLookup 读取时，若 bypass，则仍然直接将 prefetchPipe 入队的数据出队；否则，若 `readPtr === exceptionPtr`，则读出 exceptionEntry；否则读出全 0。
+
+另外，同样是由于发生过异常以后处理器已经工作在错误路径上，因此在 `exceptionEntry` 有效时，wayLookup 不再接收新的入队请求，从而反压 prefetchPipe、FTQ 和 BPU，节省功耗。直到后端重定向将前端带回正确路径，冲刷掉 `exceptionEntry`。

@@ -1,6 +1,6 @@
 # MetaArray 及 DataArray 子模块文档
 
-### DataArray 分 bank 的低功耗设计 {#sec:icache-dataarray-per-bank-lowpower}
+### DataArray 分 bank 的低功耗设计 {#sec:icache-dataarray-lowpower}
 
 目前，ICache 中每个 cacheline 分为 8 个 bank，bank0-7。一个取指块需要 34B 指令数据，故一次访问连续的 5 个 bank。存在两种情况：
 

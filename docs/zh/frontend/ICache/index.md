@@ -2,7 +2,7 @@
 
 - 版本：V3
 - 状态：draft
-- 日期：2026/04/21
+- 日期：2026/04/22
 - commit：TODO
 
 ## 术语说明
@@ -25,6 +25,7 @@
 | vaddr | Virtual Address | 虚拟地址 |
 | (g)paddr | (Guest) Physical Address | （客户机）物理地址 |
 | PBMT | Page-Based Memory Types | 基于页的内存类型，见特权手册 Svpbmt 扩展 |
+| fb | Fetch Block | 取指块 |
 
 ## 子模块列表
 
@@ -92,7 +93,7 @@
 
 ICache 结构如图 [@fig:icache-structure] 所示。
 
-![ICache 结构](../figure/ICache/ICache/pipeline.png){#fig:icache-structure}
+![ICache 结构](../figure/ICache/pipeline.png){#fig:icache-structure}
 
 从结构上看，ICache 主要由以下功能单元组成：
 
@@ -123,7 +124,7 @@ ICache 可能接受两个来源的预取请求：
 
 逻辑上来说，每个 LoadUnit 都有可能发出软件预取请求，因此每周期至多会有 LoadUnit 数量（目前默认参数为`LduCnt=3`）个软件预取请求。但出于实现成本和性能收益考量，ICache 每周期至多仅接收并处理一个，多余的会被丢弃，端口下标最小的优先。此外，若 PrefetchPipe 阻塞，而 ICache 内已经缓存了一个软件预取请求，那么原先的软件预取请求将被覆盖。
 
-![ICache 预取请求接收与仲裁](../figure/ICache/ICache/prefetch_source.png)
+![ICache 预取请求接收与仲裁](../figure/ICache/prefetch_source.png)
 
 对硬件预取请求的处理流程如下：
 
@@ -148,6 +149,32 @@ ICache 可能接受两个来源的预取请求：
 5. 对指令数据和元数据进行 ECC 校验，将结果发送到 IFU（若使能）
 
 关于 mainPipe 流水级的细节见 [MainPipe 子模块文档](MainPipe.md)。
+
+### 取指请求跨页 {#sec:icache-cross-page}
+
+在 V3 的设计中，为了节省 ITLB 端口，ICache 不允许取指请求跨页，即一个取指请求内的至多两个取指块、两个 cacheline 必须位于同一个页内（`vaddr[49:12]`相同），但 ICache 本身的硬件不对此进行检查，由 BPU 和 FTQ 保障这一点，具体来说，前者在生成取指块时，如果发现取指块起始地址 `startVAddr` + 64 位于下一个页（即 `startVAddr[49:12]` 与 `(startVAddr + 64)[49:12]` 不同），就将取指块截断到页边界的位置（即将 `takenCfiPosition` 标记在本页的最后一个指令处）；后者在尝试发送 2-(pre)fetch 请求时会检查两个取指块是否在同一页，如果不在同一页，就不会发送 2-(pre)fetch 请求。
+
+### 2-(pre)fetch {#sec:icache-2fetch}
+
+为了提高分支密集场景的取指带宽，V3 的 ICache 支持接收 2-(pre)fetch 请求，即每个周期可以接收包含至多两个取指块的（预）取指请求。2-prefetch 和 2-fetch 通过 wayLookup 进行解耦（即，可以将 fb0 和 fb1 作为一个 2-prefetch 请求送入 prefetchPipe，prefetchPipe 会将它们在一拍内入队 wayLookup，而 mainPipe 可以先用一拍处理 fb0，再用一拍处理包含 fb1 和 fb2 的 2-fetch 请求）。出于硬件复杂度和性能收益权衡考虑，无论是 2-prefetch 还是 2-fetch 都存在一些限制，具体来说：
+
+2-prefetch 请求的限制：
+
+1. 软件预取请求不支持 2-prefetch，仅 FTQ 发送的硬件预取请求支持 2-prefetch
+2. 如前 [@sec:icache-cross-page] [一节](#取指请求跨页-secicache-cross-page)所述，2-prefetch 请求内的两个取指块必须在同一页内
+3. FTQ 内 `bpuPtr - pfPtr` 必须大于等于 4，即 BPU s3 override 第二个取指块的冲刷必须在 FTQ 内完成，一旦将 2-prefetch 请求发送到 prefetchPipe，不允许 BPU 对其进行冲刷（后端重定向造成的冲刷正常进行）
+4. 两个取指块不能产生 metaArray 的读端口冲突，即满足下面条件之一：
+   1. 位于同一个 cacheline 内
+   2. 位于相邻的 cacheline 内，且靠后（setIdx 更大）的取指块不能跨行
+   3. 位于 interleave 的 cacheline 内，且两个取指块都不能跨行
+
+一些冲突示例如图 [@fig:icache-2prefetch-conflict] 所示：
+
+![2-prefetch 冲突示例](../figure/ICache/2prefetch_conflict.png){#fig:icache-2prefetch-conflict}
+
+2-fetch 请求的限制：
+
+1. TODO
 
 ### 异常传递/特殊情况处理
 
@@ -213,18 +240,10 @@ Table: ICache 异常列表 {#tab:icache-exception}
 | 冲刷原因 | 1 | 2 | 3 | 4 |
 | --- | --- | --- | --- | --- |
 | 后端/IFU 重定向 | Y | | Y | Y |
-| BPU 重定向 | Y[^redirect_tab_bpu] | | | |
+| BPU 重定向 | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
-[^redirect_tab_bpu]: BPU 精确预测器（BPU s2/s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 1- 2 拍之后就到达 ICache，因此仅需要：
-
-    BPU s2 redirect：冲刷 PrefetchPipe s0
-
-    BPU s3 redirect：冲刷 PrefetchPipe s0/1
-
-    当 PrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
-
-    当 PrefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
+[^redirect_tab_bpu]: BPU 精确预测器（BPU s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 2 拍之后就到达 ICache，因此仅需要冲刷 prefetchPipe s0/1、wayLookup 队尾项，见两个子模块文档。
 
 [^redirect_tab_fencei]: `fence.i` 在逻辑上需要冲刷 MainPipe 和 PrefetchPipe（因为此时流水级中的数据可能无效），但实际上`io.fencei`拉高必然伴随一个后端重定向，因此目前的实现中没有冲刷 MainPipe 和 PrefetchPipe 的必要。
 
