@@ -4,17 +4,34 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 
 ## S0 流水级
 
-1. 接收来自 FTQ / MemBlock 的硬/软件预取请求
-2. 向 metaArray 和 ITLB 发送读请求
-3. 接收 BPU s3 override 引起的冲刷请求，若 ftqIdx 与当前流水级匹配且不是软件预取，则进行冲刷
+1. 接收来自 FTQ / MemBlock 的硬/软件预取请求。
+2. 根据 1-prefetch 或 2-prefetch 类型选择需要发送给 metaArray 和 ITLB 的地址。
+3. 向 metaArray 和 ITLB 发送读请求。
+4. 接收 BPU s3 override 引起的冲刷请求，若 ftqIdx 与当前流水级匹配且不是软件预取，则进行冲刷。
+
+### 2-prefetch 读地址选择
+
+如 [@sec:icache-2fetch] 一节所述，ICache 支持在特定条件下单周期接收两个取指块的预取请求。prefetchPipe S0 流水级会对这两个取指块的总计 4 个 VAddr 进行选择，具体来说：
+
+1. SameLine：即两个取指块的起始地址在同一个 cacheline 内，只发送第一个取指块的两个地址（`start` 和 `nextLine = start+64`）到 metaArray 和 ITLB。
+2. Overlap1：第一个取指块是跨行请求，第二个取指块是单行请求，且其起始地址落在第一个取指块的后半部分（即 `start + 32 < secondStart < start + 64`），同样只发送第一个取指块的两个地址（`start` 和 `nextLine = start+64`）到 metaArray 和 ITLB。
+3. Overlap2：反过来，第二个取指块是跨行请求，第一个取指块是单行请求，且第一个取指块的起始地址落在第二个取指块的前半部分（即 `secondStart + 32 < start < secondStart + 64`），只发送第二个取指块的两个地址（`secondStart` 和 `secondNextLine = secondStart+64`）到 metaArray 和 ITLB。
+4. Interleave：两个取指块均不是跨行请求，且落在不同的 interleave bank 中，发送两个取指块的起始地址（`start` 和 `secondStart`）到 metaArray 和 ITLB。
+5. 其余情况，不允许 2-prefetch，FTQ 会保证这一点，因此直接发送第一个取指块的两个地址（`start` 和 `nextLine = start+64`）到 metaArray 和 ITLB。
+
+另请参考：
+
+- `TwoFetch.scala` 中 `class TwoPrefetchCase` 的实现。
+- [MetaArray 和 DataArray 子模块文档](Array.md)中关于 interleave 的说明。
 
 ## S1 流水级
 
-1. 接收 metaArray / ITLB 的响应
-2. 若 ITLB miss，重发请求直到 hit
-3. 将元数据入队 wayLookup
-4. 监听 missUnit 重填广播，更新命中信息
-5. 接收 BPU s3 override 引起的冲刷请求，若 ftqIdx 与当前流水级匹配且不是软件预取，则进行冲刷
+1. 接收 metaArray / ITLB 的响应。
+2. 若 ITLB miss，重发请求直到 hit。
+3. 根据 1-prefetch 或 2-prefetch 类型选择需要入队 wayLookup 的元数据。
+4. 将元数据入队 wayLookup。
+5. 监听 missUnit 重填广播，更新命中信息。
+6. 接收 BPU s3 override 引起的冲刷请。求，若 ftqIdx 与当前流水级匹配且不是软件预取，则进行冲刷
 
 ### 状态机
 
@@ -40,6 +57,20 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 
 - 对 prefetchPipe s1 来说，即禁止入队 wayLookup；
 - 对 wayLookup 来说，即禁止出队到 mainPipe。
+
+### 2-prefetch 数据选择
+
+如前所述，S0 流水级从 4 个备选地址中选择了 2 个地址发送到 metaArray 和 ITLB。因此 S1 流水级需要将 2 个元数据响应恢复到原始 4 个元数据请求的形式，以便后续 wayLookup 入队和 mainPipe 使用。具体来说：
+
+1. SameLine：两个取指块正常共享相同的 meta 响应，`fb0/1.meta = meta`
+2. Overlap1：第一个取指块正常 `fb0.meta = meta`，第二个取指块仅使用第二个响应作为前半，后半无效，`fb1.meta = (meta(1), null)`
+3. Overlap2：相反，`fb1.meta = meta`，`fb0.meta = (meta(1), null)`
+4. Interleave：两个取指块的前半使用各自的 meta 响应，后半无效，`fb0.meta = (meta(0), null)`，`fb1.meta = (meta(1), null)`
+5. 1-prefetch 正常使用第一个取指块的 meta 响应，`fb0.meta = meta`
+
+另请参考：
+
+- `TwoFetch.scala` 中 `class TwoPrefetchCase` 的实现。
 
 ## S2 流水级
 
