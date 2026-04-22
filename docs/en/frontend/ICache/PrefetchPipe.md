@@ -1,78 +1,50 @@
-# PrefetchPipe submodule documentation
+# PrefetchPipe Submodule Documentation
 
-The PrefetchPipe is a prefetch pipeline designed as a two-stage pipeline,
-responsible for filtering prefetch requests.
+PrefetchPipe is a two-stage prefetch pipeline. It filters prefetch requests.
 
-![PrefetchPipe
-structure](../figure/ICache/PrefetchPipe/PrefetchPipe_structure.png)
+## S0 Stage
 
-## S0 pipeline stage
+1. Accept hardware/software prefetch requests from FTQ/MemBlock.
+2. Send read requests to MetaArray and ITLB.
+3. Accept flush requests caused by BPU s3 override. If `ftqIdx` matches the current stage and this is not a software prefetch, flush the stage.
 
-In the S0 pipeline stage, it receives prefetch requests from the FTQ/backend and
-sends read requests to the MetaArray and ITLB.
+## S1 Stage
 
-## S1 pipeline stage
+1. Receive responses from MetaArray/ITLB.
+2. If ITLB misses, resend until hit.
+3. Enqueue metadata into WayLookup.
+4. Monitor MissUnit refill broadcast and update hit information.
+5. Accept flush requests caused by BPU s3 override. If `ftqIdx` matches the current stage and this is not a software prefetch, flush the stage.
 
-First, it receives the response from the ITLB to obtain the paddr, then compares
-it with the tag returned by the MetaArray to determine the hit information. The
-metadata (hit information `waymask`, ITLB information `paddr`/`af`/`pf`) is
-written into WayLookup. Simultaneously, a PMP check is performed, and the result
-is registered for the next pipeline stage.
+### State Machine
 
-Controlled by the state machine:
+S1 behavior is controlled by a state machine:
 
-- The initial state is `idle`. When a new request enters the S1 pipeline stage,
-  it first checks whether the ITLB is missing. If it is missing, it enters
-  `itlbResend`; if the ITLB hits but the hit information has not been enqueued
-  into WayLookup, it enters `enqWay`; if the ITLB hits and WayLookup is enqueued
-  but the S2 request has not been fully processed, it enters `enterS2`.
-- In the `itlbResend` state, resend a read request to the ITLB, occupying the
-  ITLB port (thus blocking new prefetch requests entering the S0 pipeline stage)
-  until the request is refilled. On the cycle when refill completes, send
-  another read request to the MetaArray. During refill, new writes may occur. If
-  the MetaArray is busy (being written by MSHR), transition to `metaResend`;
-  otherwise, proceed to `enqWay`.
-- In the `metaResend` state, it resends a read request to the MetaArray. Upon
-  successful sending, it enters `enqWay`.
-- In the `enqWay` state, it attempts to enqueue the metadata into WayLookup. If
-  the WayLookup queue is full, it blocks until enqueuing succeeds. Additionally,
-  enqueuing is prohibited when a new write occurs in the MSHR, primarily to
-  prevent conflicts between the written information and the hit information,
-  requiring an update to the hit information. When successfully enqueued into
-  WayLookup, if S2 is idle, it directly returns to `idle`; otherwise, it enters
-  `enterS2`.
-  - If the current request is a software prefetch, it will not attempt to
-    enqueue into WayLookup because this request does not need to enter the
-    MainPipe/IFU or be executed.
-- In the `enterS2` state, it attempts to flow the request to the next pipeline
-  stage. After flowing, it returns to `idle`.
+- Initial state is `idle`. When a new request enters S1:
+  - If ITLB misses, enter `itlbResend`.
+  - If ITLB hits but metadata has not been enqueued into WayLookup, enter `enqWay`.
+  - If ITLB hits and metadata is enqueued into WayLookup but S2 handling is not finished, enter `enterS2`.
+- In `itlbResend`, resend ITLB read requests. During this state, ITLB port is occupied (new prefetch requests entering S0 are blocked) until refill finishes. In the refill cycle, resend a MetaArray read request. If MetaArray is busy (being written by MissUnit), enter `metaResend`; otherwise enter `enqWay`.
+- In `metaResend`, resend MetaArray read requests. After request issue succeeds, enter `enqWay`.
+- In `enqWay`, try to enqueue metadata into WayLookup. If WayLookup is full, stall until enqueue succeeds. In addition, enqueue is blocked when MissUnit is refilling, mainly to avoid conflicts between stored metadata and hit-status updates. After successful enqueue, return directly to `idle` if S2 is idle; otherwise enter `enterS2`.
+  - If current request is software prefetch, it does not try to enqueue into WayLookup, because it does not need to enter MainPipe.
+- In `enterS2`, try to move request into the next stage. After transfer, return to `idle`.
 
-![PrefetchPipe S1 state
-machine](../figure/ICache/PrefetchPipe/PrefetchPipe_s1_fsm.png)
+![PrefetchPipe S1 state machine](../figure/ICache/prefetchPipe_s1fsm.png)
 
-## S2 pipeline stage
+### Hit Information Update {#sec:icache-hit-update}
 
-It synthesizes the hit result of the request, ITLB exceptions, and PMP
-exceptions to determine whether prefetching is needed. Prefetching is only
-performed when no exceptions exist. Since the same prediction block may
-correspond to two cachelines, the requests are sequentially sent to the MissUnit
-via the Arbiter.
+After hit information is generated in S1, there are still pipeline stages and queues before it is actually used by MainPipe. During this period, MissUnit may refill MetaArray/DataArray, so refill broadcast must be monitored in two cases:
 
-## Hit information update {#sec:PrefetchPipe-hit-update}
+1. The request was originally a miss in MetaArray. If MissUnit refills the corresponding cacheline, hit status must be updated to hit.
+2. The request was originally a hit in MetaArray. If another cacheline write (same set and way, different tag) overwrites that location, hit status must be updated to miss.
 
-After obtaining the hit information in the S1 pipeline stage, it takes two
-stages before the hit information is actually used in the MainPipe: the stage
-waiting to be enqueued into WayLookup in the PrefetchPipe and the stage waiting
-to be dequeued in WayLookup. During this waiting period, updates to the
-Meta/DataArray by the MSHR may occur, so the MSHR responses need to be
-monitored, divided into two scenarios:
+To avoid chaining update logic timing paths (set/way/tag comparisons and status updates) onto the normal pipeline path, metadata transfer to the next stage is blocked whenever MissUnit performs refill (regardless of relevance):
 
-1. Miss in MetaArray, monitored that MSHR wrote the corresponding cacheline into
-   SRAM, need to update the hit status to hit.
-2. The request has already hit in the MetaArray, but it detects that another
-   cacheline write has occurred at the same location, overwriting the original
-   data. The hit information needs to be updated to a miss state.
+- For PrefetchPipe S1: block enqueue into WayLookup.
+- For WayLookup: block dequeue to MainPipe.
 
-To prevent the delay of update logic from being introduced into the access path
-of the DataArray, enqueuing into WayLookup is prohibited when a new write occurs
-in the MSHR, and it is enqueued in the next cycle.
+## S2 Stage
+
+1. Decide whether prefetch is needed according to hit result and exception metadata.
+2. If prefetch is needed, use Arbiter to send miss requests for up to two cachelines to MissUnit in order.
