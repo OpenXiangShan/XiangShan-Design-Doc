@@ -1,47 +1,37 @@
-# MissUnit submodule documentation
+# MissUnit Submodule Documentation
 
-The MissUnit handles ICache miss requests, manages them through MSHR, interacts
-with the L2 Cache via the Tilelink bus, and is responsible for sending write
-requests to the MetaArray and DataArray, as well as sending responses to the
-MainPipe.
+MissUnit handles ICache miss requests, manages all in-flight requests through MSHRs, and interacts with L2 cache through bus. After receiving bus responses, it broadcasts refill information to SRAMs, queues, and pipelines.
 
-![MissUnit structure](../figure/ICache/MissUnit/missunit_structure.png)
+![MissUnit structure](../figure/ICache/missUnit.png)
 
-## MSHR management
+## MSHR Management
 
-The MissUnit manages fetch requests and prefetch requests separately through
-MSHRs. To ensure fetch MSHRs can be fully released during a flush, the number of
-fetch MSHRs is set to 4, and prefetch MSHRs to 10. A design separating data and
-address is used, with all MSHRs sharing a set of data registers, while only
-storing address information in the MSHRs.
+MissUnit uses separate MSHRs for fetch requests and prefetch requests. To avoid cases where fetch MSHRs cannot be fully released during flush, default configuration sets fetch MSHR count to 4 and prefetch MSHR count to 10. It uses address-data separation: all MSHRs share one set of refill data registers (grant buffer), while each MSHR stores only request address/state information.
 
-## Request enqueue
+## Request Enqueue
 
-The MissUnit receives fetch requests from the MainPipe and prefetch requests
-from the IPrfetchPipe. Fetch requests can only be assigned to fetchMSHRs, and
-prefetch requests to prefetchMSHRs, using a lower-index-first allocation
-strategy during enqueue. Simultaneously, the MSHR is queried during enqueue. If
-the request already exists in the MSHR, it is discarded, with the external
-interface still appearing to fire, but the request is not enqueued into the
-MSHR. During enqueue, a write request for the waymask is sent to the Replacer.
+MissUnit accepts fetch requests from MainPipe and prefetch requests from PrefetchPipe. Fetch requests can only be allocated to fetchMSHR, and prefetch requests can only be allocated to prefetchMSHR. During enqueue, the free MSHR with smallest index is selected.
+
+### Duplicate Request Filtering
+
+MSHR exposes lookup interface to MissUnit top level, so MissUnit can check whether a new request already exists in any MSHR. If it already exists, MissUnit directly merges this new request. For MainPipe and PrefetchPipe interfaces, handshake still appears as fire, but no actual write into MSHR is performed.
+
+### Victim Selection
+
+When MSHR sends acquire request to bus, a victim way (to be overwritten by refill) is selected from replacer, and victim information is written into MSHR. During refill, MissUnit directly uses victim info recorded in MSHR, without querying replacer again.
 
 ## acquire
 
-When the bus to L2 is idle, the MSHR entries are selected for processing. The
-fetchMSHR has higher priority than the prefetchMSHR, and only when there are no
-fetchMSHRs to process will the prefetchMSHRs be handled. For fetchMSHRs, a
-lower-index-first priority strategy is used because there are at most two
-requests to process simultaneously, and both must be completed before proceeding
-further, making the priority among fetchMSHRs less critical. For prefetchMSHRs,
-considering the temporal order of prefetch requests, a first-come-first-served
-priority strategy is adopted. A FIFO records the enqueue order, and processing
-follows this order.
+When bus to L2 is idle, MissUnit selects MSHR entries to process. Overall, fetchMSHR has higher priority than prefetchMSHR. PrefetchMSHR is processed only when there is no fetchMSHR entry to process.
+
+For fetchMSHR, smallest-index-first priority is used. This is because at most two requests are processed simultaneously, and both must complete before proceeding, so relative priority among fetchMSHR entries is not important.
+
+For prefetchMSHR, considering temporal order among prefetch requests, first-come-first-served priority is used. A FIFO records enqueue order, and processing follows this order.
 
 ## grant
 
-It interacts with the D channel of Tilelink through a state machine. The
-bandwidth to L2 is 32 bytes, requiring two transmissions, and different requests
-do not interleave, so only one set of registers is needed to store data. When a
-transmission completes, the corresponding MSHR is selected based on the
-transmission ID, and information such as address and mask is read from the MSHR.
-The relevant information is then written to SRAM, and the MSHR is released.
+MissUnit receives bus responses with a state machine. Current L1-to-L2 bus bandwidth is 32B, so one 64B cacheline is transferred in 2 beats. Bus burst mechanism guarantees responses from different requests do not interleave, so only one grant buffer set is needed. When one transfer completes, corresponding MSHR is selected by transfer id. MissUnit reads address/victim and other info from MSHR, broadcasts refill information to SRAMs, queues, and pipelines, then resets MSHR state.
+
+### Exception Handling
+
+Current TileLink bus may report two exception signals: `corrupt` and `denied`. `corrupt` indicates data corruption from L2 cache (or lower memory structures), for example ECC check failure. `denied` indicates request rejection, for example permission failure. According to TileLink spec, asserting `denied` always implies `corrupt` is also asserted. Therefore MissUnit should return `corrupt & !denied` as effective corrupt signal to MainPipe. MainPipe then reports error to BEU and raises related exception.

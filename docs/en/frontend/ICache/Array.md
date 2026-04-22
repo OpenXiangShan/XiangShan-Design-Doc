@@ -1,6 +1,6 @@
 # MetaArray and DataArray Submodule Documentation
 
-## MetaArray Interleave
+## MetaArray Interleave {#sec:icache-metaarray-interleave}
 
 MetaArray uses set-index interleave: sets with different `setIdx % NumInterleaveBanks` are stored in different physical SRAMs to reduce access conflicts. We require `NumInterleaveBanks` to be at least 2, so one fetch block can always be handled within one cycle (if not cross-line, access one `setIdx`; if cross-line, access `setIdx` and `setIdx + 1`, which fall into two different physical SRAMs).
 

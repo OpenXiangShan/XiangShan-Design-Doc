@@ -1,24 +1,37 @@
 # MissUnit 子模块文档
 
-MissUnit 负责处理 ICache 缺失的请求，通过 MSHR 进行管理，通过 Tilelink 总线与 L2 Cache 进行交互，并负责向 MetaArray 和 DataArray 发送写请求，向 MainPipe 发送响应。
+MissUnit 负责处理 ICache 的缺失请求，通过 MSHR 进行管理所有正在处理的请求，通过总线与 L2 Cache 进行交互。收到总线响应后负责向各 SRAM、Queue、Pipeline 广播重填信息。
 
-![MissUnit 结构](../figure/ICache/MissUnit/missunit_structure.png)
+![MissUnit 结构](../figure/ICache/missUnit.png)
 
 ## MSHR 的管理
 
-MissUnit 通过 MSHR 分别管理取指请求和预取请求，为了防止 flush 时取指 MSHR 不能完全释放，设置取指 MSHR 的数量为 4，预取 MSHR 的数量为 10。采用数据和地址分离的设计方法，所有的 MSHR 公用一组数据寄存器，在 MSHR 只存储请求的地址信息。
+missUnit 通过 MSHR 分别管理取指请求和预取请求，为了防止冲刷时取指 MSHR 不能完全释放，默认设置取指 MSHR 的数量为 4、预取 MSHR 的数量为 10。采用数据和地址分离的设计方法，所有的 MSHR 公用一组回填数据寄存器（grant buffer），在 MSHR 只存储请求的地址信息及状态信息。
 
-## 请求入队
+## 请求写入
 
-MissUnit 接收来自 MainPipe 的取指请求和来自 IPrfetchPipe 的预取请求，取指请求只能被分配到 fetchMSHR，预取请求只能分配到 prefetchMSHR，入队时采用低 index 优先的分配方式。
-在入队的同时对 MSHR 进行查询，如果请求已经在 MSHR 中存在，就丢弃该请求，对外接口仍表现 fire，只是不入队到 MSHR 中。在入队时向 Replacer 请求写入 waymask。
+missUnit 接收来自 mainPipe 的取指请求和来自 prefetchPipe 的预取请求，取指请求只能被分配到 fetchMSHR，预取请求只能分配到 prefetchMSHR，写入时选择下标最小的一个空闲 MSHR。
+
+### 过滤重复请求
+
+MSHR 向 missUnit 顶层暴露 lookup 接口，供 missUnit 检查新请求是否已在某个 MSHR 中存在。若已存在，则该直接对齐这一新请求，对 mainPipe、prefetchPipe 的接口上仍表现为 fire，只是不做实际写入操作。
+
+### victim 选择
+
+在 MSHR 向总线发起 acquire 请求时从 replacer 选择一个 victim（即，要被重填覆盖的 way），并将 victim 信息写入 MSHR。重填时直接使用 MSHR 中记录的 victim 信息，无需再次访问 replacer。
 
 ## acquire
 
 当到 L2 的总线空闲时，选择 MSHR 表现进行处理，整体 fetchMSHR 的优先级高于 prefetchMSHR，只有没有需要处理的 fetchMSHR，才会处理 prefetchMSHR。
+
 对于 fetchMSHR，采用低 index 优先的优先级策略，因为同时最多只有两个请求需要处理，并且只有当两个请求都处理完成时才能向下走，所有 fetchMSHR 之间的优先级并不重要。
+
 对于 prefetchMSHR，考虑到预取请求之间具有时间顺序，采用先到先得的优先级策略，在入队时通过一个 FIFO 记录入队顺序，处理时按照入队顺序进行处理。
 
 ## grant
 
-通过状态机与 Tilelink 的 D 通道进行交互，到 L2 的带宽为 32byte，需要分 2 次传输，并且不同的请求不会发生交织，所以只需要一组寄存器来存储数据。当一次传输完成时，根据传输的 id 选出对应的 MSHR，从 MSHR 中读取地址、掩码等信息，将相关信息写入 SRAM，同时将 MSHR 释放。
+通过状态机接收总线响应，目前 L1 Cache 到 L2 的总线带宽为 32B，故一个 64B 缓存行需要分 2 拍传输。总线 burst 机制保证不同的请求不会发生交织，所以只需要一组 grant buffer 来存储数据。当一次传输完成时，根据传输的 id 选出对应的 MSHR，从 MSHR 中读取地址、victim 等信息，将数据广播到各 SRAM、Queue、Pipeline，并重置 MSHR 状态。
+
+### 异常处理
+
+目前使用的 TileLink 总线可能会出现 corrupt 和 denied 两种异常，前者用来表示 L2 Cache（或更下级存储结构）出现数据损坏（如 ECC 校验出错），后者用来表示请求被拒绝（如权限不足）。根据 TileLink 手册，当拉高 denied 的同时一定会拉高 corrupt。因此我们需要将 `corrupt & !denied` 作为实际的 corrupt 信号返回给 mainPipe。mainPipe 会向 BEU 报告错误并引起相关异常。

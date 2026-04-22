@@ -1,6 +1,6 @@
 # MetaArray 及 DataArray 子模块文档
 
-## MetaArray 分 interleave
+## MetaArray 分 interleave {#sec:icache-metaarray-interleave}
 
 metaArray 按 setIdx 做了 interleave，即将 `setIdx % NumInterleaveBanks` 不同的 set 存储到不同的物理 SRAM 中，从而减少访问冲突。我们要求 `NumInterleaveBanks` 至少是 2，这样可以保证单个取指块一定可以在单周期内处理（如果未跨行，则访问一个 setIdx；如果跨行，需要访问 `setIdx` 和 `setIdx + 1`，正好落在两个不同的物理 SRAM 中）。
 
