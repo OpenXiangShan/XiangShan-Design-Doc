@@ -152,7 +152,10 @@ ICache 可能接受两个来源的预取请求：
 
 ### 取指请求跨页 {#sec:icache-cross-page}
 
-在 V3 的设计中，为了节省 ITLB 端口，ICache 不允许取指请求跨页，即一个取指请求内的至多两个取指块、两个 cacheline 必须位于同一个页内（`vaddr[49:12]`相同），但 ICache 本身的硬件不对此进行检查，由 BPU 和 FTQ 保障这一点，具体来说，前者在生成取指块时，如果发现取指块起始地址 `startVAddr` + 64 位于下一个页（即 `startVAddr[49:12]` 与 `(startVAddr + 64)[49:12]` 不同），就将取指块截断到页边界的位置（即将 `takenCfiPosition` 标记在本页的最后一个指令处）；后者在尝试发送 2-(pre)fetch 请求时会检查两个取指块是否在同一页，如果不在同一页，就不会发送 2-(pre)fetch 请求。
+在 V3 的设计中，为了节省 ITLB 端口，ICache 不允许取指请求跨页，即一个取指请求内的至多两个取指块、两个 cacheline 必须位于同一个页内（`vaddr[49:12]`相同），但 ICache 本身的硬件不对此进行检查，由 BPU 和 FTQ 保障这一点，具体来说：
+
+- BPU 在生成取指块时，如果发现取指块起始地址 `startVAddr` + 64 位于下一个页（即 `startVAddr[49:12]` 与 `(startVAddr + 64)[49:12]` 不同），就将取指块截断到页边界的位置（即将 `takenCfiPosition` 标记在本页的最后一个指令处）
+- FTQ 在尝试发送 2-(pre)fetch 请求时会检查两个取指块是否在同一页，如果不在同一页，就不会发送 2-(pre)fetch 请求。
 
 ### 2-(pre)fetch {#sec:icache-2fetch}
 
