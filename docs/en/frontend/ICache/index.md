@@ -131,7 +131,7 @@ The handling flow for hardware prefetch requests is:
 1. Query MetaArray and ITLB to get metadata, including wayMask (bitmask indicating which way hits), physical address, exception information, and so on.
 2. Write metadata into wayLookup for mainPipe.
 3. Decide whether to issue a prefetch request based on wayMask and exception information.
-   1. If needed, send to missUnit for miss handling.
+    1. If needed, send to missUnit for miss handling.
 
 Software prefetch follows almost the same flow, but since it does not affect control flow, its metadata is not sent to wayLookup (therefore not sent to mainPipe and later stages).
 
@@ -144,7 +144,7 @@ The handling flow for fetch requests is:
 1. Read metadata from wayLookup.
 2. Read DataArray by wayMask to get instruction data (if hit).
 3. Decide whether to issue a fetch miss request based on wayMask and exception information.
-   1. If needed, send to missUnit for miss handling.
+    1. If needed, send to missUnit for miss handling.
 4. Send instruction data and metadata to IFU.
 5. Perform ECC checks on instruction data/metadata and send check results to IFU (if enabled).
 
@@ -167,9 +167,9 @@ Constraints for 2-prefetch requests:
 2. As described in [@sec:icache-cross-page], the two fetch blocks in one 2-prefetch request must be in the same page.
 3. In FTQ, `bpuPtr - pfPtr` must be >= 4. In other words, flushing of the second fetch block caused by BPU s3 override must complete inside FTQ. Once a 2-prefetch request is sent to prefetchPipe, BPU is not allowed to flush it (backend-redirect-triggered flush still applies).
 4. The two fetch blocks must not cause MetaArray read-port conflicts; one of the following must hold:
-   1. They are in the same cacheline.
-   2. They are in adjacent cachelines, and the later fetch block (larger setIdx) is not cross-line.
-   3. They are in interleaved cachelines, and neither fetch block is cross-line.
+    1. They are in the same cacheline.
+    2. They are in adjacent cachelines, and the later fetch block (larger setIdx) is not cross-line.
+    3. They are in interleaved cachelines, and neither fetch block is cross-line.
 
 Some conflict examples are shown in [@fig:icache-2prefetch-conflict]:
 
@@ -212,7 +212,9 @@ These exceptions have priority: backend > ITLB > PMP > L2 = ECC. This is natural
 
 For the three backend exception types and three ITLB exception types, backend/ITLB each selects one with internal priority so at most one is asserted at a time.
 
-In addition, some mechanisms trigger special cases. In older docs/code they were also called exceptions, but they do not raise RISC-V-defined `exception`. To avoid confusion, they are referred to as special cases hereafter:
+In addition, some mechanisms trigger special cases. In older docs/code they were also called exceptions, but they do not raise RISC-V-defined `exception`. To avoid confusion, they are referred to as special cases hereafter.
+
+Table: ICache special case list {#tab:icache-special-case}
 
 | Source | Special case | Description | Handling |
 | --- | --- | --- | --- |

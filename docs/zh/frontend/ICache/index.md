@@ -131,7 +131,7 @@ ICache 可能接受两个来源的预取请求：
 1. 查询 metaArray、ITLB，得到 wayMask（是否命中某一路的 bitmask）、物理地址、异常信息等元数据
 2. 将元数据写入 wayLookup 供 mainPipe 使用
 3. 根据 wayMask 和异常信息判断是否需要发起预取请求
-   1. 若需要发起预取请求，发送到 missUnit 进行缺失处理
+    1. 若需要发起预取请求，发送到 missUnit 进行缺失处理
 
 对软件预取请求的处理和硬件预取请求几乎是一致的，但软件预取请求不会影响控制流，故其元数据不会发送到 wayLookup（进而不会发送到 mainPipe 和后续环节）
 
@@ -144,7 +144,7 @@ ICache 可能接受两个来源的预取请求：
 1. 读取 wayLookup 获取元数据
 2. 根据 wayMask 读取 dataArray 获取指令数据（若命中）
 3. 根据 wayMask 和异常信息判断是否需要发起取指请求
-   1. 若需要发起取指请求，发送到 missUnit 进行缺失处理
+    1. 若需要发起取指请求，发送到 missUnit 进行缺失处理
 4. 将指令数据和元数据发送到 IFU
 5. 对指令数据和元数据进行 ECC 校验，将结果发送到 IFU（若使能）
 
@@ -167,9 +167,9 @@ ICache 可能接受两个来源的预取请求：
 2. 如前 [@sec:icache-cross-page] [一节](#取指请求跨页-secicache-cross-page)所述，2-prefetch 请求内的两个取指块必须在同一页内
 3. FTQ 内 `bpuPtr - pfPtr` 必须大于等于 4，即 BPU s3 override 第二个取指块的冲刷必须在 FTQ 内完成，一旦将 2-prefetch 请求发送到 prefetchPipe，不允许 BPU 对其进行冲刷（后端重定向造成的冲刷正常进行）
 4. 两个取指块不能产生 metaArray 的读端口冲突，即满足下面条件之一：
-   1. 位于同一个 cacheline 内
-   2. 位于相邻的 cacheline 内，且靠后（setIdx 更大）的取指块不能跨行
-   3. 位于 interleave 的 cacheline 内，且两个取指块都不能跨行
+    1. 位于同一个 cacheline 内
+    2. 位于相邻的 cacheline 内，且靠后（setIdx 更大）的取指块不能跨行
+    3. 位于 interleave 的 cacheline 内，且两个取指块都不能跨行
 
 一些冲突示例如图 [@fig:icache-2prefetch-conflict] 所示：
 
@@ -212,7 +212,9 @@ Table: ICache 异常列表 {#tab:icache-exception}
 
 而对于 backend 的三种异常、ITLB 的三种异常，由 backend 和 ITLB 内部进行有优先级的选择，保证同时至多只有一种拉高。
 
-此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况：
+此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况。
+
+Table: ICache 特殊情况列表 {#tab:icache-special-case}
 
 | 来源 | 特殊情况 | 描述 | 处理 |
 | --- | --- | --- | --- |

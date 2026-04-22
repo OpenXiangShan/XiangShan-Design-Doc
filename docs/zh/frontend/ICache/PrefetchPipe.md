@@ -36,7 +36,10 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 1. 请求原来在 metaArray 中未命中，监听到 missUnit 将该请求对应的 cacheline 重填了 SRAM，需要更新为命中状态。
 2. 请求原来在 metaArray 中已经命中，监听到同样的位置（同 set，同 way）发生了其它 cacheline（不同 tag）的写入，原有数据被覆盖，需要更新为缺失状态。
 
-为了防止更新逻辑的时序路径（set、way、tag 的比较和状态更新）串联到正常流水路径上，当 missUnit 正在执行重填时（无论是否相关），都禁止元数据进入下一阶段（对 prefetchPipe s1 来说，即禁止入队 wayLookup；对 wayLookup 来说，即禁止出队到 mainPipe）。
+为了防止更新逻辑的时序路径（set、way、tag 的比较和状态更新）串联到正常流水路径上，当 missUnit 正在执行重填时（无论是否相关），都禁止元数据进入下一阶段：
+
+- 对 prefetchPipe s1 来说，即禁止入队 wayLookup；
+- 对 wayLookup 来说，即禁止出队到 mainPipe。
 
 ## S2 流水级
 
