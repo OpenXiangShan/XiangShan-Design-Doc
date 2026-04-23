@@ -1,4 +1,4 @@
-# MetaArray 及 DataArray 子模块文档
+# MetaArray 及 DataArray
 
 ## MetaArray 分 interleave {#sec:icache-metaarray-interleave}
 

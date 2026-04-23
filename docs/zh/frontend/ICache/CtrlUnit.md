@@ -1,4 +1,4 @@
-# CtrlUnit 子模块文档 {#sec:icache-ctrlunit}
+# CtrlUnit {#sec:icache-ctrlunit}
 
 目前 CtrlUnit 主要负责 ECC 校验使能/错误注入等功能
 

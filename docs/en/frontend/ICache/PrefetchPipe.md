@@ -1,4 +1,4 @@
-# PrefetchPipe Submodule Documentation {#sec:icache-prefetchpipe}
+# PrefetchPipe {#sec:icache-prefetchpipe}
 
 PrefetchPipe is a two-stage prefetch pipeline. It filters prefetch requests.
 
@@ -22,7 +22,7 @@ As described in [@sec:icache-2fetch], ICache can accept one prefetch request wit
 See also:
 
 - Implementation of `class TwoPrefetchCase` in `TwoFetch.scala`.
-- Interleave description in [MetaArray and DataArray doc](Array.md).
+- Interleave description in [MetaArray and DataArray section](Array.md).
 
 ## S1 Stage
 

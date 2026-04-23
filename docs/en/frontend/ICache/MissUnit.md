@@ -1,4 +1,4 @@
-# MissUnit Submodule Documentation
+# MissUnit
 
 MissUnit handles ICache miss requests, manages all in-flight requests through MSHRs, and interacts with L2 cache through bus. After receiving bus responses, it broadcasts refill information to SRAMs, queues, and pipelines.
 

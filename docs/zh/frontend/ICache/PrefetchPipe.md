@@ -1,4 +1,4 @@
-# PrefetchPipe 子模块文档 {#sec:icache-prefetchpipe}
+# PrefetchPipe {#sec:icache-prefetchpipe}
 
 prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求的过滤。
 
@@ -22,7 +22,7 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 另请参考：
 
 - `TwoFetch.scala` 中 `class TwoPrefetchCase` 的实现。
-- [MetaArray 和 DataArray 子模块文档](Array.md)中关于 interleave 的说明。
+- [MetaArray 和 DataArray 一节](Array.md)中关于 interleave 的说明。
 
 ## S1 流水级
 

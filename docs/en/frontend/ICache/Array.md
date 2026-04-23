@@ -1,4 +1,4 @@
-# MetaArray and DataArray Submodule Documentation
+# MetaArray and DataArray
 
 ## MetaArray Interleave {#sec:icache-metaarray-interleave}
 

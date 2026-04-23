@@ -135,7 +135,7 @@ ICache 可能接受两个来源的预取请求：
 
 对软件预取请求的处理和硬件预取请求几乎是一致的，但软件预取请求不会影响控制流，故其元数据不会发送到 wayLookup（进而不会发送到 mainPipe 和后续环节）
 
-关于 prefetchPipe 流水级的细节见 [@sec:icache-prefetchpipe] [PrefetchPipe 子模块文档](PrefetchPipe.md)。
+关于 prefetchPipe 流水级的细节见 [@sec:icache-prefetchpipe] [PrefetchPipe 一节](PrefetchPipe.md)。
 
 ### 取指请求
 
@@ -148,7 +148,7 @@ ICache 可能接受两个来源的预取请求：
 4. 将指令数据和元数据发送到 IFU
 5. 对指令数据和元数据进行 ECC 校验，将结果发送到 IFU（若使能）
 
-关于 mainPipe 流水级的细节见 [@sec:icache-mainpipe] [MainPipe 子模块文档](MainPipe.md)。
+关于 mainPipe 流水级的细节见 [@sec:icache-mainpipe] [MainPipe 一节](MainPipe.md)。
 
 ### 取指请求跨页 {#sec:icache-cross-page}
 
@@ -250,7 +250,7 @@ Table: ICache 冲刷目标列表 {#tbl:icache-flush}
 | BPU 重定向 | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
-[^redirect_tab_bpu]: BPU 精确预测器（BPU s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 2 拍之后就到达 ICache，因此仅需要冲刷 prefetchPipe s0/1、wayLookup 队尾项，见两个子模块文档。
+[^redirect_tab_bpu]: BPU 精确预测器（BPU s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 2 拍之后就到达 ICache，因此仅需要冲刷 prefetchPipe s0/1、wayLookup 队尾项，见对应节。
 
 [^redirect_tab_fencei]: `fence.i` 在逻辑上需要冲刷 MainPipe 和 PrefetchPipe（因为此时流水级中的数据可能无效），但实际上`io.fencei`拉高必然伴随一个后端重定向，因此目前的实现中没有冲刷 MainPipe 和 PrefetchPipe 的必要。
 

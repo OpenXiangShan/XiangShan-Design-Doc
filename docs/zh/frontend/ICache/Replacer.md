@@ -1,6 +1,6 @@
-# Replacer 子模块文档
+# Replacer
 
-采用 PLRU 更新算法。
+ICache 的 replacer 采用 PLRU 更新算法。
 
 与 [@sec:icache-metaarray-interleave] [metaArray interleave](Array.md#metaarray-分-interleave-secicache-metaarray-interleave) 类似地，考虑到每次取指可能访问连续的两个 cacheline，对于奇地址和偶地址各自使用一个 replacer，在进行 touch 和选择 victim 时根据地址的奇偶分别更新。
 

@@ -1,4 +1,4 @@
-# MissUnit 子模块文档
+# MissUnit
 
 MissUnit 负责处理 ICache 的缺失请求，通过 MSHR 进行管理所有正在处理的请求，通过总线与 L2 Cache 进行交互。收到总线响应后负责向各 SRAM、Queue、Pipeline 广播重填信息。
 

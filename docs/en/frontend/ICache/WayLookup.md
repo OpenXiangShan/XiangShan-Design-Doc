@@ -1,6 +1,6 @@
-# WayLookup Submodule Documentation
+# WayLookup
 
-WayLookup is a ring queue structure. It temporarily stores metadata obtained by PrefetchPipe from MetaArray and ITLB for MainPipe. It also monitors MissUnit refill broadcast and updates hit information. The update logic is the same as PrefetchPipe; see [@sec:icache-hit-update] in [PrefetchPipe documentation](PrefetchPipe.md).
+WayLookup is a ring queue structure. It temporarily stores metadata obtained by PrefetchPipe from MetaArray and ITLB for MainPipe. It also monitors MissUnit refill broadcast and updates hit information. The update logic is the same as PrefetchPipe; see [@sec:icache-hit-update] [Hit Information Update section in PrefetchPipe](PrefetchPipe.md#hit-information-update-secicache-hit-update).
 
 ## Pointer Update
 

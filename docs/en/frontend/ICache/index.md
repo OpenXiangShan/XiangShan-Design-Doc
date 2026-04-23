@@ -135,7 +135,7 @@ The handling flow for hardware prefetch requests is:
 
 Software prefetch follows almost the same flow, but since it does not affect control flow, its metadata is not sent to wayLookup (therefore not sent to mainPipe and later stages).
 
-For pipeline-stage details, see [@sec:icache-prefetchpipe] [PrefetchPipe doc](PrefetchPipe.md).
+For pipeline-stage details, see [@sec:icache-prefetchpipe] [PrefetchPipe section](PrefetchPipe.md).
 
 ### Fetch Requests
 
@@ -148,7 +148,7 @@ The handling flow for fetch requests is:
 4. Send instruction data and metadata to IFU.
 5. Perform ECC checks on instruction data/metadata and send check results to IFU (if enabled).
 
-For pipeline-stage details, see [@sec:icache-mainpipe] [MainPipe doc](MainPipe.md).
+For pipeline-stage details, see [@sec:icache-mainpipe] [MainPipe section](MainPipe.md).
 
 ### Cross-page Fetch Requests {#sec:icache-cross-page}
 
@@ -250,7 +250,7 @@ Table: ICache flush target list {#tbl:icache-flush}
 | BPU redirect | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
-[^redirect_tab_bpu]: BPU precise predictor (result from BPU s3) may override simple predictor (result from BPU s0). Its redirect reaches ICache at most 2 cycles after prefetch issue, so only prefetchPipe s0/s1 and tail entries in wayLookup need to be flushed. See related submodule docs.
+[^redirect_tab_bpu]: BPU precise predictor (result from BPU s3) may override simple predictor (result from BPU s0). Its redirect reaches ICache at most 2 cycles after prefetch issue, so only prefetchPipe s0/s1 and tail entries in wayLookup need to be flushed. See corresponding sections.
 
 [^redirect_tab_fencei]: Logically, `fence.i` needs to flush MainPipe and PrefetchPipe (because in-flight data may become invalid). But in current implementation, assertion of `io.fencei` always accompanies backend redirect, so explicit MainPipe/PrefetchPipe flush by `fence.i` is unnecessary.
 

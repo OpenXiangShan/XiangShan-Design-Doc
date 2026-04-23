@@ -1,4 +1,4 @@
-# CtrlUnit Submodule Documentation {#sec:icache-ctrlunit}
+# CtrlUnit {#sec:icache-ctrlunit}
 
 Currently, CtrlUnit is mainly responsible for ECC check enable/error injection features.
 
