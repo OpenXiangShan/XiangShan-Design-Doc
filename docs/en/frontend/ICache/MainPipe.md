@@ -1,4 +1,4 @@
-# MainPipe Submodule Documentation
+# MainPipe Submodule Documentation {#sec:icache-mainpipe}
 
 MainPipe is the main ICache pipeline. It has 2 stages and is responsible for reading data from DataArray, ECC checks, miss handling, and returning results to IFU.
 

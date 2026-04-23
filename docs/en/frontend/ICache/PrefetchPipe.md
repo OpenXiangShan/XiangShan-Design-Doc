@@ -1,4 +1,4 @@
-# PrefetchPipe Submodule Documentation
+# PrefetchPipe Submodule Documentation {#sec:icache-prefetchpipe}
 
 PrefetchPipe is a two-stage prefetch pipeline. It filters prefetch requests.
 

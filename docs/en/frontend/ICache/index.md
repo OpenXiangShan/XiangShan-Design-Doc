@@ -8,7 +8,7 @@
 ## Glossary
 
 | Abbreviation | Full Name | Description |
-| --- | --- | --- |
+| --- | --------- | ------------ |
 | ICache/I$ | Instruction Cache | L1 instruction cache |
 | L2 Cache/L2$ | Level Two Cache | L2 cache |
 | FTQ | Fetch Target Queue | Fetch target queue, see [FTQ design doc](../FTQ/index.md) |
@@ -30,7 +30,7 @@
 ## Submodules
 
 | Submodule | Description |
-| --- | --- |
+| --- | --------- |
 | [PrefetchPipe](PrefetchPipe.md) | Prefetch pipeline |
 | [MainPipe](MainPipe.md) | Main pipeline |
 | [WayLookup](WayLookup.md) | Metadata buffer queue |
@@ -66,7 +66,7 @@
 See `case class ICacheParams` in `Parameters.scala`. Selected parameters are listed below:
 
 | Parameter | Default | Description | Requirement |
-| --- | --- | --- | --- |
+| ------ | --- | --------- | ------ |
 | nSets | 256 | Number of SRAM sets | Power of 2 |
 | nWays | 4 | Number of SRAM ways | |
 | rowBits | 64 | Data width of each bank | Factor of `(blockBytes * 8)` |
@@ -83,7 +83,7 @@ See `case class ICacheParams` in `Parameters.scala`. Selected parameters are lis
 | MetaDataSplit | 1 | Number of physical-data splits in MetaArray, for SRAM PPA tuning | |
 | DataPaddingBits | 1 | Extra padding bits per DataArray entry, for SRAM PPA tuning | |
 | EnableCtrlUnit | true | Whether to instantiate CtrlUnit; if false, ECC features are not software-controllable | |
-| ctrlUnitParameters | - | CtrlUnit parameters | See [CtrlUnit doc](./CtrlUnit.md) |
+| ctrlUnitParameters | - | CtrlUnit parameters | See [@sec:icache-ctrlunit] [CtrlUnit doc](./CtrlUnit.md) |
 
 ## Functional Overview
 
@@ -120,11 +120,11 @@ ICache may accept prefetch requests from two sources:
 1. Hardware prefetch requests from FTQ, based on FDIP.
 2. Software prefetch requests from LoadUnit in MemBlock, which are essentially Zicbop `prefetch.i` instructions (see the RISC-V CMO specification).
 
-However, prefetchPipe can process only one prefetch request per cycle, so arbitration is required. ICache top-level logic buffers software prefetch requests, then chooses one request between software and FTQ hardware prefetch to send into prefetchPipe. Software prefetch has higher priority.
+However, prefetchPipe can process only one prefetch request per cycle, so arbitration is required. ICache top-level logic buffers software prefetch requests, then chooses one request between software and FTQ hardware prefetch to send into prefetchPipe. Software prefetch has higher priority, as shown in [@fig:icache-prefetch-source].
 
 Logically, each LoadUnit may issue a software prefetch request, so up to `LduCnt` requests (current default `LduCnt=3`) may appear in one cycle. Considering implementation cost and performance benefit, ICache only accepts and processes one per cycle; the rest are dropped, and the smallest port index wins. In addition, if prefetchPipe is blocked and ICache already buffers one software prefetch request, the buffered request may be overwritten.
 
-![ICache prefetch request receive and arbitration](../figure/ICache/prefetch_source.png)
+![ICache prefetch request receive and arbitration](../figure/ICache/prefetch_source.png){#fig:icache-prefetch-source}
 
 The handling flow for hardware prefetch requests is:
 
@@ -135,7 +135,7 @@ The handling flow for hardware prefetch requests is:
 
 Software prefetch follows almost the same flow, but since it does not affect control flow, its metadata is not sent to wayLookup (therefore not sent to mainPipe and later stages).
 
-For pipeline-stage details, see [PrefetchPipe doc](PrefetchPipe.md).
+For pipeline-stage details, see [@sec:icache-prefetchpipe] [PrefetchPipe doc](PrefetchPipe.md).
 
 ### Fetch Requests
 
@@ -148,7 +148,7 @@ The handling flow for fetch requests is:
 4. Send instruction data and metadata to IFU.
 5. Perform ECC checks on instruction data/metadata and send check results to IFU (if enabled).
 
-For pipeline-stage details, see [MainPipe doc](MainPipe.md).
+For pipeline-stage details, see [@sec:icache-mainpipe] [MainPipe doc](MainPipe.md).
 
 ### Cross-page Fetch Requests {#sec:icache-cross-page}
 
@@ -181,12 +181,12 @@ Constraints for 2-fetch requests:
 
 ### Exception Propagation and Special-case Handling
 
-ICache checks fetch-request permissions through ITLB and PMP and receives L2 responses. Possible exceptions are listed in [@tab:icache-exception].
+ICache checks fetch-request permissions through ITLB and PMP and receives L2 responses. Possible exceptions are listed in [@tbl:icache-exception].
 
-Table: ICache exception list {#tab:icache-exception}
+Table: ICache exception list {#tbl:icache-exception}
 
 | Source | Exception | Description | Handling |
-| --- | --- | --- | --- |
+| --- | --- | --------- | ------------ |
 | ITLB | af | Access fault during virtual-address translation | Block fetching, mark block as af, send to backend through IFU |
 | ITLB | gpf | Guest page fault | Block fetching, mark block as gpf, send to backend through IFU, and pass valid `gpaddr` plus `isForNonLeafPTE` to backend GPAMem |
 | ITLB | pf | Page fault | Block fetching, mark block as pf, send to backend through IFU |
@@ -212,12 +212,12 @@ These exceptions have priority: backend > ITLB > PMP > L2 = ECC. This is natural
 
 For the three backend exception types and three ITLB exception types, backend/ITLB each selects one with internal priority so at most one is asserted at a time.
 
-In addition, some mechanisms trigger special cases. In older docs/code they were also called exceptions, but they do not raise RISC-V-defined `exception`. To avoid confusion, they are referred to as special cases hereafter.
+In addition, some mechanisms trigger special cases. In older docs/code they were also called exceptions, but they do not raise RISC-V-defined `exception`. To avoid confusion, they are referred to as special cases hereafter, as listed in [@tbl:icache-special-case].
 
-Table: ICache special case list {#tab:icache-special-case}
+Table: ICache special case list {#tbl:icache-special-case}
 
 | Source | Special case | Description | Handling |
-| --- | --- | --- | --- |
+| --- | --- | --------- | ------------ |
 | PMP | mmio | Physical address is in MMIO space | Block fetching, mark block as mmio, IFU performs **non-speculative** fetch |
 | ITLB | pbmt.NC | Page attribute is non-cacheable and idempotent | Block cache fetch, IFU performs **speculative** fetch |
 | ITLB | pbmt.IO | Page attribute is non-cacheable and non-idempotent | Same as pmp mmio |
@@ -240,10 +240,12 @@ When backend/IFU redirect, BPU redirect, or `fence.i` happens, selected storage 
    - If an MSHR has already sent a bus request, mark it pending-flush (`flush === true.B` or `fencei === true.B`), and invalidate it when the D-channel grant returns. At that time, grant data is neither replied to MainPipe/PrefetchPipe nor written into SRAM.
    - Note that if D-channel grant and flush (`io.flush === true.B` or `io.fencei === true.B`) arrive in the same cycle, MissUnit still does not write SRAM, but **does** reply data to MainPipe/PrefetchPipe to avoid introducing port latency into response logic. MainPipe/PrefetchPipe also receive the flush in that cycle, so they will discard the data.
 
-Flush targets per flush reason:
+Flush targets per flush reason are listed in [@tbl:icache-flush].
+
+Table: ICache flush target list {#tbl:icache-flush}
 
 | Flush reason | 1 | 2 | 3 | 4 |
-| --- | --- | --- | --- | --- |
+| ------ | --- | --- | --- | --- |
 | backend/IFU redirect | Y | | Y | Y |
 | BPU redirect | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |

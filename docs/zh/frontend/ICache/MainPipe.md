@@ -1,4 +1,4 @@
-# MainPipe 子模块文档
+# MainPipe 子模块文档 {#sec:icache-mainpipe}
 
 MainPipe 为 ICache 的主流水，为 2 级流水设计，负责从 DataArray 中读取数据、ECC 检查、缺失处理，并且将结果返回给 IFU。
 

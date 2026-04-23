@@ -1,4 +1,4 @@
-# CtrlUnit Submodule Documentation
+# CtrlUnit Submodule Documentation {#sec:icache-ctrlunit}
 
 Currently, CtrlUnit is mainly responsible for ECC check enable/error injection features.
 
@@ -7,7 +7,7 @@ Currently, CtrlUnit is mainly responsible for ECC check enable/error injection f
 See `case class ICacheCtrlUnitParameters` in `Parameters.scala`. Selected parameters are listed below:
 
 | Parameter | Default | Description | Requirement |
-| --- | --- | --- | --- |
+| --- | ------ | --------- | ------ |
 | Address | AddressSet(0x38022080, 0x7f) | MMIO-mapped CSR address range of CtrlUnit | See below |
 | BeatBytes | 8 | Bus width of CtrlUnit | Power of 2 and <= 8 |
 
@@ -26,7 +26,7 @@ Implemented CSRs are:
 ```
 
 | CSR | field | desp |
-| --- | --- | --- |
+| --- | --- | ------------ |
 | eccctrl | enable | ECC check enable, originally `sfetchctl(0)` |
 | eccctrl | inject | ECC injection enable, write 1 to start injection, always reads 0 |
 | eccctrl | itarget | ECC injection target, see table below |

@@ -8,7 +8,7 @@
 ## 术语说明
 
 | 缩写 | 全称 | 描述 |
-| --- | --- | --- |
+| --- | --------- | ------------ |
 | ICache/I$ | Instruction Cache | L1 指令缓存 |
 | L2 Cache/L2$ | Level Two Cache | L2 缓存 |
 | FTQ | Fetch Target Queue | 取指目标队列，见 [FTQ 设计文档](../FTQ/index.md) |
@@ -30,7 +30,7 @@
 ## 子模块列表
 
 | 子模块 | 描述 |
-| --- | --- |
+| --- | --------- |
 | [PrefetchPipe](PrefetchPipe.md) | 预取流水线 |
 | [MainPipe](MainPipe.md) | 主流水线 |
 | [WayLookup](WayLookup.md) | 元数据缓冲队列 |
@@ -66,7 +66,7 @@
 见 `Parameters.scala` 中 `case class ICacheParams` 的定义，部分参数的描述如下表所示：
 
 | 参数 | 默认值 | 描述 | 要求 |
-| --- | --- | --- | --- |
+| ------ | --- | --------- | ------ |
 | nSets | 256 | SRAM set 数量 | 2 的幂次 |
 | nWays | 4 | SRAM way 数量 | |
 | rowBits | 64 | 每个 bank 的 data 位宽 | (blockBytes * 8) 的因子 |
@@ -83,7 +83,7 @@
 | MetaDataSplit | 1 | MetaArray 中物理 SRAM 按数据拆分的数量，用于 SRAM 选型优化 PPA | |
 | DataPaddingBits | 1 | DataArray 中每项额外的 padding 位数，用于 SRAM 选型优化 PPA | |
 | EnableCtrlUnit | true | 是否实例化 CtrlUnit，如果为 false，则 ECC 相关功能无法被软件控制 | |
-| ctrlUnitParameters | - | CtrlUnit 的参数 | 见 [CtrlUnit 文档](./CtrlUnit.md) |
+| ctrlUnitParameters | - | CtrlUnit 的参数 | 见 [@sec:icache-ctrlunit] [CtrlUnit 文档](./CtrlUnit.md) |
 
 ## 功能概述
 
@@ -91,7 +91,7 @@
 
 > 本文档及相关代码正在施工中，文档中部分描述可能是目前的设计预期，暂未完全实现，仅供参考！
 
-ICache 结构如图 [@fig:icache-structure] 所示。
+ICache 结构如 [@fig:icache-structure] 所示。
 
 ![ICache 结构](../figure/ICache/pipeline.png){#fig:icache-structure}
 
@@ -120,11 +120,11 @@ ICache 可能接受两个来源的预取请求：
 1. 来自 FTQ 的硬件预取请求，基于 FDIP 算法。
 2. 来自 Memblock 中 LoadUint 的软件预取请求，其本质是 Zicbop 扩展中的 `prefetch.i` 指令，请参考 RISC-V CMO 手册。
 
-然而，prefetchPipe 每周期仅可以处理一个预取请求，故需要进行仲裁。ICache 顶层负责缓存软件预取请求，并与来自 FTQ 的硬件预取请求二选一送往 prefetchPipe，软件预取请求的优先级高于硬件预取请求。
+然而，prefetchPipe 每周期仅可以处理一个预取请求，故需要进行仲裁。ICache 顶层负责缓存软件预取请求，并与来自 FTQ 的硬件预取请求二选一送往 prefetchPipe，软件预取请求的优先级高于硬件预取请求。如 [@fig:icache-prefetch-source] 所示。
 
 逻辑上来说，每个 LoadUnit 都有可能发出软件预取请求，因此每周期至多会有 LoadUnit 数量（目前默认参数为`LduCnt=3`）个软件预取请求。但出于实现成本和性能收益考量，ICache 每周期至多仅接收并处理一个，多余的会被丢弃，端口下标最小的优先。此外，若 PrefetchPipe 阻塞，而 ICache 内已经缓存了一个软件预取请求，那么原先的软件预取请求将被覆盖。
 
-![ICache 预取请求接收与仲裁](../figure/ICache/prefetch_source.png)
+![ICache 预取请求接收与仲裁](../figure/ICache/prefetch_source.png){#fig:icache-prefetch-source}
 
 对硬件预取请求的处理流程如下：
 
@@ -135,7 +135,7 @@ ICache 可能接受两个来源的预取请求：
 
 对软件预取请求的处理和硬件预取请求几乎是一致的，但软件预取请求不会影响控制流，故其元数据不会发送到 wayLookup（进而不会发送到 mainPipe 和后续环节）
 
-关于 prefetchPipe 流水级的细节见 [PrefetchPipe 子模块文档](PrefetchPipe.md)。
+关于 prefetchPipe 流水级的细节见 [@sec:icache-prefetchpipe] [PrefetchPipe 子模块文档](PrefetchPipe.md)。
 
 ### 取指请求
 
@@ -148,7 +148,7 @@ ICache 可能接受两个来源的预取请求：
 4. 将指令数据和元数据发送到 IFU
 5. 对指令数据和元数据进行 ECC 校验，将结果发送到 IFU（若使能）
 
-关于 mainPipe 流水级的细节见 [MainPipe 子模块文档](MainPipe.md)。
+关于 mainPipe 流水级的细节见 [@sec:icache-mainpipe] [MainPipe 子模块文档](MainPipe.md)。
 
 ### 取指请求跨页 {#sec:icache-cross-page}
 
@@ -171,7 +171,7 @@ ICache 可能接受两个来源的预取请求：
     2. 位于相邻的 cacheline 内，且靠后（setIdx 更大）的取指块不能跨行
     3. 位于 interleave 的 cacheline 内，且两个取指块都不能跨行
 
-一些冲突示例如图 [@fig:icache-2prefetch-conflict] 所示：
+一些冲突示例如 [@fig:icache-2prefetch-conflict] 所示：
 
 ![2-prefetch 冲突示例](../figure/ICache/2prefetch_conflict.png){#fig:icache-2prefetch-conflict}
 
@@ -181,12 +181,12 @@ ICache 可能接受两个来源的预取请求：
 
 ### 异常传递/特殊情况处理
 
-ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），接收 L2 的响应，过程中可能出现的异常如 [@tab:icache-exception] 所示。
+ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），接收 L2 的响应，过程中可能出现的异常如 [@tbl:icache-exception] 所示。
 
-Table: ICache 异常列表 {#tab:icache-exception}
+Table: ICache 异常列表 {#tbl:icache-exception}
 
 | 来源 | 异常 | 描述 | 处理 |
-| --- | --- | --- | --- |
+| --- | --- | --------- | ------------ |
 | ITLB | af | 虚拟地址翻译过程出现访问错误 | 禁止取指，标记取指块为 af，经 IFU 发送到后端处理 |
 | ITLB | gpf | 客户机页错误 | 禁止取指，标记取指块为 gpf，经 IFU 发送到后端处理，将有效的 `gpaddr` 和 `isForNonLeafPTE` 发送到后端的 GPAMem 以备使用 |
 | ITLB | pf | 页错误 | 禁止取指，标记取指块为 pf，经 IFU 发送到后端处理 |
@@ -212,12 +212,12 @@ Table: ICache 异常列表 {#tab:icache-exception}
 
 而对于 backend 的三种异常、ITLB 的三种异常，由 backend 和 ITLB 内部进行有优先级的选择，保证同时至多只有一种拉高。
 
-此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况。
+此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况，如 [@tbl:icache-special-case] 所示。
 
-Table: ICache 特殊情况列表 {#tab:icache-special-case}
+Table: ICache 特殊情况列表 {#tbl:icache-special-case}
 
 | 来源 | 特殊情况 | 描述 | 处理 |
-| --- | --- | --- | --- |
+| --- | --- | --------- | ------------ |
 | PMP | mmio | 物理地址为 mmio 空间 | 禁止取指，标记取指块为 mmio，由 IFU 进行**非推测性**取指 |
 | ITLB | pbmt.NC | 页属性为不可缓存、幂等 | 禁止取指，由 IFU 进行**推测性**取指 |
 | ITLB | pbmt.IO | 页属性为不可缓存、非幂等 | 同 pmp mmio |
@@ -240,10 +240,12 @@ Table: ICache 特殊情况列表 {#tab:icache-special-case}
     - 若 MSHR 已经向总线发出请求，记录待冲刷（`flush === true.B` 或 `fencei === true.B`），等到 d 通道收到 grant 响应时再置无效，同时不把 grant 的数据回复给 MainPipe/PrefetchPipe，也不写入 SRAM
     - 需要留意，当 d 通道收到 grant 响应的同时收到冲刷（`io.flush === true.B` 或 `io.fencei === true.B`）时，MissUnit 同样不写入 SRAM，但**会**将数据回复给 MainPipe/PrefetchPipe，避免将端口的延时引入响应逻辑中，此时 MainPipe/PrefetchPipe 也同步收到了冲刷请求，因此会将数据丢弃
 
-每种冲刷原因需要执行的冲刷目标：
+每种冲刷原因需要执行的冲刷目标如 [@tbl:icache-flush] 所示：
+
+Table: ICache 冲刷目标列表 {#tbl:icache-flush}
 
 | 冲刷原因 | 1 | 2 | 3 | 4 |
-| --- | --- | --- | --- | --- |
+| ------ | --- | --- | --- | --- |
 | 后端/IFU 重定向 | Y | | Y | Y |
 | BPU 重定向 | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |

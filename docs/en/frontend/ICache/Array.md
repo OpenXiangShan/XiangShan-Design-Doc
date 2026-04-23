@@ -14,7 +14,7 @@ DataArray splits one cacheline into multiple banks. Each bank stores part of one
 
 In V2R2, one fetch block had a fixed size of 34B, so each access always activated 5 banks. In V3, fetch-block size is determined by `takenCfiPosition` provided by BPU (that is, fetch-block range is from start address to the address of the first taken branch instruction predicted by BPU). BPU guarantees this value is conflict-free for ICache accesses. Therefore, ICache does not need to check `takenCfiPosition`; it can directly activate corresponding banks.
 
-Figure [@fig:icache-dataarray-bank] shows the DataArray banking design.
+[@fig:icache-dataarray-bank] shows the DataArray banking design.
 
 ![Bank activation example](../figure/ICache/dataArray_bank.png){#fig:icache-dataarray-bank}
 
