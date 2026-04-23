@@ -2,14 +2,14 @@
 
 PrefetchPipe is a two-stage prefetch pipeline. It filters prefetch requests.
 
-## S0 Stage
+## S0 Stage {#sec:icache-prefetchpipe-s0}
 
 1. Accept hardware/software prefetch requests from FTQ/MemBlock.
 2. Select addresses to send to MetaArray and ITLB according to 1-prefetch or 2-prefetch type.
 3. Send read requests to MetaArray and ITLB.
 4. Accept flush requests caused by BPU s3 override. If `ftqIdx` matches the current stage and this is not a software prefetch, flush the stage.
 
-### 2-prefetch Read Address Selection
+### 2-prefetch Read Address Selection {#sec:icache-prefetchpipe-s0-addr}
 
 As described in [@sec:icache-2fetch], ICache can accept one prefetch request with two fetch blocks in one cycle under specific conditions. PrefetchPipe S0 selects two addresses from four candidate VAddrs of these two fetch blocks:
 
@@ -24,7 +24,7 @@ See also:
 - Implementation of `class TwoPrefetchCase` in `TwoFetch.scala`.
 - Interleave description in [MetaArray and DataArray section](Array.md).
 
-## S1 Stage
+## S1 Stage {#sec:icache-prefetchpipe-s1}
 
 1. Receive responses from MetaArray/ITLB.
 2. If ITLB misses, resend until hit.
@@ -33,7 +33,7 @@ See also:
 5. Monitor MissUnit refill broadcast and update hit information.
 6. Accept flush requests caused by BPU s3 override. If `ftqIdx` matches the current stage and this is not a software prefetch, flush the stage.
 
-### State Machine
+### State Machine {#sec:icache-prefetchpipe-s1-fsm}
 
 S1 behavior is controlled by a state machine:
 
@@ -47,7 +47,7 @@ S1 behavior is controlled by a state machine:
   - If current request is software prefetch, it does not try to enqueue into WayLookup, because it does not need to enter MainPipe.
 - In `enterS2`, try to move request into the next stage. After transfer, return to `idle`.
 
-![PrefetchPipe S1 state machine](../figure/ICache/prefetchPipe_s1fsm.png)
+![PrefetchPipe S1 state machine](../figure/ICache/prefetchPipe_s1fsm.png){#fig:icache-prefetchpipe-s1fsm}
 
 ### Hit Information Update {#sec:icache-hit-update}
 
@@ -61,7 +61,7 @@ To avoid chaining update logic timing paths (set/way/tag comparisons and status 
 - For PrefetchPipe S1: block enqueue into WayLookup.
 - For WayLookup: block dequeue to MainPipe.
 
-### 2-prefetch Data Selection
+### 2-prefetch Data Selection {#sec:icache-prefetchpipe-s1-data}
 
 As mentioned above, S0 selects two addresses from four candidates and sends them to MetaArray/ITLB. So S1 needs to reconstruct two metadata responses into the original four-request form for WayLookup enqueue and MainPipe usage:
 
@@ -75,7 +75,7 @@ See also:
 
 - Implementation of `class TwoPrefetchCase` in `TwoFetch.scala`.
 
-## S2 Stage
+## S2 Stage {#sec:icache-prefetchpipe-s2}
 
 1. Decide whether prefetch is needed according to hit result and exception metadata.
 2. If prefetch is needed, use Arbiter to send miss requests for up to two cachelines to MissUnit in order.

@@ -1,4 +1,4 @@
-# MetaArray 及 DataArray
+# MetaArray 及 DataArray {#sec:icache-array}
 
 ## MetaArray 分 interleave {#sec:icache-metaarray-interleave}
 
@@ -8,7 +8,7 @@ metaArray 按 setIdx 做了 interleave，即将 `setIdx % NumInterleaveBanks` �
 
 ![MetaArray interleave](../figure/ICache/metaArray_interleave.png){#fig:icache-metaarray-interleave}
 
-## DataArray 分 bank
+## DataArray 分 bank {#sec:icache-dataarray-bank}
 
 dataArray 则将单个缓存行拆分成多个 bank 存储，每个 bank 存储一个 cacheline 的一部分，每次访问只激活需要的 bank，从而降低功耗。下面以默认参数下将 64B 的缓存行拆分成 8 个 8B 存储为例进行说明。
 

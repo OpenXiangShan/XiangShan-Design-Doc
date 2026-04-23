@@ -1,11 +1,11 @@
-# XiangShan ICache 设计文档
+# XiangShan ICache 设计文档 {#sec:icache-index}
 
 - 版本：V3
 - 状态：draft
 - 日期：2026/04/22
 - commit：TODO
 
-## 术语说明
+## 术语说明 {#sec:icache-glossary}
 
 | 缩写 | 全称 | 描述 |
 | --- | --------- | ------------ |
@@ -27,7 +27,7 @@
 | PBMT | Page-Based Memory Types | 基于页的内存类型，见特权手册 Svpbmt 扩展 |
 | fb | Fetch Block | 取指块 |
 
-## 子模块列表
+## 子模块列表 {#sec:icache-submodules}
 
 | 子模块 | 描述 |
 | --- | --------- |
@@ -40,7 +40,7 @@
 | [Replacer](Replacer.md) | 替换策略单元 |
 | [CtrlUnit](CtrlUnit.md) | 控制单元，目前仅用于控制错误校验/错误注入功能 |
 
-## 设计规格
+## 设计规格 {#sec:icache-design-spec}
 
 - 缓存指令数据
 - 缺失时通过 tilelink 总线向 L2 请求数据
@@ -61,7 +61,7 @@
 
 [^ecc]: 本文档也将错误检查 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](#ecc-secicache-ecc) 一节的说明。
 
-## 参数列表
+## 参数列表 {#sec:icache-params}
 
 见 `Parameters.scala` 中 `case class ICacheParams` 的定义，部分参数的描述如下表所示：
 
@@ -85,7 +85,7 @@
 | EnableCtrlUnit | true | 是否实例化 CtrlUnit，如果为 false，则 ECC 相关功能无法被软件控制 | |
 | ctrlUnitParameters | - | CtrlUnit 的参数 | 见 [@sec:icache-ctrlunit] [CtrlUnit 文档](./CtrlUnit.md) |
 
-## 功能概述
+## 功能概述 {#sec:icache-functional-overview}
 
 > 阅读本文档前建议先行阅读参考文献中 FDIP、Decoupled Frontend 相关论文，以便了解相关前置知识。
 
@@ -111,9 +111,9 @@ ICache 结构如 [@fig:icache-structure] 所示。
 
 prefetchPipe 和 mainPipe 都会根据 metaArray 和 ITLB 提供的元数据进行缺失和异常判断，当没有异常且缺失时会通过 missUnit 向 L2 Cache 发起请求。prefetchPipe 发起预取请求后可以直接结束当前取指块的处理，而 mainPipe 发起取指请求后需要等待重填、将数据发送到 IFU 后才能完成。
 
-## 功能详述
+## 功能详述 {#sec:icache-functional-details}
 
-### 预取请求
+### 预取请求 {#sec:icache-prefetch-req}
 
 ICache 可能接受两个来源的预取请求：
 
@@ -137,7 +137,7 @@ ICache 可能接受两个来源的预取请求：
 
 关于 prefetchPipe 流水级的细节见 [@sec:icache-prefetchpipe] [PrefetchPipe 一节](PrefetchPipe.md)。
 
-### 取指请求
+### 取指请求 {#sec:icache-fetch-req}
 
 对取指请求的处理流程如下：
 
@@ -179,7 +179,7 @@ ICache 可能接受两个来源的预取请求：
 
 1. TODO
 
-### 异常传递/特殊情况处理
+### 异常传递/特殊情况处理 {#sec:icache-exception-special}
 
 ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），接收 L2 的响应，过程中可能出现的异常如 [@tbl:icache-exception] 所示。
 
@@ -222,7 +222,7 @@ Table: ICache 特殊情况列表 {#tbl:icache-special-case}
 | ITLB | pbmt.NC | 页属性为不可缓存、幂等 | 禁止取指，由 IFU 进行**推测性**取指 |
 | ITLB | pbmt.IO | 页属性为不可缓存、非幂等 | 同 pmp mmio |
 
-### 冲刷
+### 冲刷 {#sec:icache-flush}
 
 在后端/IFU 重定向、BPU 重定向、`fence.i` 指令执行时，需要视情况对 ICache 内的存储结构和流水级进行冲刷。可能的冲刷目标/动作有：
 
@@ -256,7 +256,7 @@ Table: ICache 冲刷目标列表 {#tbl:icache-flush}
 
 ICache 进行冲刷时不接收取指/预取请求（`io.req.ready === false.B`）
 
-#### 对 ITLB 的冲刷
+#### 对 ITLB 的冲刷 {#sec:icache-itlb-flush}
 
 ITLB 的冲刷比较特殊，其缓存的页表项仅需要在执行 `sfence.vma` 指令时冲刷，而这条冲刷通路由后端负责，因此前端/ICache 一般不需要管理 ITLB 的冲刷。只有一个特例：目前 ITLB 为了节省资源，不会存储 `gpaddr`，而是在 `gpf` 发生时去 L2TLB 重取，重取状态由一个 `gpf` 缓存控制，这要求 ICache 在收到 `ITLB.resp.excp.gpf_instr` 时保证下面两个条件之一：
 
@@ -277,7 +277,7 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 [^reri]: RERI（RAS Error-record Register Interface），参考 [RISC-V RERI 手册](https://github.com/riscv-non-isa/riscv-ras-eri)。
 
-#### 错误检测
+#### 错误检测 {#sec:icache-ecc-detect}
 
 在 MissUnit 向 MetaArray 和 DataArray 重填数据时，会计算 meta 和 data 的校验码，前者和 meta 一起存储在 Meta SRAM 中，后者存储在单独的 Data Code SRAM 中。
 
@@ -295,7 +295,7 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 2. 错误报告：向 BEU 报告错误，后者会引起中断向软件报告错误。
 3. 取消请求：当 MetaArray 被检查出错误时，其读出的 ptag 不可靠，进而对 hit 与否的判断不可靠，因此无论是否 hit 都不向 L2 Cache 发送请求，而是直接将异常传递到 IFU、进而传递到后端处理。
 
-#### 错误注入
+#### 错误注入 {#sec:icache-ecc-inject}
 
 根据 RISC-V RERI 手册[^reri]的说明，为了使软件能够测试 ECC 功能，进而更好地判断硬件功能是否正常，需要提供错误注入功能，即主动地触发 ECC 错误。
 
@@ -347,6 +347,6 @@ finish:
 5. 注入未命中的地址
 6. 尝试写入只读的 CSR 域
 
-## 参考文献
+## 参考文献 {#sec:icache-references}
 
 1. Glenn Reinman, Brad Calder, and Todd Austin. "[Fetch directed instruction prefetching.](https://doi.org/10.1109/MICRO.1999.809439)" 32nd Annual ACM/IEEE International Symposium on Microarchitecture (MICRO). 1999.

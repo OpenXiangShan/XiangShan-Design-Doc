@@ -2,13 +2,13 @@
 
 MainPipe is the main ICache pipeline. It has 2 stages and is responsible for reading data from DataArray, ECC checks, miss handling, and returning results to IFU.
 
-## S0 Stage
+## S0 Stage {#sec:icache-mainpipe-s0}
 
 1. Accept fetch requests from FTQ.
 2. Read metadata from the WayLookup queue head.
 3. If hit, send DataArray read request based on fetch request and metadata.
 
-## S1 Stage
+## S1 Stage {#sec:icache-mainpipe-s1}
 
 1. Perform MetaArray ECC check.
 2. Decide whether fetch is needed based on hit result, exception metadata, and MetaArray ECC result.
@@ -16,13 +16,13 @@ MainPipe is the main ICache pipeline. It has 2 stages and is responsible for rea
 4. If miss and no exception, send miss requests for up to two cachelines to MissUnit through Arbiter in order, then wait until refill completes.
 5. Send data to IFU.
 
-### MetaArray ECC Check
+### MetaArray ECC Check {#sec:icache-mainpipe-s1-ecc}
 
 After PrefetchPipe reads MetaArray metadata and check bits, it does not verify them in PrefetchPipe. Instead, they are directly stored in WayLookup and checked in MainPipe.
 
 Besides check-bit verification itself, MetaArray ECC check also detects multi-way hit (that is, multiple ways with matching tags in the same `setIdx`). If multi-way hit exists, it is treated as a MetaArray error even when check bits pass.
 
-## S2 Stage
+## S2 Stage {#sec:icache-mainpipe-s2}
 
 1. Perform DataArray ECC check.
 2. If MetaArray or DataArray ECC check fails, report error information to BEU.

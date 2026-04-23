@@ -2,14 +2,14 @@
 
 prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求的过滤。
 
-## S0 流水级
+## S0 流水级 {#sec:icache-prefetchpipe-s0}
 
 1. 接收来自 FTQ / MemBlock 的硬/软件预取请求。
 2. 根据 1-prefetch 或 2-prefetch 类型选择需要发送给 metaArray 和 ITLB 的地址。
 3. 向 metaArray 和 ITLB 发送读请求。
 4. 接收 BPU s3 override 引起的冲刷请求，若 ftqIdx 与当前流水级匹配且不是软件预取，则进行冲刷。
 
-### 2-prefetch 读地址选择
+### 2-prefetch 读地址选择 {#sec:icache-prefetchpipe-s0-addr}
 
 如 [@sec:icache-2fetch] 一节所述，ICache 支持在特定条件下单周期接收两个取指块的预取请求。prefetchPipe S0 流水级会对这两个取指块的总计 4 个 VAddr 进行选择，具体来说：
 
@@ -24,7 +24,7 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 - `TwoFetch.scala` 中 `class TwoPrefetchCase` 的实现。
 - [MetaArray 和 DataArray 一节](Array.md)中关于 interleave 的说明。
 
-## S1 流水级
+## S1 流水级 {#sec:icache-prefetchpipe-s1}
 
 1. 接收 metaArray / ITLB 的响应。
 2. 若 ITLB miss，重发请求直到 hit。
@@ -33,7 +33,7 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 5. 监听 missUnit 重填广播，更新命中信息。
 6. 接收 BPU s3 override 引起的冲刷请。求，若 ftqIdx 与当前流水级匹配且不是软件预取，则进行冲刷
 
-### 状态机
+### 状态机 {#sec:icache-prefetchpipe-s1-fsm}
 
 本级的行为由一个状态机进行控制：
 
@@ -44,7 +44,7 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
   - 若当前请求是软件预取，不会尝试入队 wayLookup，因为该请求不需要进入 mainPipe，不需要被执行
 - 在 `enterS2` 状态，尝试将请求流入下一流水级，流入后回到 `idle`
 
-![PrefetchPipe S1 状态机](../figure/ICache/prefetchPipe_s1fsm.png)
+![PrefetchPipe S1 状态机](../figure/ICache/prefetchPipe_s1fsm.png){#fig:icache-prefetchpipe-s1fsm}
 
 ### 命中信息的更新 {#sec:icache-hit-update}
 
@@ -58,7 +58,7 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 - 对 prefetchPipe s1 来说，即禁止入队 wayLookup；
 - 对 wayLookup 来说，即禁止出队到 mainPipe。
 
-### 2-prefetch 数据选择
+### 2-prefetch 数据选择 {#sec:icache-prefetchpipe-s1-data}
 
 如前所述，S0 流水级从 4 个备选地址中选择了 2 个地址发送到 metaArray 和 ITLB。因此 S1 流水级需要将 2 个元数据响应恢复到原始 4 个元数据请求的形式，以便后续 wayLookup 入队和 mainPipe 使用。具体来说：
 
@@ -72,7 +72,7 @@ prefetchPipe 为预取的流水线，为两级流水设计，负责预取请求�
 
 - `TwoFetch.scala` 中 `class TwoPrefetchCase` 的实现。
 
-## S2 流水级
+## S2 流水级 {#sec:icache-prefetchpipe-s2}
 
 1. 根据命中结果、异常信息判断是否需要预取
 2. 若需要预取，通过 Arbiter 将依次将至多两个 cacheline 的缺失请求发送至 missUnit

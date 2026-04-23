@@ -2,13 +2,13 @@
 
 MainPipe 为 ICache 的主流水，为 2 级流水设计，负责从 DataArray 中读取数据、ECC 检查、缺失处理，并且将结果返回给 IFU。
 
-## S0 流水级
+## S0 流水级 {#sec:icache-mainpipe-s0}
 
 1. 接收来自 FTQ 的取指请求。
 2. 从 wayLookup 队头项获取元数据。
 3. 若命中，根据取指请求和元数据向 dataArray 发送读请求。
 
-## S1 流水级
+## S1 流水级 {#sec:icache-mainpipe-s1}
 
 1. metaArray ECC 校验。
 2. 根据命中结果、异常信息、metaArray 校验结果判断是否需要取指。
@@ -16,13 +16,13 @@ MainPipe 为 ICache 的主流水，为 2 级流水设计，负责从 DataArray �
 4. 若缺失且无异常，通过 Arbiter 将依次将至多两个 cacheline 的缺失请求发送至 missUnit。并等待直到重填完成。
 5. 将数据发送到 IFU。
 
-### MetaArray ECC 校验
+### MetaArray ECC 校验 {#sec:icache-mainpipe-s1-ecc}
 
 prefetchPipe 读出 metaArray 的元数据和校验码后，并不对其进行校验，而是直接存入 wayLookup，在 mainPipe 中进行校验。
 
 除了校验码本身的校验之外，metaArray ECC 校验还会检查是否存在多路命中（即同一个 setIdx 存在多个 way 的 tag 都命中）。如果存在多路命中，即使校验码通过了检查，也会认为 metaArray 出现了错误。
 
-## S2 流水级
+## S2 流水级 {#sec:icache-mainpipe-s2}
 
 1. dataArray ECC 校验。
 2. metaArray 或 dataArray ECC 校验出错时，向 BEU 发送错误信息。

@@ -1,4 +1,4 @@
-# MetaArray and DataArray
+# MetaArray and DataArray {#sec:icache-array}
 
 ## MetaArray Interleave {#sec:icache-metaarray-interleave}
 
@@ -8,7 +8,7 @@ The case with `NumInterleaveBanks = 2` is shown in [@fig:icache-metaarray-interl
 
 ![MetaArray interleave](../figure/ICache/metaArray_interleave.png){#fig:icache-metaarray-interleave}
 
-## DataArray Banking
+## DataArray Banking {#sec:icache-dataarray-bank}
 
 DataArray splits one cacheline into multiple banks. Each bank stores part of one cacheline, and each access activates only the required banks, reducing power. The example below uses the default configuration where one 64B cacheline is split into eight 8B banks.
 

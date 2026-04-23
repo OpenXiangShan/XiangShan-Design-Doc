@@ -2,7 +2,7 @@
 
 Currently, CtrlUnit is mainly responsible for ECC check enable/error injection features.
 
-## Parameter List
+## Parameter List {#sec:icache-ctrlunit-params}
 
 See `case class ICacheCtrlUnitParameters` in `Parameters.scala`. Selected parameters are listed below:
 
@@ -11,7 +11,7 @@ See `case class ICacheCtrlUnitParameters` in `Parameters.scala`. Selected parame
 | Address | AddressSet(0x38022080, 0x7f) | MMIO-mapped CSR address range of CtrlUnit | See below |
 | BeatBytes | 8 | Bus width of CtrlUnit | Power of 2 and <= 8 |
 
-## MMIO-mapped CSR
+## MMIO-mapped CSR {#sec:icache-ctrlunit-csr}
 
 CtrlUnit implements a set of MMIO-mapped CSRs connected on TileLink bus. Address is configurable by parameter `Address`, with default `0x38022080`. Total size is 128B.
 
@@ -61,11 +61,11 @@ Implemented CSRs are:
 | 2 | Inject target address (i.e. `ecciaddr.paddr`) is not in ICache |
 | 3-7 | rsvd |
 
-## ECC Check Enable
+## ECC Check Enable {#sec:icache-ctrlunit-ecc-check}
 
 `eccctrl.enable` in CtrlUnit is directly connected to MainPipe and controls ECC check enable. When this bit is 0, ICache does not perform ECC checking. But check bits are still calculated and stored during refill, which may add a small amount of power overhead. If check bits are not calculated, then switching from disabled to enabled requires flushing ICache (otherwise read parity code may be incorrect).
 
-## ECC Injection Enable
+## ECC Injection Enable {#sec:icache-ctrlunit-ecc-inject}
 
 CtrlUnit uses an internal state machine to control injection process. Its internal status (note: different from `eccctrl.istatus`) is:
 

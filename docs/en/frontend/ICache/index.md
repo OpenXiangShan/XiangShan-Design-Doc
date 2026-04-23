@@ -1,11 +1,11 @@
-# XiangShan ICache Design Document
+# XiangShan ICache Design Document {#sec:icache-index}
 
 - Version: V3
 - Status: draft
 - Date: 2026/04/22
 - commit: TODO
 
-## Glossary
+## Glossary {#sec:icache-glossary}
 
 | Abbreviation | Full Name | Description |
 | --- | --------- | ------------ |
@@ -27,7 +27,7 @@
 | PBMT | Page-Based Memory Types | Page-based memory types, see the Svpbmt extension |
 | fb | Fetch Block | Fetch block |
 
-## Submodules
+## Submodules {#sec:icache-submodules}
 
 | Submodule | Description |
 | --- | --------- |
@@ -40,7 +40,7 @@
 | [Replacer](Replacer.md) | Replacement policy unit |
 | [CtrlUnit](CtrlUnit.md) | Control unit, currently only for ECC check/error injection control |
 
-## Design Specifications
+## Design Specifications {#sec:icache-design-spec}
 
 - Cache instruction data.
 - Request data from L2 through TileLink on miss.
@@ -61,7 +61,7 @@
 
 [^ecc]: In this document, error checking and error injection features are also referred to as ECC. See [@sec:icache-ecc] [ECC](#ecc-secicache-ecc).
 
-## Parameters
+## Parameters {#sec:icache-params}
 
 See `case class ICacheParams` in `Parameters.scala`. Selected parameters are listed below:
 
@@ -85,7 +85,7 @@ See `case class ICacheParams` in `Parameters.scala`. Selected parameters are lis
 | EnableCtrlUnit | true | Whether to instantiate CtrlUnit; if false, ECC features are not software-controllable | |
 | ctrlUnitParameters | - | CtrlUnit parameters | See [@sec:icache-ctrlunit] [CtrlUnit doc](./CtrlUnit.md) |
 
-## Functional Overview
+## Functional Overview {#sec:icache-functional-overview}
 
 > Before reading this document, it is recommended to read the FDIP and Decoupled Frontend papers in the references for prerequisite background.
 
@@ -111,9 +111,9 @@ After reset or redirect, the first fetch request is sent to both mainPipe and pr
 
 Both prefetchPipe and mainPipe decide miss/exception status based on metadata from MetaArray and ITLB. If there is no exception and a miss occurs, missUnit sends an L2 cache request. For prefetchPipe, processing can complete after issuing the prefetch miss. For mainPipe, processing completes only after refill and data delivery to IFU.
 
-## Functional Details
+## Functional Details {#sec:icache-functional-details}
 
-### Prefetch Requests
+### Prefetch Requests {#sec:icache-prefetch-req}
 
 ICache may accept prefetch requests from two sources:
 
@@ -137,7 +137,7 @@ Software prefetch follows almost the same flow, but since it does not affect con
 
 For pipeline-stage details, see [@sec:icache-prefetchpipe] [PrefetchPipe section](PrefetchPipe.md).
 
-### Fetch Requests
+### Fetch Requests {#sec:icache-fetch-req}
 
 The handling flow for fetch requests is:
 
@@ -179,7 +179,7 @@ Constraints for 2-fetch requests:
 
 1. TODO
 
-### Exception Propagation and Special-case Handling
+### Exception Propagation and Special-case Handling {#sec:icache-exception-special}
 
 ICache checks fetch-request permissions through ITLB and PMP and receives L2 responses. Possible exceptions are listed in [@tbl:icache-exception].
 
@@ -222,7 +222,7 @@ Table: ICache special case list {#tbl:icache-special-case}
 | ITLB | pbmt.NC | Page attribute is non-cacheable and idempotent | Block cache fetch, IFU performs **speculative** fetch |
 | ITLB | pbmt.IO | Page attribute is non-cacheable and non-idempotent | Same as pmp mmio |
 
-### Flush
+### Flush {#sec:icache-flush}
 
 When backend/IFU redirect, BPU redirect, or `fence.i` happens, selected storage structures and pipeline stages in ICache must be flushed depending on reason. Possible flush targets/actions include:
 
@@ -256,7 +256,7 @@ Table: ICache flush target list {#tbl:icache-flush}
 
 ICache does not accept fetch/prefetch requests while flushing (`io.req.ready === false.B`).
 
-#### ITLB Flush Notes
+#### ITLB Flush Notes {#sec:icache-itlb-flush}
 
 ITLB flush is special. Cached PTEs only need flushing on `sfence.vma`, and that path is handled by backend, so frontend/ICache normally does not manage ITLB flush. There is one exception: currently ITLB does not store `gpaddr` to save resources. When `gpf` occurs, ITLB refetches from L2TLB, and the retry state is controlled by a `gpf` cache. This requires ICache, after receiving `ITLB.resp.excp.gpf_instr`, to ensure one of the following:
 
@@ -277,7 +277,7 @@ ICache supports error detection, error recovery, and error injection as part of 
 
 [^reri]: RERI (RAS Error-record Register Interface), see the [RISC-V RERI specification](https://github.com/riscv-non-isa/riscv-ras-eri).
 
-#### Error Detection
+#### Error Detection {#sec:icache-ecc-detect}
 
 When MissUnit refills MetaArray and DataArray, it computes check bits for metadata and data. Metadata check bits are stored together with metadata in Meta SRAM, while data check bits are stored in dedicated Data Code SRAM.
 
@@ -295,7 +295,7 @@ When MainPipe detects an error in s1/s2, it performs:
 2. Error reporting: report the error to BEU, which then raises interrupt for software.
 3. Request canceling: if MetaArray check fails, read ptag is unreliable, so hit/miss judgment is unreliable. Therefore no L2 request is sent regardless of hit/miss result; exception is directly propagated to IFU and then backend.
 
-#### Error Injection
+#### Error Injection {#sec:icache-ecc-inject}
 
 According to RISC-V RERI[^reri], to let software test ECC behavior and better validate hardware functionality, hardware should provide error injection, i.e., proactively trigger ECC errors.
 
@@ -347,6 +347,6 @@ A test case has been implemented in [this repository](https://github.com/OpenXia
 5. Injection on miss target address.
 6. Attempting to write read-only CSR fields.
 
-## References
+## References {#sec:icache-references}
 
 1. Glenn Reinman, Brad Calder, and Todd Austin. "[Fetch directed instruction prefetching.](https://doi.org/10.1109/MICRO.1999.809439)" 32nd Annual ACM/IEEE International Symposium on Microarchitecture (MICRO). 1999.
