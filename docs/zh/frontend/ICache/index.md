@@ -244,10 +244,10 @@ Table: ICache 特殊情况列表 {#tbl:icache-special-case}
 
 Table: ICache 冲刷目标列表 {#tbl:icache-flush}
 
-| 冲刷原因 | 1 | 2 | 3 | 4 |
+| 冲刷原因 | Pipeline | MetaArray | WayLookup | MissUnit |
 | ------ | --- | --- | --- | --- |
 | 后端/IFU 重定向 | Y | | Y | Y |
-| BPU 重定向 | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
+| BPU 重定向 | Y[^redirect_tab_bpu] | | Y[^redirect_tab_bpu] | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
 [^redirect_tab_bpu]: BPU 精确预测器（BPU s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 2 拍之后就到达 ICache，因此仅需要冲刷 prefetchPipe s0/1、wayLookup 队尾项，见对应节。

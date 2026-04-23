@@ -244,10 +244,10 @@ Flush targets per flush reason are listed in [@tbl:icache-flush].
 
 Table: ICache flush target list {#tbl:icache-flush}
 
-| Flush reason | 1 | 2 | 3 | 4 |
+| Flush reason | Pipeline | MetaArray | WayLookup | MissUnit |
 | ------ | --- | --- | --- | --- |
 | backend/IFU redirect | Y | | Y | Y |
-| BPU redirect | Y[^redirect_tab_bpu] | Y[^redirect_tab_bpu] | | |
+| BPU redirect | Y[^redirect_tab_bpu] | | Y[^redirect_tab_bpu] | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
 [^redirect_tab_bpu]: BPU precise predictor (result from BPU s3) may override simple predictor (result from BPU s0). Its redirect reaches ICache at most 2 cycles after prefetch issue, so only prefetchPipe s0/s1 and tail entries in wayLookup need to be flushed. See corresponding sections.
