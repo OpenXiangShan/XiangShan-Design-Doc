@@ -48,6 +48,7 @@ nav:
       - MainPipe: frontend/ICache/MainPipe.md
       - PrefetchPipe: frontend/ICache/PrefetchPipe.md
       - WayLookup: frontend/ICache/WayLookup.md
+      - Array: frontend/ICache/Array.md
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
