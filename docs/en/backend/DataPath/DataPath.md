@@ -409,7 +409,9 @@ triangular matrix, consisting of N * (N - 1) / 2 bits.
 
 The age matrix is maintained as follows:
 
- - 在 T0 时刻根据各项的状态，通过一个年龄比较函数得到两两之间的年龄次序，写入年龄矩阵
+ - At time T0, according to the state of each item, the age order between two
+   individuals is obtained through an age comparison function and written into
+   the age matrix.
  - At time T1, based on the count of 1s in each row, entries exceeding the
    threshold are considered selected for replacement.
 
@@ -424,7 +426,7 @@ Each RC entry maintains an AgeTimer, with update rules as follows:
  - When an entry is updated, the counter is cleared
  - Currently has a read request, remains unchanged (including cases where a read
    request was issued but the instruction was canceled)
- - 计数器已达到最大值，维持不变
+ - The counter has reached the maximum value and remains unchanged.
  - In all other cases, the counter increments by 1.
 
 ``` c

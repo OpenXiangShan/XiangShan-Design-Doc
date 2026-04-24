@@ -1,6 +1,6 @@
 # BPU submodule FTB
 
-## Functional Overview
+## Function Overview
 
 The FTB temporarily stores FTB entries, providing more accurate branch
 instruction locations, types, and other information for subsequent advanced
@@ -10,9 +10,9 @@ actual storage of FTB entries, utilizing a multi-port SRAM as memory.
 ### Request reception
 
 At stage 0, the FTB module sends a read request to the internal FTBBank, with
-the request PC value being the PC passed in from s0.
+the request PC value being the PC passed by s0.
 
-Data read and return
+### Data read and return
 
 In the next clock cycle after sending the request, which is stage 1 of the
 predictor, the multi-path signals read from the FTB SRAM will be temporarily
@@ -25,13 +25,14 @@ there is a hit request, the return value is the selected FTB entry and the hit
 way information; if no hit occurs, the output data is meaningless. The tag
 corresponds to bits 29 to 10 of the PC.
 
-The data read from the FTBBank module is passed as a 2-stage prediction result
-to subsequent predictors via combinational logic within the same cycle.
-Additionally, this read result is temporarily stored within the FTB module and
-passed again as a prediction result to subsequent predictors via combinational
-logic in the 3rd stage. If the FTB hits, the read hit way number is also passed
-as meta information to the subsequent FTQ module in stage s3, along with the hit
-information and cycle count.
+The data read by the FTBBank module will serve as the prediction result of the
+FTB module at stage 2. It is passed to the subsequent predictor in the current
+beat via a combinational logic connection. Additionally, this read result is
+also latched inside the FTB module and passed again to the subsequent predictor
+at stage 3 as a prediction result via a combinational logic connection. If the
+FTB hits, the read hit way number will also be passed as meta information,
+together with the hit information and cycle count, to the subsequent FTQ module
+at s3.
 
 Additionally, if there is an "always taken" flag in the FTB entry, the
 corresponding br_taken_mask in the prediction results of stage 2 is also pulled
@@ -64,35 +65,35 @@ power-on reset.
 
 20-bit tag, 60-bit FTB entry.
 
-FTB entry
+The FTB items include:
 
-1 bit valid
+- 1 bit valid
 
-20-bit br slot (4-bit offset, 12-bit lower, 2-bit tarStat, 1-bit sharing, 1-bit
-valid)
+- 20-bit br slot (4-bit offset, 12-bit lower, 2-bit tarStat, 1-bit sharing,
+  1-bit valid)
 
-28-bit tail slot (4-bit offset, 20-bit lower, 2-bit tarStat, 1-bit sharing,
-1-bit valid)
+- 28-bit tail slot (4-bit offset, 20-bit lower, 2-bit tarStat, 1-bit sharing,
+  1-bit valid)
 
-4-bit pftAddr
+- 4-bit pftAddr
 
-1-bit carry
+- 1-bit carry
 
-1-bit isCall
+- 1-bit isCall
 
-1 bit isRet
+- 1 bit isRet
 
-1-bit isJalr
+- 1-bit isJalr
 
-The last bit may be an RVI call
+- The last bit may be an RVI call
 
-2-bit always taken
+- 2-bit always taken
 
 ## Overall Block Diagram
 
 ![Overall Block Diagram](../figure/BPU/FTB/structure.png)
 
-## Interface timing
+## Interface Timing
 
 ### Result output interface
 
@@ -112,7 +113,7 @@ The figure above demonstrates an update operation of the FTB module for address
 
 ## FTBBank
 
-### Interface timing
+### Interface Timing
 
 #### Read data interface
 
@@ -137,7 +138,7 @@ the result is read out.
 shows the FTBBank update write data interface. One cycle after receiving the
 write request, the data is written.
 
-### Functional Overview
+### Function Overview
 
 As mentioned above, the FTBBank primarily stores FTB entries and is a simple
 encapsulation of the SRAM module.
@@ -156,7 +157,7 @@ specific strategy is as follows:
 - The FTB entry is indexed by start, where start is generated in the prediction
   pipeline. In practice, start generally follows one of the following
   principles:
-  - start is the end of the previous prediction block.
+  - start is the end of the previous prediction block;
   - start is the target address of the redirect from outside the BPU;
 - The FTB entry can record up to two branch instructions, with the first one
   always being a conditional branch;
@@ -190,14 +191,14 @@ FTB entry structure is as follows
 
 | total | valid     | brSlot                   | tailSlot                  | pftAddr                   | carry                                                     | isCall, isRet, isJalr | last_may_be_rvi_call | strong_bias |
 | ----- | --------- | ------------------------ | ------------------------- | ------------------------- | --------------------------------------------------------- | --------------------- | -------------------- | ----------- |
-|       | Valid bit | First branch information | Second branch information | Predict block end address | Whether the high-order bits of the end address carry over | tailSlot branch type  | RAS special flag bit | Strong bias |
+|       | Valid Bit | First branch information | Second branch information | Predict block end address | Whether the high-order bits of the end address carry over | tailSlot branch type  | RAS special flag bit | Strong bias |
 | 62    | 1         | 21                       | 29                        | 4                         | 1                                                         | 3                     | 1                    | 2           |
 
 Composition of FTB slots, each slot corresponds to one branch instruction
 
 | total | valid     | offset                             | lower                        | tarStat                                          | sharing                                                  | isRVC                           |
 | ----- | --------- | ---------------------------------- | ---------------------------- | ------------------------------------------------ | -------------------------------------------------------- | ------------------------------- |
-|       | Valid bit | Offset relative to the starting PC | Lower bits of target address | Whether the target address high bit carries over | (For tailSlot) Whether a conditional branch is installed | Is it a compressed instruction? |
+|       | Valid Bit | Offset relative to the starting PC | Lower bits of target address | Whether the target address high bit carries over | (For tailSlot) Whether a conditional branch is installed | Is it a compressed instruction? |
 | 21/29 | 1         | 4                                  | 12/20                        | 2                                                | 1                                                        | 1                               |
 
 The FTB has a total of 2048 entries, 4-way set-associative, with each entry
@@ -215,6 +216,7 @@ high bits) and concatenate it with the stored target address low bits.
 1. Entry generation
 
    1.1 Read necessary information from FTQ:
+
       - Starting address startAddr
       - The old FTB entry old_entry read during prediction
       - Contains the pre-decoding information pd for all branch instructions
@@ -230,6 +232,7 @@ high bits) and concatenate it with the stored target address low bits.
         the FTQ entry
 
    1.2 FTB entry generation logic:
+
       - Case 1: FTB miss or error exists
         1) Unconditional jump instruction processing:
           - Regardless of whether it is executed, it will always be written to

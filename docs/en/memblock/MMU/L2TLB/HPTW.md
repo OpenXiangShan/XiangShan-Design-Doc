@@ -7,7 +7,7 @@ Hypervisor Page Table Walker refers to the following module:
 
 ## Design Specifications
 
-1. Supports accessing the three-level page table of G-stage
+1. Supports accessing G-stage 3-level page table
 2. Supports sending requests to memory
 3. Supports sending refill signals to the Page Cache
 4. Support for exception handling
@@ -15,7 +15,7 @@ Hypervisor Page Table Walker refers to the following module:
 
 ## Function
 
-### Supports accessing the three-level page table of G-stage
+### Supports accessing G-stage 3-level page table
 
 The overall design of HPTW is fundamentally the same as PTW, capable of
 processing only one request at a time. HPTW can perform a complete second-stage

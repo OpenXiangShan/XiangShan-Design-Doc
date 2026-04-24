@@ -16,9 +16,9 @@ Table: LoadQueueReplay Storage Information
 | vecReplay          | Vector load instruction related information                                                                                                                                      |
 | vaddrModule        | Virtual address of the Load instruction.                                                                                                                                         |
 | cause              | Reasons for a load instruction replay in the load replay queue include:                                                                                                          |
-|                    | C_MA(位0): store-load预测违例                                                                                                                                                         |
+|                    | C_MA(bit0): store-load prediction violation                                                                                                                                      |
 |                    | C_TM (Bit 1): TLB miss                                                                                                                                                           |
-|                    | C_FF(位2): store-to-load-forwarding store数据为准备好，导致失败                                                                                                                              |
+|                    | C_FF(bit2): store-to-load-forwarding store data is ready, causing failure                                                                                                        |
 |                    | C_DR (Bit 3): DCache miss occurs, but MSHR cannot be allocated                                                                                                                   |
 |                    | C_DM (Bit 4): DCache miss occurred                                                                                                                                               |
 |                    | C_WF (Bit 5): Way predictor misprediction.                                                                                                                                       |
@@ -29,13 +29,13 @@ Table: LoadQueueReplay Storage Information
 |                    | C_MF (Bit 10): LoadMisalignBuffer has no space to accept the instruction.                                                                                                        |
 | Blocking           | The Load instruction is currently blocked.                                                                                                                                       |
 | strict             | The memory dependency predictor determines whether an instruction needs to wait for all preceding store instructions to complete execution before entering the scheduling phase. |
-| blockSqIdx         | 与load指令有相关性的store指令的StoreQueue Index                                                                                                                                             |
-| missMSHRId         | load指令的dcache miss请求接受ID                                                                                                                                                         |
-| tlbHintId          | load指令的tlb miss请求接受ID                                                                                                                                                            |
-| replacementUpdated | DCcahe的替换算法是否已经更新                                                                                                                                                                |
+| blockSqIdx         | StoreQueue Index of the store instruction that has dependency with the load instruction                                                                                          |
+| missMSHRId         | Load instruction's dcache miss request acceptance ID                                                                                                                             |
+| tlbHintId          | Load instruction's tlb miss request acceptance ID                                                                                                                                |
+| replacementUpdated | Whether the DCache replacement algorithm has been updated                                                                                                                        |
 | replayCarry        | DCache way predictor prediction information                                                                                                                                      |
 | missDbUpdated      | Miss-related updates in ChiselDB                                                                                                                                                 |
-| dataInLastBeatReg  | Load指令需要的数据在两笔回填请求的最后一笔                                                                                                                                                          |
+| dataInLastBeatReg  | The data required by the Load instruction is in the last of two refill requests                                                                                                  |
 
 
 \newpage
@@ -54,7 +54,7 @@ Table: LoadQueueReplay Storage Information
   number of entries in LoadQueueReplay, with an allocation width equal to the
   load width (number of LoadUnits) and a deallocation width of 4.
 
-  * 分配
+  * Allocation
 
     * LoadQueueReplay selects an entry index from the free items in the Freelist
       (i.e., the Valid items in Figure \ref{fig:LSQ-LoadQueueReplay-Freelist})
@@ -86,7 +86,9 @@ Table: LoadQueueReplay Storage Information
     Otherwise, it only needs to wait for the address calculation of the Store
     instruction corresponding to blockSqIdx to complete.
 
-  * C_TM：如果TLB没有多余空间处理miss请求，则可以标记为可重发状态，等待调度；否则需要等待TLB返回tlbHintId匹配的hint信号唤醒。
+  * C_TM: If the TLB has no extra space to handle the miss request, it can be
+    marked as a replay state, waiting for scheduling; otherwise, it needs to
+    wait for the TLB to return a hint signal matching tlbHintId to wake up.
 
   * C_FF: Needs to wait until the data for the Store instruction corresponding
     to blockSqIdx is ready before waking up.
@@ -111,7 +113,7 @@ Table: LoadQueueReplay Storage Information
 
 ### Feature 3: Selective Scheduling
 
-* LoadQueueReplay有3种选择调度方式：
+* LoadQueueReplay has 3 optional scheduling methods:
 
   * Based on enqueue age
 
@@ -124,7 +126,7 @@ Table: LoadQueueReplay Storage Information
     * LoadQueueReplay can determine the oldest Load instruction for replay based
       on LqPtr, with a selection width of OldestSelectStride=4.
 
-  * DCache数据相关的load指令优先调度
+  * Load instructions related to DCache data are scheduled with priority
 
     * LoadQueueReply first schedules the replay triggered by L2 Hint (When a
       dcache miss occurs, it needs to continue querying the lower-level cache L2
@@ -162,7 +164,8 @@ Diagram](./figure/LSQ-LoadQueueReplay-Enq-Timing.svg){#fig:LSQ-LoadQueueReplay-E
 
   * Non-replay enqueue
 
-![LoadQueueReplay非重发入队时序图](./figure/LSQ-LoadQueueReplay-NoEnq-Timing.svg){#fig:LSQ-LoadQueueReplay-NoEnq-Timing}
+![LoadQueueReplay Non-Replay Enqueue Timing
+Diagram](./figure/LSQ-LoadQueueReplay-NoEnq-Timing.svg){#fig:LSQ-LoadQueueReplay-NoEnq-Timing}
 
 ### Replay Timing
 
@@ -175,7 +178,8 @@ Diagram](./figure/LSQ-LoadQueueReplay-Deq-Timing.svg){#fig:LSQ-LoadQueueReplay-D
 
   * Allocation timing
 
-![Freelist分配时序图](./figure/LSQ-Freelist-Alloc-Timing.svg){#fig:LSQ-Freelist-Alloc-Timing}
+![Freelist Allocation Timing
+Diagram](./figure/LSQ-Freelist-Alloc-Timing.svg){#fig:LSQ-Freelist-Alloc-Timing}
 
   * Reclaim timing
 

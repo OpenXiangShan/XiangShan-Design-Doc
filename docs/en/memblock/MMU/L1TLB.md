@@ -6,38 +6,38 @@
    MemBlock.
 2. Supports the PLRU replacement algorithm.
 3. Supports returning physical addresses to the Frontend and MemBlock.
-4. Both the ITLB and DTLB employ non-blocking access.
+4. Both ITLB and DTLB use non-blocking access. Specifically, for MMIO address
+   translation requests, ITLB uses blocking access.
 5. Both ITLB and DTLB entries are implemented using register files
 6. Both ITLB and DTLB entries are fully associative structures
 7. ITLB and DTLB adopt the current privilege level of the processor and the
    effective privilege level for memory access execution
-8. Supports determining whether virtual memory is enabled and whether two-stage
-   translation is enabled within the L1 TLB.
+8. Support for determining whether virtualization is enabled and whether
+   two-stage translation is enabled within the L1 TLB
 9. Support sending PTW requests to L2 TLB
 10. The DTLB supports copying the returned physical address.
 11. Support for exception handling
-12. Supports TLB compression
+12. Support for TLB compression
 13. Support TLB Hint mechanism
-14. Stores four types of TLB entries.
-15. TLB refill merges the two stages of page tables.
-16. The hit logic for TLB entries.
-17. Supports reissuing PTW to obtain gpaddr after a guest page fault.
+14. Stores four types of TLB entries
+15. TLB refill merges page tables of two stages
+16. Hit detection logic for TLB entries
+17. Support for re-sending PTW to obtain gpaddr after a guest page fault
 
 ## Function
 
 ### Receives address translation requests from the Frontend and MemBlock.
 
-Before performing memory read/write operations within the core, including
-frontend instruction fetching and backend memory access, address translation
-must be performed by the L1 TLB. Due to physical distance and to avoid mutual
-contamination, it is divided into the ITLB (Instruction TLB) for frontend
-instruction fetching and the DTLB (Data TLB) for backend memory access. The ITLB
-operates in a fully associative mode, with 48 fully associative entries storing
-all page sizes. The ITLB receives address translation requests from the
-Frontend, where itlb_requestors(0) to itlb_requestors(2) come from the icache,
-with itlb_requestors(2) being the prefetch request from the icache;
-itlb_requestors(3) comes from the ifu, representing the address translation
-request for MMIO instructions.
+Memory reads and writes within the core, including frontend instruction fetch
+and backend memory access before the access, require address translation by the
+L1 TLB. Due to the large physical distance and to avoid mutual interference,
+they are divided into the ITLB (Instruction TLB) for frontend instruction fetch
+and the DTLB (Data TLB) for backend memory access. The ITLB uses a fully
+associative mode, with 48 entries fully associative storing all page sizes. The
+ITLB receives address translation requests from the Frontend; itlb_requestors(0)
+to itlb_requestors(1) come from IPrefetch in the icache; itlb_requestors(2)
+comes from ifu, for address translation requests of MMIO instructions.
+Specifically, blocking ITLB is used for MMIO address translation.
 
 The configuration of ITLB entries and request sources are detailed in
 [@tbl:ITLB-config;@tbl:ITLB-request-source].
@@ -51,28 +51,27 @@ Table: ITLB Entry Configuration {#tbl:ITLB-config}
 
 Table: ITLB Request Sources {#tbl:ITLB-request-source}
 
-| **Serial number** |      **Source**       |
-| :---------------: | :-------------------: |
-|   requestors(0)   |   Icache, mainPipe    |
-|   requestors(1)   |   Icache, mainPipe    |
-|   requestors(2)   | Icache, fdipPrefetch. |
-|   requestors(3)   |          IFU          |
+| **Serial number** | **Source** |
+| :---------------: | :--------: |
+|   requestors(0)   |   Icache   |
+|   requestors(1)   |   Icache   |
+|   requestors(2)   |    IFU     |
 
-Xiangshan's memory access channels consist of 2 Load pipelines, 2 Store
-pipelines, an SMS prefetcher, and an L1 Load stream & stride prefetcher. To
-handle the numerous requests, the two Load pipelines and the L1 Load stream &
-stride prefetcher use the Load DTLB, the two Store pipelines use the Store DTLB,
-and prefetch requests use the Prefetch DTLB—totaling 3 DTLBs, all employing the
+Xiangshan's memory access channel has 3 Load pipelines, 2 Store pipelines, as
+well as an SMS prefetcher and an L1 Load stream & stride prefetcher. To handle
+numerous requests, the three Load pipelines and the L1 Load stream & stride
+prefetcher use the Load DTLB, the two Store pipelines use the Store DTLB, and
+prefetch requests use the Prefetch DTLB, totaling 3 DTLBs, all employing the
 PLRU replacement algorithm (see Section 5.1.1.2).
 
-The DTLB operates in a fully associative mode, with 48 fully associative entries
-storing all page sizes. The DTLB receives address translation requests from
-MemBlock, where dtlb_ld handles requests from loadUnits and the L1 Load stream &
+DTLB uses a fully associative mode, with 48 entries fully associative storing
+all page sizes. DTLB receives address translation requests from MemBlock;
+dtlb_ld receives requests from loadUnits, VSegmentUnit, and the L1 Load stream &
 stride prefetcher, responsible for address translation of Load instructions;
-dtlb_st processes requests from StoreUnits, handling address translation for
-Store instructions. Notably, for AMO instructions, the dtlb_ld_requestor of
-loadUnit(0) is used to send requests to dtlb_ld. The SMSPrefetcher sends
-prefetch requests to a separate DTLB.
+dtlb_st receives requests from StoreUnits, responsible for address translation
+of Store instructions. Specifically, for AMO instructions, loadUnit(0)'s
+dtlb_ld_requestor is used to send requests to dtlb_ld. The SMSPrefetcher and
+prefetches from L2 send prefetch requests to a separate DTLB.
 
 The configuration and request sources of DTLB entries are as shown in
 [@tbl:DTLB-config;@tbl:DTLB-request-source].
@@ -86,19 +85,19 @@ Table: DTLB Entry Configuration {#tbl:DTLB-config}
 
 Table: DTLB Request Sources {#tbl:DTLB-request-source}
 
-| **module** | **Serial number** |            **Source**             |
-| :--------: | :---------------: | :-------------------------------: |
-|  DTLB_LD   |                   |                                   |
-|            | ld_requestors(0)  |     loadUnit(0), AtomicsUnit      |
-|            | ld_requestors(1)  |            loadUnit(1)            |
-|            | ld_requestors(2)  |            loadUnit(2)            |
-|            | ld_requestors(3)  | L1 Load stream & stride Prefetch. |
-|  DTLB_ST   |                   |                                   |
-|            | st_requestors(0)  |           StoreUnit(0)            |
-|            | st_requestors(1)  |           StoreUnit(1)            |
-|  DTLB_PF   |                   |                                   |
-|            | pf_requestors(0)  |            SMSPrefetch            |
-|            | pf_requestors(1)  |            L2 Prefetch            |
+| ** module ** | **Serial number** |               **Source**               |
+| :----------: | :---------------: | :------------------------------------: |
+|   DTLB_LD    |                   |                                        |
+|              | ld_requestors(0)  | loadUnit(0), AtomicsUnit, VSegmentUnit |
+|              | ld_requestors(1)  |              loadUnit(1)               |
+|              | ld_requestors(2)  |              loadUnit(2)               |
+|              | ld_requestors(3)  |   L1 Load stream & stride Prefetch.    |
+|   DTLB_ST    |                   |                                        |
+|              | st_requestors(0)  |              StoreUnit(0)              |
+|              | st_requestors(1)  |              StoreUnit(1)              |
+|   DTLB_PF    |                   |                                        |
+|              | pf_requestors(0)  |              SMSPrefetch               |
+|              | pf_requestors(1)  |              L2 Prefetch               |
 
 ### Uses the PLRU replacement algorithm
 
@@ -122,12 +121,12 @@ The refill policies for ITLB and DTLB are shown in [@tbl:L1TLB-refill-policy].
 
 Table: ITLB and DTLB refill policy {#tbl:L1TLB-refill-policy}
 
-| **module** | **Item name** |                              **Policy**                              |
-| :--------: | :-----------: | :------------------------------------------------------------------: |
-|    ITLB    |               |                                                                      |
-|            |     Page      | 48-entry fully associative, capable of backfilling pages of any size |
-|    DTLB    |               |                                                                      |
-|            |     Page      | 48-entry fully associative, capable of backfilling pages of any size |
+| ** module ** | **Item name** |                         **Policy**                         |
+| :----------: | :-----------: | :--------------------------------------------------------: |
+|     ITLB     |               |                                                            |
+|              |     Page      | 48 entries fully associative, can refill pages of any size |
+|     DTLB     |               |                                                            |
+|              |     Page      | 48 entries fully associative, can refill pages of any size |
 
 ### Returns the physical address to the Frontend and MemBlock.
 
@@ -185,9 +184,9 @@ to retrieve the page table entry. In Kunminghu, this functionality is guaranteed
 by ICache, where after an ITLB miss is reported to ICache, ICache continuously
 resends the same request until a hit, ensuring non-blocking access.
 
-However, it should be noted that in the Kunminghu architecture, both the ITLB
-and DTLB are non-blocking. Whether the external effect is blocking or
-non-blocking is controlled by the fetch unit or memory access unit.
+However, it should be noted that the DTLB of the Kunminghu architecture is
+non-blocking, the first two channels of the ITLB are non-blocking, but for MMIO
+address translation requests, the ITLB is blocking.
 
 ### Storage structure of L1 TLB entries.
 
@@ -198,25 +197,26 @@ implemented by register files (see Section 5.1.2.3). If simultaneous read and
 write operations to the same address occur in the same cycle, results can be
 obtained directly via bypass.
 
-Referenced ITLB or DTLB configuration: Both employ a fully associative structure
-with 8/16/32/48 entries. Currently, parameterized modification of TLB structures
-(fully associative/set-associative/direct-mapped) is not supported and requires
-manual code changes.
+Reference ITLB or DTLB configuration: Both use a fully associative structure,
+with entry counts of 8 / 16 / 32 / 48. Currently, parameterized modification of
+the TLB structure (fully associative / set-associative / direct-mapped) is not
+supported; manual code modification is required.
 
-### Supports determining whether virtual memory is enabled and whether two-stage translation is enabled within the L1 TLB.
+### Support for determining whether virtualization is enabled and whether two-stage translation is enabled within the L1 TLB
 
-Xiangshan supports the Sv39 page table specified in the RISC-V manual, with a
-virtual address length of 39 bits. Xiangshan's physical address is 36 bits,
-which can be modified parametrically.
+XiangShan supports the Sv39/Sv48 page tables in the RISC-V manual, with a
+virtual address length of 39/48 bits. XiangShan's physical address is 48 bits
+and is configurable.
 
-Determining whether virtual memory is enabled depends on the privilege level and
-the MODE field of the SATP register, among other factors. This decision is made
-internally by the TLB and is transparent to external modules. For details on
-privilege levels, refer to Section 5.1.2.7. Regarding the SATP MODE field, the
-Kunminghu architecture of Xiangshan only supports MODE=8, corresponding to the
-Sv39 paging mechanism; otherwise, an illegal instruction fault is raised. From
-the perspective of external modules (Frontend, LoadUnit, StoreUnit, AtomicsUnit,
-etc.), all addresses have undergone TLB translation.
+Whether virtual memory is enabled is determined jointly by the privilege level
+and the MODE field of the SATP register. This decision is made inside the TLB
+and is transparent to components outside the TLB. For a description of privilege
+levels, see Section 5.1.2.7; regarding the MODE field of SATP, the Kunming Lake
+architecture of XiangShan supports MODE field values of 8/9, i.e., the Sv39/Sv48
+paging mechanism; otherwise, an illegal instruction fault will be raised. To
+modules outside the TLB (such as Frontend, LoadUnit, StoreUnit, AtomicsUnit,
+VSegmentUnit, etc.), all addresses have undergone address translation by the
+TLB.
 
 When the H extension is added, enabling address translation also requires
 determining whether two-stage address translation is active. Two-stage address
@@ -231,38 +231,38 @@ Table: Two-Stage Translation Mode
 
 | **VSATP Mode** | **HGATP Mode** |                 **Translation Mode**                  |
 | :------------: | :------------: | :---------------------------------------------------: |
-|    Non-zero    |    Non-zero    |       allStage, both translation stages present       |
-|    Non-zero    |       0        |       onlyStage1, only first-stage translation        |
-|       0        |    Non-zero    | onlyStage2, indicating only second-stage translation. |
+|    non-zero    |    non-zero    |       allStage, both translation stages present       |
+|    non-zero    |       0        |       onlyStage1, only first-stage translation        |
+|       0        |    non-zero    | onlyStage2, indicating only second-stage translation. |
 
 ### Privilege level of L1 TLB.
 
-According to the RISC-V manual requirements, the privilege level for frontend
-instruction fetch (ITLB) is the current processor privilege level, while the
-privilege level for backend memory access (DTLB) is the effective memory access
-execution privilege level. Both the current processor privilege level and the
-effective memory access execution privilege level are determined in the CSR
-module and passed to the ITLB and DTLB. The current processor privilege level is
-stored in the CSR module; the effective memory access execution privilege level
-is determined by the MPRV, MPV, and MPP bits of the mstatus register, along with
-the SPVP bit of the hstatus register. If executing a virtualized memory access
-instruction, the effective memory access execution privilege level is the
-privilege level stored in the SPVP bit of hstatus. If the executed instruction
-is not a virtualized memory access instruction and the MPRV bit is 0, the
-effective memory access execution privilege level is the same as the current
-processor privilege level, and the effective virtualization mode for memory
-access also matches the current virtualization mode. If the MPRV bit is 1, the
-effective memory access execution privilege level is the privilege level stored
-in the MPP field of the mstatus register, and the effective virtualization mode
-is the virtualization mode stored in the MPV bit of the hstatus register. The
-privilege levels for ITLB and DTLB are as shown in the table.
+According to the RISC-V manual, the privilege level for the frontend instruction
+fetch (ITLB) is the current processor privilege level, while the privilege level
+for backend memory access (DTLB) is the effective privilege level for memory
+access. Both the current processor privilege level and the effective memory
+access privilege level are determined in the CSR module and passed to the ITLB
+and DTLB. The current processor privilege level is stored in the CSR module. The
+effective memory access privilege level is jointly determined by the MPRV, MPV,
+and MPP bits of the mstatus register, and the SPVP bit of the hstatus register.
+If a virtual memory access instruction is executed, the effective memory access
+privilege level is the privilege level stored in the SPVP bit of the hstatus
+register. If the executed instruction is not a virtual memory access instruction
+and the MPRV bit is 0, the effective memory access privilege level is the same
+as the current processor privilege level, and the effective virtualization mode
+for memory access is consistent with the current virtualization mode. If the
+MPRV bit is 1, the effective memory access privilege level is the privilege
+level stored in the MPP field of the mstatus register, and the effective
+virtualization mode for memory access is the virtualization mode stored in the
+MPV bit of the hstatus register. The privilege levels of the ITLB and DTLB are
+shown in the table.
 
 Table: Privilege Levels of ITLB and DTLB
 
-| **module** |                                                                                                                             **Privilege Level**                                                                                                                             |
-| :--------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-|    ITLB    |                                                                                                                      Current processor privilege level                                                                                                                      |
-|    DTLB    | When executing non-virtualized memory access instructions, if mstatus.MPRV=0, the current processor privilege level and virtualization mode are used; if mstatus.MPRV=1, the privilege level saved in mtatus.MPP and the virtualization mode saved in hstatus.MPV are used. |
+| ** module ** |                                                                                                                                 **Privilege Level**                                                                                                                                  |
+| :----------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+|     ITLB     |                                                                                                                          Current processor privilege level                                                                                                                           |
+|     DTLB     | When executing a non-virtualized memory access instruction, if mstatus.MPRV=0, the privilege level and virtualization mode are those of the current processor; if mstatus.MPRV=1, the privilege level is stored in mstatus.MPP and the virtualization mode is stored in hstatus.MPV. |
 
 ### Send PTW request
 
@@ -425,6 +425,13 @@ Additionally, vaNeedExt must be added to the output. Specifically:
           exception occurs on the original address, gpaddr is generated using
           the offset from fullva (0xffb). Here, fullva is always valid,
           regardless of whether checkfullva is asserted.
+       5. The TLB determines whether a page crossing occurs by comparing fullva
+          with vaddr. The specific logic is: `crossPageVaddr = Mux(fullva[12] ≠
+          vaddr[12], vaddr, fullva)`. That is, if bit 12 of fullva and vaddr
+          differ (indicating a cross to a different page), use vaddr; otherwise,
+          use fullva. For onlyStage2 mode, gpaddr is directly equal to
+          crossPageVaddr; for other modes, gpaddr is formed by concatenating
+          gvpn with the offset from crossPageVaddr.
 4. When vaNeedExt is valid (under what circumstances it is used)
    1. In the memory access queue (load queue/store queue), to save area, the
       original 64-bit address is truncated to 50 bits for storage. However, when
@@ -494,7 +501,52 @@ exceptions. Specifically:
    not enabled, zero-extend the upper 7 or 16 bits of the address based on
    whether the pmm value is 2 or 3, respectively.
 
-### Supports TLB compression
+### Supports Svnapot extension
+
+Currently, XiangShan also supports the Svnapot extension.
+
+The purpose of the Svnapot extension is to represent a contiguous block of pages
+(a power of 2 number of pages) with a single page table entry, reducing TLB
+pressure. In the PTE, when bit 63 is 1, it indicates that this page table entry
+is a NAPOT page table entry. The low 4 bits of the PPN of a NAPOT page table
+entry encode the contiguous address space represented by NAPOT. For example,
+when the low 4 bits of ppn are 1000, it indicates that this is a 64KB page table
+entry. In XiangShan, currently only 64KB NAPOT page table entries are supported.
+
+In the TLB, an N-bit is similarly set to indicate the NAPOT property. During hit
+matching, for a normal 4KB page, matching is done by comparing the low 6 bits of
+the tag with the [8:3] bits of the vpn. If the N bit of the TLB entry is 1,
+matching is done by comparing the [6:1] bits of the tag with the [8:4] bits of
+the vpn, because a NAPOT page covers 16 consecutive 4KB pages. When generating
+the physical address, a NAPOT page replaces the low 4 bits of the generated ppn
+with the low 4 bits of the vpn.
+
+### Supports Svpbmt extension
+
+Currently, XiangShan also supports the Svpbmt extension.
+
+The Svpbmt extension allows specifying memory type properties in page table
+entries. In the PTE, bits 62-61 (i.e., the pbmt field) are used to specify the
+memory type. The specific encoding is as follows:
+
+Table: Svpbmt type encoding
+
+| **pbmt value** | **Type** | ** describing **                                                         |
+| :------------: | :------: | ------------------------------------------------------------------------ |
+|       00       |   PMA    | No special attributes, use PMA configuration                             |
+|       01       |    NC    | Non-cacheable, idempotent, weakly-ordered (RVWMO), main memory type      |
+|       10       |    IO    | Non-cacheable, non-idempotent, strongly-ordered (I/O ordering), I/O type |
+|       11       | Reserved | Reserved for future standard use                                         |
+
+In the L1 TLB entry, two fields pbmt and g_pbmt are added to store the memory
+type attributes of the first-stage and second-stage page tables respectively.
+pbmt stores the pbmt attribute of the first-stage page table, and is valid in
+noS2xlate, allStage, and onlyStage1 modes. g_pbmt stores the pbmt attribute of
+the second-stage page table, and is valid in allStage and onlyStage2 modes. For
+allStage mode, when both stages have pbmt attributes, the pbmt of the first
+stage has higher priority.
+
+### Support for TLB compression
 
 ![TLB Compression Diagram](figure/image18.png)
 
@@ -517,80 +569,84 @@ bits of the physical page number. The valid field indicates whether the page
 table is valid within the compressed TLB entry, as shown in Table 5.1.8.
 
 Table 5.1.8 shows the comparison before and after compression. The tag before
-compression is the vpn, while the compressed tag is the upper 24 bits of the
-vpn, with the lower 3 bits not needing to be stored. In fact, for the i-th entry
-of 8 consecutive page table entries, i corresponds to the lower 3 bits of the
-tag. The upper 21 bits of ppn are the same, and ppn_low stores the lower 3 bits
-of ppn for each of the 8 entries. Valididx indicates the validity of these 8
-entries, where only valididx(i) being 1 means the entry is valid. pteidx(i)
-represents the i-th entry corresponding to the original request, i.e., the value
-of the lower 3 bits of the original request's vpn.
+compression is vpn, and the tag after compression is the upper vpnLen - 3 bits
+of vpn, the lower 3 bits do not need to be saved. In fact, for 8 consecutive
+page table entries, the i-th entry corresponds to the lower 3 bits of the tag.
+The upper ppnLen - 3 bits of ppn are the same, and ppn_low saves the lower 3
+bits of ppn for each of the 8 page table entries. Valididx indicates the
+validity of these 8 page table entries; only when valididx(i) is 1 is it valid.
+pteidx(i) represents the original request corresponding to the i-th entry, i.e.,
+the value of the lower 3 bits of the original request vpn.
 
-Here is an illustrative example. For instance, if a vpn is 0x0000154 with the
-lower three bits being 100 (i.e., 4), after being filled back into the L1 TLB,
-the 8 page table entries from vpn 0x0000150 to 0x0000157 will all be filled back
-and compressed into a single entry. For example, if the upper 21 bits of the ppn
-for vpn 0x0000154 are PPN0 and the page table attribute bits are PERM0, and if
-the upper 21 bits of the ppn and the page table attributes for the i-th entry
-among these 8 page tables are also PPN0 and PERM0, then valididx(i) is 1, with
-the lower 3 bits of the i-th page table saved via ppn_low(i). Additionally,
-pteidx(i) represents the i-th entry corresponding to the original request. Here,
-the lower three bits of the original request's vpn are 4, so pteidx(4) is 1,
-while all other pteidx(i) are 0.
+An example is given here for illustration. For instance, a certain vpn is
+0x0000154, with the lower three bits being 100, i.e., 4. When refilled into the
+L1 TLB, the 8 page table entries from vpn 0x0000150 to 0x0000157 are all
+refilled and compressed into 1 entry. For example, the upper bits of ppn for vpn
+0x0000154 are PPN0, and the page table attribute bits are PERM0. If for the i-th
+entry of these 8 page table entries, the upper ppn bits and page table
+attributes are also PPN0 and PERM0, then valididx(i) is 1, and the lower 3 bits
+of the i-th page table entry are saved via ppn_low(i). Additionally, pteidx(i)
+represents the original request corresponding to the i-th entry. Here, the lower
+three bits of the original request vpn are 4, so pteidx(4) is 1, and all other
+pteidx(i) are 0.
 
-Additionally, the TLB does not compress query results for large pages (1GB,
-2MB). For large pages, every bit of valididx(i) is set to 1 upon return.
-According to page table query rules, large pages do not actually use ppn_low, so
-the value of ppn_low can be arbitrary.
+Additionally, the TLB does not compress query results for large pages (1GB, 2MB)
+or NAPOT pages. For large pages, each bit of valididx(i) is set to 1 upon
+return. According to page table query rules, large pages do not actually use
+ppn_low, so the value of ppn_low can be arbitrary.
 
 Table: Contents stored per TLB entry before and after compression
 
-| **compressed or not** | **tag** | **asid** | **level** | **ppn** |       **perm**        | **valididx** | **pteidx** | **ppn_low** |
-| :-------------------: | :-----: | :------: | :-------: | :-----: | :-------------------: | :----------: | :--------: | :---------: |
-|          No           | 27 bits | 16-bit.  |  2 bits   | 24-bit  | Page table attributes |  Not saved   | Not saved  |  Not saved  |
-|          Yes          | 24-bit  | 16-bit.  |  2 bits   | 21 bits | Page table attributes |    8 bits    |   8 bits   |  8×3 bits.  |
+| **compressed or not** |  **tag**   | **asid** | **level** |  **ppn**   | **n** |       **perm**        | **valididx** | **pteidx** | **ppn_low** |
+| :-------------------: | :--------: | :------: | :-------: | :--------: | :---: | :-------------------: | :----------: | :--------: | :---------: |
+|          No           | 27/36 bits | 16 bits  |  2 bits   | 24/44 bits | 1 bit | Page Table Attributes |  Not Saved   | Not Saved  |  Not Saved  |
+|          Yes          | 24/33 bits | 16 bits  |  2 bits   | 21/41 bits | 1 bit | Page Table Attributes |    8 bits    |   8 bits   |  8×3 bits.  |
 
 
-After implementing TLB compression, the hit condition of L1 TLB changes from TAG
-hit to TAG hit (high bits of vpn match), while also requiring the valididx(i)
-indexed by the lower 3 bits of vpn to be valid. PPN is obtained by concatenating
-ppn (upper 21 bits) with ppn_low(i).
+After TLB compression is implemented, the hit condition of L1 TLB changes from
+TAG hit to TAG hit (high VPN bits match), while also requiring that valididx(i),
+indexed by the lower 3 bits of VPN, is valid. PPN is formed by concatenating ppn
+(high bits) with ppn_low(i).
 
 Note that after adding the H extension, L1TLB entries are divided into four
 types. The TLB compression mechanism is not enabled for virtualized TLB entries
 (though TLB compression is still used in the L2TLB). These four types will be
 described in detail later.
 
-### Stores four types of TLB entries.
+### Stores four types of TLB entries
 
 The L1 TLB entries have been modified with the addition of the H extension, as
 shown in [@fig:L1TLB-item].
 
 ![TLB Entry Diagram](figure/image19.png){#fig:L1TLB-item}
 
-Compared to the original design, g_perm, vmid, and s2xlate have been added.
-Here, g_perm stores the permission bits of the second-stage page table, vmid
-stores the VMID of the second-stage page table, and s2xlate distinguishes the
-types of TLB entries. The content stored in TLB entries varies depending on
-s2xlate.
+Compared to the original design, g_perm, vmid, s2xlate, pbmt, and g_pbmt have
+been added. Among them, g_perm is used to store the perm of the second-stage
+page table, vmid is used to store the vmid of the second-stage page table,
+s2xlate is used to distinguish the type of TLB entry, and pbmt and g_pbmt
+respectively store the memory type attributes of the first-stage and
+second-stage page tables. Depending on s2xlate, the content stored in the TLB
+entry also differs.
 
 Table: Types of TLB entries
 
-|  **type**   | **s2xlate** |                      **tag**                       |                       **ppn**                       |                       **perm**                       |          **g_perm**          |                   **level**                    |
-| :---------: | :---------: | :------------------------------------------------: | :-------------------------------------------------: | :--------------------------------------------------: | :--------------------------: | :--------------------------------------------: |
-|  noS2xlate  |     b00     |    Virtual page number in non-virtualized mode     |    Physical page number in non-virtualized mode     | Page table entry permissions in non-virtualized mode |           Not used           | Page table entry level in non-virtualized mode |
-|  allStage   |     b11     | Virtual page number of the first-stage page table  | Physical page number of the second-stage page table |          First-stage page table permissions          | Second-stage page table perm |   The highest level in two-stage translation   |
-| onlyStage1  |     b01     | Virtual page number of the first-stage page table  | Physical page number of the first-stage page table  |          First-stage page table permissions          |           Not used           |      Level of the first-stage page table       |
-| onlyStage2. |     b10     | Virtual page number of the second-stage page table | Physical page number of the second-stage page table |                       Not used                       | Second-stage page table perm |      Level of the second-stage page table      |
+|  **Type**   | **s2xlate** |                      **tag**                       |                       **ppn**                       |      **n**      |                       **perm**                       |             **g_perm**              |           **pbmt**           |        **g_pbmt**        |                   **level**                    |
+| :---------: | :---------: | :------------------------------------------------: | :-------------------------------------------------: | :-------------: | :--------------------------------------------------: | :---------------------------------: | :--------------------------: | :----------------------: | :--------------------------------------------: |
+|  noS2xlate  |     b00     |    Virtual page number in non-virtualized mode     |    Physical page number in non-virtualized mode     | NAPOT attribute | Page table entry permissions in non-virtualized mode |              Not used               | PBMT in non-virtualized mode |         Not used         | Page table entry level in non-virtualized mode |
+|  allStage   |     b11     | Virtual page number of the first-stage page table  | Physical page number of the second-stage page table | NAPOT attribute |          Perm of the first-stage page table          | Perm of the second-stage page table |   PBMT of the first stage    | PBMT of the second stage |     Minimum level in two-stage translation     |
+| onlyStage1  |     b01     | Virtual page number of the first-stage page table  | Physical page number of the first-stage page table  | NAPOT attribute |          Perm of the first-stage page table          |              Not used               |   PBMT of the first stage    |         Not used         |      Level of the first-stage page table       |
+| onlyStage2. |     b10     | Virtual page number of the second-stage page table | Physical page number of the second-stage page table | NAPOT attribute |                       Not used                       | Perm of the second-stage page table |           Not used           | PBMT of the second stage |      Level of the second-stage page table      |
 
 
-TLB compression technology is enabled in noS2xlate and onlyStage1 but not in
-other cases. In allStage and onlyS2xlate scenarios, the L1TLB hit mechanism uses
-pteidx to calculate the tag and ppn of valid ptes, and these two cases also
-differ during refill. Furthermore, asid is valid in noS2xlate, allStage, and
-onlyStage1, while vmid is valid in allStage and onlyS2xlate.
+Among these, the TLB compression technique is enabled in noS2xlate and
+onlyStage1, and disabled in other cases. In allStage and onlyS2xlate cases, the
+L1TLB hit mechanism uses pteidx to calculate the tag and ppn of a valid pte.
+These two cases also differ during refill. Additionally, asid is valid in
+noS2xlate, allStage, and onlyStage1; vmid is valid in allStage and onlyStage2;
+pbmt is valid in noS2xlate, allStage, and onlyStage1; and g_pbmt is valid in
+allStage and onlyStage2.
 
-### TLB refill merges the two stages of page tables.
+### TLB refill merges page tables of two stages
 
 With the H extension added to the MMU, the PTW response structure is divided
 into three parts. The first part, s1, is the original PtwSectorResp, storing the
@@ -609,121 +665,154 @@ the TLB entry, with a method similar to the original design, filling the
 corresponding fields of the returned s1 into the entry's corresponding fields.
 Note that for noS2xlate, the vmid field is invalid.
 
-For the onlyS2xlate case, we populate the TLB entry with the s2 result. Due to
-the TLB compression structure, special handling is required. First, the asid and
-perm fields of this entry are unused, so we do not care about the values filled
-here. The vmid is populated with the s1 vmid (since the PTW module always fills
-this field regardless of the scenario, it can be directly used for writing). The
-s2 tag is written into the TLB entry's tag, and the pteidx is determined based
-on the lower sectortlbwidth bits of the s2 tag. If s2 is a large page, all
-valididx fields in the TLB entry are marked valid; otherwise, only the valididx
-corresponding to the pteidx is valid. The ppn field is filled by reusing the
-allStage logic, which will be explained in the allStage case.
+For the onlyS2xlate case, we fill the TLB entry with the results of stage 2.
+Here, due to the need to conform to the TLB compression structure, some special
+handling is required. First, the asid and perm of this entry are not used, so we
+don't care what value is filled in at this time. vmid and n are filled with the
+vmid and n of stage 2. Fill the TLB entry's tag with the stage 2 tag. pteidx is
+determined by the low sectortlbwidth bits of the stage 2 tag. If stage 2 is a
+large page, then all valididx of the TLB entry are valid; otherwise, the pteidx
+of the TLB entry corresponds to a valid valididx. Regarding the filling of ppn,
+the logic from allStage is reused and will be introduced in the allStage case.
 
-For allStage, the two-stage page tables must be merged. First, populate the tag,
-asid, and vmid based on s1. Since there is only one level, the level field
-should be filled with the maximum value between s1 and s2. This accounts for
-scenarios where the first stage uses large pages and the second stage uses small
-pages, which might cause a query to hit a large page while exceeding the range
-of the second-stage page table. The tag for such requests must also be
-merged—for example, combining the first-level page number from the first tag
-with the second-level page number from the second tag (the third-level page
-number can be padded with zeros) to form the new page table tag. Additionally,
-populate the perm fields from both s1 and s2, along with s2xlate. For ppn, since
-guest physical addresses are not stored, if the first stage uses small pages and
-the second stage uses large pages, directly storing s2's ppn would result in
-incorrect physical address calculations during queries. Thus, s2's tag and ppn
-must first be concatenated based on s2's level, with s2ppn as the high-order ppn
-and s2ppn_tmp constructed for the low-order calculation. The high-order bits are
-stored in the TLB entry's ppn field, and the low-order bits in the ppn_low
-field.
+For allStage, the two-stage page tables need to be merged. First, fill in tag,
+asid, vmid, etc., based on stage 1. Since there is only one level, fill level
+with the minimum value of stage 1 and stage 2. This is because if a first-stage
+large page and a second-stage small page exist, querying an address might hit
+the large page but actually exceed the range of the second-stage page table. For
+such requests, the tag must also be merged. For example, if the first tag is a
+first-level page table and the second tag is a second-level page table, we need
+to concatenate the first-level page number of the first tag and the second-level
+page number of the second tag (the third-level page number can be directly
+zero-extended) to obtain the tag of the new page table. Additionally, fill in
+the perm of stage1 and stage2 as well as s2xlate. Regarding ppn, since we do not
+save the guest physical address, for the case of a first-stage small page and a
+second-stage large page, directly storing the ppn of stage2 will cause the
+physical address calculated upon querying this page table to be incorrect.
+Therefore, first, based on the level of stage2, concatenate the tag and ppn of
+stage2. s2ppn is the high-order ppn, and s2ppn_tmp is constructed for
+calculating the low order. Then fill the high order into the ppn field of the
+TLB entry, and the low order into the ppn_low field of the TLB entry. For the
+filled n, the n bit is considered 1 in the following cases:
 
-### The hit logic for TLB entries.
+1. When the n bit of stage1 is 1 and stage2 is not a leaf node.
+2. When the n bit of stage2 is 1 and stage1 is not a leaf node.
+3. When both the n bits of stage1 and stage2 are 1.
+
+In particular, for an allStage with exceptions, if stage1 raises an exception,
+the filled level should be written back as s1_level; if stage2 raises an
+exception:
+
+1. If stage1 is a fakePTE, the level should be written back as the maximum value
+   in stage1 and stage2 (indicating a vsatp configuration error).
+2. If stage1 is a non-leaf node, the level should be written back as s1_level.
+3. If stage1 is a leaf node, the level should be written back as the minimum
+   value in stage1 and stage2.
+
+### Hit detection logic for TLB entries
 
 There are three types of hits used in the L1TLB: TLB query hits, TLB fill hits,
 and PTW request response hits.
 
-For TLB hit queries, new parameters such as vmid, hasS2xlate, onlyS2, and onlyS1
-have been added. The Asid hit is always true during the second-stage
-translation. The H extension adds pteidx hit, which is enabled for small pages
-in allStage and onlyS2 scenarios to mask the TLB compression mechanism.
+For TLB query hits, parameters such as vmid, hasS2xlate, onlyS2, and onlyS1 have
+been added. The ASID hit is always true during stage-2 translation. The H
+extension adds a pteidx hit, which is enabled in the cases of small pages, n
+bits being 0, and under allStage and onlyS2, to mask the TLB compression
+mechanism.
 
-For TLB fill hits (wbhit), the input is PtwRespS2. The current VPN for
-comparison must be determined. If only the second-stage translation is involved,
-the upper bits of the s2 tag are used; otherwise, the tag of s1vpn is used, with
-zeros padded in the lower sectortlbwidth bits. The VPN is then compared with the
-tag of the TLB entry. The H extension modifies the wb_valid judgment and adds
-pteidx_hit and s2xlate_hit. For PTW responses involving only second-stage
-translation, wb_valididx is determined by the s2 tag; otherwise, it is directly
-connected to s1's valididx. The s2xlate hit compares the s2xlate field of the
-TLB entry with that of the PTW response to filter TLB entry types. The
-pteidx_hit is used to invalidate TLB compression: for second-stage-only
-translations, the lower bits of the s2 tag are compared with the pteidx of the
-TLB entry; for other two-stage translation cases, the pteidx of the TLB entry is
-compared with s1's pteidx.
+For TLB fill hits (wbhit), the input is PtwRespS2. It is necessary to determine
+the current VPN being compared. If it is a stage-2-only translation, use the
+high bits of the s2 tag; otherwise, use the s1vpn tag. Then, pad the low
+sectortlbwidth bits with 0, and compare the VPN against the TLB entry tag. The H
+extension modifies the wb_valid determination and adds pteidx_hit and
+s2xlate_hit. If the PTW response is for a stage-2-only translation, wb_valididx
+is determined by the s2 tag; otherwise, it directly connects to the s1 valididx.
+The s2xlate hit compares the TLB entry's s2xlate with the PTW response's s2xlate
+to filter the TLB entry type. The pteidx_hit is for invalidating TLB
+compression: for stage-2-only translation, it compares the low bits of the s2
+tag with the TLB entry's pteidx; for other two-stage translation cases, it
+compares the TLB entry's pteidx with the s1 pteidx.
 
-For PTW request resp hits, they are primarily used to determine whether the PTW
-req sent by the TLB corresponds to the resp or whether the PTW resp matches the
-TLB's request during a query. This method is defined in PtwRespS2 and internally
-divides hits into three types: for noS2_hit (noS2xlate), only s1 hit needs to be
-checked; for onlyS2_hit (onlyStage2), only s2 hit needs to be checked; for
-all_onlyS1_hit (allStage or onlyStage1), the vpnhit logic must be redesigned—it
-cannot simply check s1hit. The level for vpn_hit should use the maximum of s1
-and s2, then determine the hit based on the level, and include checks for vasid
-(from vsatp) hit and vmid hit.
+For PTW request response hits, this is mainly used to determine, when a PTW
+response arrives, whether the PTW request sent by the TLB exactly corresponds to
+that response, or to determine, during a TLB query, whether the PTW response is
+the PTW result needed for this TLB request. This method is defined in PtwRespS2.
+Internally, it is divided into three types of hits. For noS2_hit (noS2xlate),
+only determining whether s1 hits is sufficient. For onlyS2_hit (onlyStage2),
+only determining whether s2 hits is sufficient. For all_onlyS1_hit (allStage or
+onlyStage1), the vpnhit determination logic needs to be redesigned; it cannot
+simply determine s1hit. The level for determining vpn_hit should take the
+minimum value of s1 and s2, then determine the hit based on the level, and add
+the hit for vasid (from vsatp) and the hit for vmid.
 
-### Supports reissuing PTW to obtain gpaddr after a guest page fault.
+### Support for re-sending PTW to obtain gpaddr after a guest page fault
 
-Since the L1TLB does not store the gpaddr from translation results, when a guest
-page fault occurs after querying a TLB entry, a new PTW is required to obtain
-the gpaddr. In this case, the TLB response remains a miss. Additional registers
-have been added for this purpose.
+Since L1 TLB does not preserve the gpaddr in the translation result, when a TLB
+hits but the queried TLB entry has a guest page fault, the need_gpa special
+mechanism is required to re-fetch the gpaddr for exception handling. Below are
+the registers used by the need_gpa mechanism.
 
 Table: New Registers for Obtaining gpaddr
 
-|    **Name**     | **type** |                                ** function **                                |
-| :-------------: | :------: | :--------------------------------------------------------------------------: |
-|    need_gpa.    |   Bool   |         Indicates that there is currently a request acquiring gpaddr         |
-| need_gpa_robidx |  RobPtr  |                    robidx of the request to obtain gpaddr                    |
-|  need_gpa_vpn   |  vpnLen  |                   The vpn of the request to obtain gpaddr                    |
-|  need_gpa_gvpn  |  vpnLen  |                    Stores the gvpn of the obtained gpaddr                    |
-| need_gpa_refill |   Bool   | Indicates that the gpaddr of this request has been filled into need_gpa_gvpn |
+|      **Name**       |    **Type**     |                                ** function **                                |
+| :-----------------: | :-------------: | :--------------------------------------------------------------------------: |
+|      need_gpa.      |      Bool       |         Indicates that there is currently a request acquiring gpaddr         |
+|   need_gpa_robidx   |     RobPtr      |                    robidx of the request to obtain gpaddr                    |
+|    need_gpa_vpn     |     vpnLen      |                   The vpn of the request to obtain gpaddr                    |
+|    need_gpa_gvpn    |     vpnLen      |                    Stores the gvpn of the obtained gpaddr                    |
+|   resp_gpa_refill   |      Bool       | Indicates that the gpaddr of this request has been filled into need_gpa_gvpn |
+|    resp_s1_level    | log2Up(Level+1) |      Stores the level of the s1 page table, used for calculating gpaddr      |
+|   resp_s1_isLeaf    |      Bool       |                       Stores whether s1 is a leaf node                       |
+|  resp_s1_isFakePte  |      Bool       |                       Whether storage s1 is a fake PTE                       |
+| need_clear_need_gpa |      Bool       |              Used to quickly clear need_gpa during PTW fast hit              |
 
+#### need_gpa mechanism ####
 
-When a TLB query results in a guest page fault, a PTW is required again. At this
-point, need_gpa is set to valid, the requested vpn is filled into need_gpa_vpn,
-the requested robidx is filled into need_gpa_robidx, and resp_gpa_refill is
-initialized to false. When the PTW response is received and it is determined
-through need_gpa_vpn that it is a previously sent request to obtain gpaddr, the
-s2 tag from the PTW response is filled into need_gpa_gvpn, and need_gpa_refill
-is set to valid, indicating that the gvpn of gpaddr has been obtained. When the
-previous request re-enters the TLB, this need_gpa_gvpn can be used to calculate
-gpaddr and return it. Once a request completes this process, need_gpa is
-invalidated. Here, resp_gpa_refill remains valid, so the refilled gvpn may be
-used by other TLB requests (as long as they match need_gpa_vpn).
+1. A TLB query hits a TLB entry, but the entry has a guest page fault. At this
+   point, set need_gpa to valid, fill the requested vpn into need_gpa_vpn, fill
+   the requested robidx into need_gpa_robidx, and initialize resp_gpa_refill to
+   false. Simultaneously send a PTW request, where the getGpa signal is set to
+   true, indicating this request is only for obtaining the gpaddr. If the PTW
+   bypass hits (p_hit_fast), gpaddr-related information can be directly
+   obtained. At this point, set need_clear_need_gpa to clear the need_gpa state
+   in the next cycle, without waiting for the request to be resent.
+2. After the PTW response, use need_gpa_vpn to determine it is the previously
+   sent request for obtaining gpaddr, and save information such as gvpn,
+   s1_level, s1_isLeaf, s1_isFakePte into registers. If the response is in
+   OnlyStage2, fill the s2 tag of the PTW response into need_gpa_gvpn;
+   otherwise, calculate resp_gpa_gvpn through need_gpa_vpn, and set
+   resp_gpa_refill to valid, indicating that the gvpn of the gpaddr has been
+   obtained. When the previous request re-enters the TLB, this need_gpa_gvpn can
+   be used to calculate the gpaddr and return it. After a request completes the
+   above process, invalidate need_gpa. Here, resp_gpa_refill is still valid, so
+   the refilled gvpn may be used by other TLB requests (as long as it equals
+   need_gpa_vpn). Since getGpa is valid, this PTW response will not refill the
+   TLB.
+3. When the original request is resent and enters the TLB, since the
+   resp_gpa_refill && need_gpa_vpn_hit condition is met, the miss signal is no
+   longer raised. The TLB uses the cached gpaddr information to return the
+   exception result normally.
 
-Additionally, a redirect may occur, changing the entire instruction flow and
-preventing previously issued gpaddr requests from entering the TLB. If a
-redirect happens, the need_gpa_robidx register is used to determine whether to
-invalidate TLB registers related to gpaddr fetching.
+During processing, a redirect may occur, causing the entire instruction flow to
+change. The previous request for obtaining gpaddr will no longer enter the TLB.
+Therefore, if a redirect occurs, we use the saved need_gpa_robidx to determine
+whether the registers related to obtaining gpaddr in the TLB need to be
+invalidated.
 
-Additionally, to ensure that PTW requests for obtaining gpaddr do not refill the
-TLB upon return, a new output signal, getGpa, is added when sending PTW
-requests. This signal follows a path similar to memidx and can be referenced
-accordingly. The signal is passed into the Repeater, and when the PTW resp
-returns to the TLB, this signal is also sent back. If the signal is valid, it
-indicates that this PTW request is solely for obtaining gpaddr, and thus the TLB
-will not be refilled.
+To prevent the returned PTW request for obtaining gpaddr from refilling the TLB,
+since need_gpa is a register, it cannot prevent refill in the same cycle it is
+set. Therefore, the combined logic signal `maybe_need_gpa_not_allow_refill` is
+added to immediately prevent TLB refill in the same cycle that triggers
+need_gpa.
 
 Regarding the handling process of obtaining gpaddr after a guest page fault
 occurs, key points are reiterated here:
 
-1. The mechanism for obtaining GPA can be viewed as a buffer with only one
-   entry. When a guest page fault occurs for a request, the corresponding
-   information of need_gpa is written into this buffer. The GPA information
-   remains until the conditions need_gpa_vpn_hit && resp_gpa_refill are met, or
-   a flush (itlb)/redirect (dtlb) signal is received to refresh the GPA
-   information.
+1. The mechanism for obtaining gpa can be viewed as a buffer with only 1 entry.
+   When a request incurs a guest page fault, the corresponding need_gpa
+   information is written into this buffer. This continues until the
+   `need_gpa_vpn_hit &amp;&amp; resp_gpa_refill` condition is valid, or a flush
+   (itlb) / redirect (dtlb) signal is received to refresh the gpa information.
 
   * need_gpa_vpn_hit refers to: after a guest page fault occurs for a request,
     the vpn information is written into need_gpa_vpn. If the same vpn queries
@@ -773,14 +862,14 @@ occurs, key points are reiterated here:
 
 ## Overall Block Diagram
 
-The overall block diagram of the L1 TLB is described in [@fig:L1TLB-overall],
-including the ITLB and DTLB within the green box. The ITLB receives PTW requests
-from the Frontend, while the DTLB receives PTW requests from the Memblock. PTW
-requests from the Frontend include 3 requests from the ICache and 1 request from
-the IFU. PTW requests from the Memblock include 2 requests from the LoadUnit
-(with the AtomicsUnit occupying one of the LoadUnit's request channels), 1
-request from the L1 Load Stream & Stride prefetch, 2 requests from the
-StoreUnit, and 1 request from the SMSPrefetcher.
+The overall diagram of the L1 TLB is as described in [@fig:L1TLB-overall],
+including the ITLB and DTLB in the green box. The ITLB receives PTW requests
+from the Frontend, and the DTLB receives PTW requests from the Memblock. PTW
+requests from the Frontend include 2 requests from the ICache and 1 request from
+the IFU. PTW requests from the Memblock include 3 requests from the LoadUnit
+(AtomicsUnit and VSegmentUnit occupy 1 request channel of the LoadUnit), 1
+request from L1 Load Stream & Stride prefetch, 2 requests from the StoreUnit,
+and 1 request from the SMSPrefetcher.
 
 After obtaining results from ITLB and DTLB queries, PMP and PMA checks are
 required. Due to the small size of L1 TLB, the backup of PMP and PMA registers
@@ -809,8 +898,7 @@ address translated from the virtual address to the Frontend, along with
 information on whether a guest page fault, page fault, or access fault occurred.
 The timing is described as follows:
 
-* Cycle 0: The Frontend sends a PTW request to the ITLB, with req_valid set to
-  1.
+* Cycle 0: The Frontend sends a PTW request to the ITLB, setting req_valid to 1.
 * Cycle 1: ITLB returns the physical address to Frontend, with resp_valid set to
   1.
 
@@ -822,33 +910,34 @@ is as shown in [@fig:ITLB-time-miss].
 ![Timing Diagram of PTW Request from Frontend to ITLB Missing
 ITLB](figure/image13.svg){#fig:ITLB-time-miss}
 
-When a PTW request from the Frontend misses in the ITLB, the ITLB returns a
-resp_miss signal in the next cycle, indicating an ITLB miss. At this point, the
-requestor channel of the ITLB no longer accepts new PTW requests, and the
-Frontend repeats the same request until the page table is found in the L2 TLB or
-memory and a response is returned. (Note: "The requestor channel of the ITLB no
-longer accepts new PTW requests" is controlled by the Frontend. This means that
-whether the Frontend chooses not to resend the missed request or to resend
-another request, the Frontend's behavior is transparent to the TLB. If the
-Frontend sends a new request, the ITLB will directly discard the old request.)
+When a PTW request sent from the Frontend to the ITLB misses in the ITLB, a
+resp_miss signal will be returned to the Frontend in the next cycle, indicating
+an ITLB miss. At this point, the requestor channel of this ITLB no longer
+accepts new PTW requests. The Frontend retransmits the request until the page
+table in the L2 TLB or memory is queried and returned. (Please note, "The
+requestor channel of this ITLB no longer accepts new PTW requests" is controlled
+by the Frontend. That is, whether the Frontend chooses not to resend the missed
+request or resends other requests, the behavior of the Frontend is transparent
+to the TLB. If the Frontend chooses to send a new request, the ITLB will
+directly drop the old request.)
 
-When a PTW request from the Frontend misses in the ITLB, the ITLB returns a
-resp_miss signal in the next cycle, indicating an ITLB miss. At this point, the
-requestor channel of the ITLB no longer accepts new PTW requests, and the
-Frontend repeats the same request until the page table is found in the L2 TLB or
-memory and a response is returned. (Note: "The requestor channel of the ITLB no
-longer accepts new PTW requests" is controlled by the Frontend. This means that
-whether the Frontend chooses not to resend the missed request or to resend
-another request, the Frontend's behavior is transparent to the TLB. If the
-Frontend sends a new request, the ITLB will directly discard the old request.)
+When a PTW request sent from the Frontend to the ITLB misses in the ITLB, a
+resp_miss signal will be returned to the Frontend in the next cycle, indicating
+an ITLB miss. At this point, the requestor channel of this ITLB no longer
+accepts new PTW requests. The Frontend retransmits the request until the page
+table in the L2 TLB or memory is queried and returned. (Please note, "The
+requestor channel of this ITLB no longer accepts new PTW requests" is controlled
+by the Frontend. That is, whether the Frontend chooses not to resend the missed
+request or resends other requests, the behavior of the Frontend is transparent
+to the TLB. If the Frontend chooses to send a new request, the ITLB will
+directly drop the old request.)
 
 When an ITLB miss occurs, a PTW request is sent to the L2 TLB until a result is
 obtained. The timing interaction between the ITLB and L2 TLB, as well as the
 return of physical addresses and other information to the Frontend, can be seen
 in the timing diagram of Figure 4.4 and the following timing description:
 
-* Cycle 0: The Frontend sends a PTW request to the ITLB, with req_valid set to
-  1.
+* Cycle 0: The Frontend sends a PTW request to the ITLB, setting req_valid to 1.
 * Cycle 1: The ITLB query results in a miss, returning resp_miss as 1 and
   resp_valid as 1 to the Frontend. Simultaneously, the ITLB sends a PTW request
   to the L2 TLB (specifically to itlbrepeater1) in the same cycle, with
@@ -948,7 +1037,7 @@ ITLB is shown in [@fig:ITLB-time-ptw-resp].
 ![Timing diagram of itlbRepeater returning PTW response to
 ITLB](figure/image25.svg){#fig:ITLB-time-ptw-resp}
 
-The timing description is as follows:
+The sequence description is as follows:
 
 * Cycle X: The itlbRepeater receives the PTW response from the lower-level
   itlbRepeater via the L2 TLB, with itlbrepeater_ptw_resp_valid asserted high.
@@ -962,7 +1051,7 @@ the DTLB is shown in [@fig:DTLB-time-ptw-resp].
 ![Timing Diagram of DTLBRepeater Returning PTW Response to
 DTLB](figure/image27.svg){#fig:DTLB-time-ptw-resp}
 
-The timing description is as follows:
+The sequence description is as follows:
 
 * Cycle X: dtlbRepeater receives the PTW response from the L2 TLB passed through
   the lower-level dtlbRepeater, with dtlbrepeater_ptw_resp_valid high.

@@ -116,11 +116,11 @@ Table: State information stored in the StoreQueue
     * addrvalid: This store has completed virtual-to-physical address
       translation and obtained the physical address.
 
-    * If the memory dependency predictor is enabled, the SSID (Store-Set-ID)
-      marks historical information of previously failed load prediction
-      executions. If the current load hits an SSID in the history, it waits for
-      all older stores to complete; if there is no hit, it only waits for older
-      stores with the same physical address to complete.
+    * If the access dependency predictor is enabled, the SSID (Store-Set-ID)
+      records the history information of previous load prediction execution
+      failures; if the current load hits an SSID in the history, it will wait
+      for all older stores to complete; if there is no hit, it will only wait
+      for older stores with the same physical address to finish.
 
 ### Feature 2: Misaligned store instructions
 

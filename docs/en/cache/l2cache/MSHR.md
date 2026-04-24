@@ -78,22 +78,22 @@ be modified by internal MSHR actions.
 Schedule state items are named with ```s_``` as the prefix, and their overview
 is as follows:
 
-| Name             | Description                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| ```s_acquire```  | 首次需要向下游发送 权限提升请求 或 CMO 请求，或者需要向下发送被重试的写回或踢出请求                                                                              |
-| ```s_rprobe```   | Due to replacement or writeback, a Probe request needs to be sent upstream                                                 |
-| ```s_pprobe```   | Due to a downstream Snoop request, a Probe request needs to be sent upstream.                                              |
-| ```s_release```  | Writeback or eviction requests that need to be sent downstream                                                             |
-| ```s_probeack``` | Due to downstream Snoop requests, a Snoop response needs to be sent downstream                                             |
-| ```s_refill```   | Need to send a Grant response upstream                                                                                     |
-| ```s_retry```    | Due to no available way for replacement, the Grant response sent upstream needs to be retried                              |
-| ```s_cmoresp```  | Need to send a CBOAck response upstream                                                                                    |
-| ```s_cmometaw``` | Directory update requests sent to MainPipe caused by CMO                                                                   |
-| ```s_rcompack``` | 由于向下游发送了读请求，需要发送对应的 CompAck 回复                                                                                             |
-| ```s_wcompack``` | Since a write request was sent downstream, a corresponding CompAck response needs to be sent.                              |
-| ```s_cbwrdata``` | Due to a write request sent downstream, the corresponding CopyBackWrData needs to be sent to write back the data           |
-| ```s_reissue```  | Due to a RetryAck received from downstream and the MSHR having obtained PCredit, the request needs to be resent downstream |
-| ```s_dct```      | Due to downstream Forwarding Snoop requests, CompData needs to be sent in the form of DCT to provide data to other RNs.    |
+| Name             | Description                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ```s_acquire```  | For the first time, a permission upgrade request or CMO request needs to be sent downstream, or a retried writeback or eviction request needs to be sent downstream. |
+| ```s_rprobe```   | Due to replacement or writeback, a Probe request needs to be sent upstream                                                                                           |
+| ```s_pprobe```   | Due to a downstream Snoop request, a Probe request needs to be sent upstream.                                                                                        |
+| ```s_release```  | Writeback or eviction requests that need to be sent downstream                                                                                                       |
+| ```s_probeack``` | Due to downstream Snoop requests, a Snoop response needs to be sent downstream                                                                                       |
+| ```s_refill```   | Need to send a Grant response upstream                                                                                                                               |
+| ```s_retry```    | Due to no available way for replacement, the Grant response sent upstream needs to be retried                                                                        |
+| ```s_cmoresp```  | Need to send a CBOAck response upstream                                                                                                                              |
+| ```s_cmometaw``` | Directory update requests sent to MainPipe caused by CMO                                                                                                             |
+| ```s_rcompack``` | Because a read request was sent downstream, the corresponding CompAck response needs to be sent.                                                                     |
+| ```s_wcompack``` | Since a write request was sent downstream, a corresponding CompAck response needs to be sent.                                                                        |
+| ```s_cbwrdata``` | Due to a write request sent downstream, the corresponding CopyBackWrData needs to be sent to write back the data                                                     |
+| ```s_reissue```  | Due to a RetryAck received from downstream and the MSHR having obtained PCredit, the request needs to be resent downstream                                           |
+| ```s_dct```      | Due to downstream Forwarding Snoop requests, CompData needs to be sent in the form of DCT to provide data to other RNs.                                              |
 
 Wait state entries are named with ```w_``` as the prefix, and their overview is
 as follows:
@@ -171,10 +171,10 @@ task to the MainPipe:
 
 1. From replacement task
     - The replacement way selection has been completed
-    - All responses to the upstream Probe have been received
+    - All responses to the upstream Probe have been received.
     - The replacement read request has received all data from downstream.
 2. From CMO request
-    - All responses to the upstream Probe have been received
+    - All responses to the upstream Probe have been received.
 
 The writeback request task will require MainPipe to send a request on the TXREQ
 channel:
@@ -223,17 +223,19 @@ When ```s_probeack``` is marked as incomplete, its MSHR state must meet the
 following conditions before it can send a downstream Snoop response task to the
 MainPipe:
 
-- All responses to the upstream Probe have been received
+- All responses to the upstream Probe have been received.
 
 The downstream Snoop response task will require MainPipe to send messages on the
 TXRSP or TXDAT channel and specify the Snoop Response type in the MSHR. For
 details, see [@sec:mshr-snoop-details] [Snoop
 Processing](#sec:mshr-snoop-details).
 
-下游 Snoop 回复任务会在满足以下情况时要求 MainPipe 将 MSHR 持有的关联数据写入 DataStorage：
+The downstream Snoop response task will request the MainPipe to write the
+associated data held by the MSHR into the DataStorage when the following
+conditions are met:
 
 - The target state of the downstream Snoop request is not I.
-- 上游 L1 在 Probe 过程中返回了脏数据（ProbeAckData）
+- The upstream L1 returned dirty data during the Probe process (ProbeAckData)
 - The upstream L1 does not initiate a dirty data writeback (ReleaseData) nested
   before the Probe ends.
 
@@ -264,7 +266,7 @@ When ```s_refill``` is marked as incomplete, the MSHR state must meet the
 following conditions before it can send a replacement way query and upstream
 Grant response task to the MainPipe:
 
-- All responses to the upstream Probe have been received
+- All responses to the upstream Probe have been received.
 - The first Comp, CompData, or RespSepData response from downstream has been
   received
 - If required, receive all Comp, CompData, or DataSepResp responses from
@@ -280,7 +282,7 @@ When ```s_cmoresp``` is marked as incomplete, the MSHR state must meet the
 following conditions to send a replacement way query to MainPipe and an upstream
 CBOAck response task:
 
-- All responses to the upstream Probe have been received
+- All responses to the upstream Probe have been received.
 - A Comp response belonging to ```w_releaseack``` has been received from
   downstream
 - The Comp response from downstream belonging to ```w_grant``` has been received
@@ -720,9 +722,10 @@ sending a Probe toN request upstream to the L1 cache due to replacement, and the
 L1 cache's reply to this Probe toN has not yet been observed by CoupledL2,
 prompting the L1 cache to actively initiate a ReleaseData TtoN to CoupledL2.
 
-此时需要对 MSHR 内记录的缓存行状态进行如下更新：
+At this point, the cache line state recorded in the MSHR needs to be updated as
+follows:
 
-- 标记为 Dirty
+- Marked as Dirty
 - Update state to TIP.
 - Update status to upstream L1 no longer holds this cache line
 
@@ -738,7 +741,8 @@ response from the upstream L1 cache to this Probe toN has not yet been observed
 by CoupledL2, while the upstream L1 cache proactively initiates a Release TtoN
 to CoupledL2.
 
-此时需要对 MSHR 内记录的缓存行状态进行如下更新：
+At this point, the cache line state recorded in the MSHR needs to be updated as
+follows:
 
 - Update state to TIP.
 - Update status to upstream L1 no longer holds this cache line
@@ -759,7 +763,8 @@ sending a writeback request caused by replacement downstream, and before
 receiving a CompDBIDResp response from downstream, a new Snoop request is
 initiated by downstream to CoupledL2.
 
-此时需要对 MSHR 内记录的缓存行状态进行如下更新：
+At this point, the cache line state recorded in the MSHR needs to be updated as
+follows:
 
 - Clear State to Clean
 - Update the state to INVALID
@@ -777,7 +782,8 @@ sending a writeback request caused by replacement downstream, and before
 receiving a CompDBIDResp response from downstream, a new Snoop request is
 initiated by downstream to CoupledL2.
 
-此时需要对 MSHR 内记录的缓存行状态进行如下更新：
+At this point, the cache line state recorded in the MSHR needs to be updated as
+follows:
 
 - Clear State to Clean
 - If the cache line permission is not INVALID, update it to BRANCH
@@ -795,7 +801,8 @@ sending a writeback request caused by replacement downstream, and before
 receiving a CompDBIDResp response from downstream, a new Snoop request is
 initiated by downstream to CoupledL2.
 
-此时需要对 MSHR 内记录的缓存行状态进行如下更新：
+At this point, the cache line state recorded in the MSHR needs to be updated as
+follows:
 
 - Clear State to Clean
 - Update the state to INVALID
