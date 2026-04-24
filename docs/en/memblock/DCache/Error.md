@@ -70,9 +70,11 @@ first read operation (e.g., a load instruction or MainPipe access).
 
 ### Feature 3: Bus Error Unit Controller
 
-* DCache的ECC错误将统一发送到Bus Error Unit控制器处理。Bus Error Unit控制器保存信息有：
+* ECC errors from the DCache are uniformly sent to the Bus Error Unit controller
+  for processing. The Bus Error Unit controller stores the following
+  information:
 
-  Table: Bus Error Unit保存的信息
+  Table: Information stored by the Bus Error Unit
 
   | Field            | Descrption                          | Initial value | Address    |
   | ---------------- | ----------------------------------- | ------------- | ---------- |
@@ -80,7 +82,7 @@ first read operation (e.g., a load instruction or MainPipe access).
   | value            | Physical address of the error event | Undefined     | 0x38010008 |
   | enable           | Event valid mask                    | 1             | 0x38010010 |
   | global_interrupt | Global interrupt enable mask        | 0             | 0x38010018 |
-  | accrued          | 累积事件掩码                              | 0             | 0x38010020 |
+  | accrued          | Accumulated Event Mask              | 0             | 0x38010020 |
   | local_interrupt  | Hart local interrupt enable mask    | 0             | 0x38010028 |
 
   * Address space
@@ -97,7 +99,9 @@ first read operation (e.g., a load instruction or MainPipe access).
 
   * Controlled interrupt
 
-    * 局部中断：只能报告给Bus Error Unit所在的Hart, 上报至后端，有后端负责中断处理，目前采用NMI_31中断。
+    * Local interrupt: It can only be reported to the Hart where the Bus Error
+      Unit resides, and is reported to the backend, which is responsible for
+      interrupt handling. Currently, the NMI_31 interrupt is used.
 
     * Global interrupt: If a global interrupt occurs, the Bus Error Unit sends
       the interrupt information to the PLIC, which is responsible for reporting
@@ -111,17 +115,19 @@ first read operation (e.g., a load instruction or MainPipe access).
 
     Table: Tag ECC Error and Tag Hit Relationship
 
-    | Hit | Error                | Tag Error        |
-    | --- | -------------------- | ---------------- |
-    | N   | N                    | N                |
-    | N   | Y                    | Y (probably hit) |
-    | Y   | N                    | N                |
-    | Y   | Y(hit with error)    | Y                |
-    | Y   | Y(hit with no error) | N                |
+    | Hit | Error                 | Tag Error        |
+    | --- | --------------------- | ---------------- |
+    | N   | N                     | N                |
+    | N   | Y                     | Y (probably hit) |
+    | Y   | N                     | N                |
+    | Y   | Y(hit with error)     | Y                |
+    | Y   | Y (hit with no error) | N                |
 
-    表中Tag Hit 和 Tag ECC Error 与判断结果之间的关系
+    Relationship between Tag Hit and Tag ECC Error and the judgment result in
+    the table
 
-    * Data ECC 错误：命中行如果出现 ECC 错误，则认为出现 ECC 错误，如果不命中则不处理。
+    * Data ECC Error: If a hit line has an ECC error, it is considered an ECC
+      error. If there is no hit, it is not handled.
 
     * If an instruction access triggers an ECC error, it is considered a
       Hardware error and an exception is reported.
@@ -143,12 +149,13 @@ first read operation (e.g., a load instruction or MainPipe access).
     * If a tag ECC error occurs, there is no need to change the cache state, and
       a ProbeAck request with corrupt=1 must be returned to L2.
 
-    * 如果出现 data ecc error，按规则更改 cache 状态，如果需要返回数据，则需要向 l2 返回 corrupt=1 的
-      ProbeAckData请求。
+    * If a data ECC error occurs, change the cache state according to the rules.
+      If data needs to be returned, a ProbeAckData request with corrupt=1 must
+      be returned to L2.
 
 * Replace/Evict
 
-  * 对于 Replace/Evict，
+  * For Replace/Evict,
 
     * If a tag ECC error occurs, a Release request with corrupt=1 must be
       returned to L2.
@@ -172,7 +179,7 @@ first read operation (e.g., a load instruction or MainPipe access).
   * For Atomic operations, exceptions are reported, but errors are not forwarded
     to L2.
 
-* 多错误选择
+* Multiple Error Selection
 
   * If multiple errors occur simultaneously, the priority order is ldu0 > ldu1 >
     ldu2 > MainPipe
@@ -180,9 +187,9 @@ first read operation (e.g., a load instruction or MainPipe access).
 \newpage
 ## Overall Block Diagram
 
-![Error架构](./figure/DCache-CtrlUnit.svg){#fig:CtrlUnit width=40%}
+![Error Architecture](./figure/DCache-CtrlUnit.svg){#fig:CtrlUnit width=40%}
 
-## 接口时序
+## Interface Timing
 
 ### Configuration register timing
 
@@ -226,8 +233,9 @@ width=80%}
 
 ### Data injection timing
 
-* 如图\ref{fig:DCache-Error-DataInj-Timing}所示，当配置好寄存器（EccCtl,
-  EccEid和EccMask2）之后，当计时器计时到0，开始注入：
+* As shown in Figure \ref{fig:DCache-Error-DataInj-Timing}, after configuring
+  the registers (EccCtl, EccEid, and EccMask2), when the timer counts down to 0,
+  injection begins:
 
   * The tag injection interface io_pseudoError_1_valid is asserted,
 

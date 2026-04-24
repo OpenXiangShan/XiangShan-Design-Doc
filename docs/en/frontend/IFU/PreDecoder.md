@@ -1,8 +1,8 @@
 # IFU Submodule PreDecoder
 
-## Functional Description
+## Functional description
 
-### Functional Overview
+### Function Overview
 
 The PreDecoder receives the initial instruction code and performs instruction
 code generation. Each instruction code queries the pre-decoding table to produce
@@ -13,7 +13,7 @@ generates two types of valid instruction start vectors: one defaults the 1st
 2-byte as the start of a valid instruction, and the other defaults the 2nd
 2-byte as the start. The final selection is made at the IFU side.
 
-### Feature Descriptions
+### Subfeature description
 
 #### Feature 1: Instruction Code Generation (instr_gen)
 
@@ -50,11 +50,11 @@ instruction, the type of CFI instruction (branch/jal/jalr/call/ret), and the
 target address calculation offset for CFI instructions. The CFI instruction
 types are shown in Table 1.2.
 
-## Overall Block Diagram
+## Overall overview
 
 ![PreDecoder Structure](../figure/IFU/PreDecoder/PreDecoder_structure.png)
 
-## Interface timing
+## Interface Timing
 
 ![PreDecode Interface Timing](../figure/IFU/PreDecoder/PreDecoder_port.png)
 
@@ -63,9 +63,9 @@ and outputs are processed within the same clock cycle.
 
 # IFU Submodule PredChecker
 
-## Functional Description
+## Functional description
 
-### Functional Overview
+### Function Overview
 
 The branch prediction checker PredChecker receives prediction block information
 from the IFU (including the position of the predicted jump instruction within
@@ -78,34 +78,35 @@ The second stage outputs to the WB stage to generate frontend redirection upon
 detecting branch prediction errors and to write back correct prediction
 information to the FTQ.
 
-### Feature Descriptions
+### Subfeature description
 
 #### Feature 1: Jal Instruction Misprediction Check
 
-The condition for a jal instruction prediction error is when there is a jal
-instruction in the prediction block (indicated by pre-decode information), but
-either the prediction block does not predict a jump, or the predicted jump
-instruction in the block occurs after this jal instruction (i.e., this jal
-instruction was not predicted to jump).
+The condition for a jal instruction misprediction is that there is a jal
+instruction in the prediction block (as indicated by pre-decode information),
+but either this prediction block does not predict a jump, or the instruction
+predicted to be the jump target by this prediction block is after this jal
+instruction (i.e., this jal instruction is not predicted to jump).
 
 #### Feature 2: Ret Instruction Prediction Error Check
 
-The condition for a ret instruction misprediction is that the prediction block
-contains a ret instruction (provided by pre-decoding information), but either
-the prediction block has no predicted jump, or the predicted jump instruction in
-this prediction block is after the ret instruction (i.e., this ret instruction
-is not predicted to jump).
+The condition for a ret instruction misprediction is that there is a ret
+instruction in the prediction block (as indicated by pre-decode information),
+but either this prediction block does not predict a jump, or the instruction
+predicted to be the jump target by this prediction block is after this ret
+instruction (i.e., this ret instruction is not predicted to jump).
 
 #### Feature 6: Regenerate Instruction Valid Range Vector
 
 When PredChecker detects a Jal/Ret instruction misprediction, it needs to
 regenerate the instruction valid range vector, truncating the valid range to the
-position of the Jal/Ret instruction and setting all subsequent bits to 0. Note
-that both jal and ret instruction mispredictions will shorten the instruction
-valid range, so the fixedRange must be regenerated, and the prediction result
-must be corrected (i.e., canceling the original prediction and regenerating the
-prediction result for this instruction block based on the jal instruction's
-position).
+position of the Jal/Ret instruction, with all subsequent bits set to 0. It
+should be noted that the error detection of both jal and ret instructions will
+lead to a reduction in the instruction valid range, so it is necessary to
+regenerate a fixedRange for the instruction valid range, while also repairing
+the prediction result (i.e., canceling the original prediction result and
+regenerating the prediction result of this instruction block based on the
+position of the jal instruction).
 
 #### Feature 3: Non-CFI Prediction Error Check
 
@@ -135,11 +136,11 @@ the backend promptly. Due to timing considerations, other error information
 addresses) is returned to the IFU in the next cycle (WB) for frontend
 redirection.
 
-#### Overall Block Diagram
+#### Overall overview
 
 ![PredChecker Structure](../figure/IFU/PreDecoder/PredChecker_structure.png)
 
-#### Interface timing
+#### Interface Timing
 
 ![PredChecker Interface Timing](../figure/IFU/PreDecoder/PredChecker_port.png)
 

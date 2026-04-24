@@ -91,7 +91,7 @@ The list of submodules in each Slice is as follows:
   lower address bits
 - Cache line size is 64B, bus data width is 32B, a complete cache line transfer
   requires 2 beats of data transmission
-- Adopts a MESI-like cache coherence protocol
+- Adopting a MESI-like cache coherence protocol
 - Adopts a strict inclusion policy with DCache and a non-strict inclusion policy
   with ICache / PTW.
 - Adopts a non-blocking main pipeline structure
@@ -107,7 +107,7 @@ The list of submodules in each Slice is as follows:
 - Supports BOP prefetcher
 - Supports handling prefetch requests trained by L1 and backfilled to L2.
 - Supports replacement algorithms such as DRRIP / PLRU, defaulting to DRRIP
-- Supports hardware handling of Cache aliases.
+- Supports hardware handling of cache aliasing
 - Supports MMIO request handling. MMIO requests are converted from TileLink bus
   to CHI bus in CoupledL2 and arbitrated with cacheable requests from 4 Slices.
 
@@ -138,7 +138,7 @@ based on the cache block state and request information:
 When all operations required by a request are completed in the MSHR, the MSHR is
 released and waits to receive a new request.
 
-### Adopts a MESI-like cache coherence protocol
+### Adopting a MESI-like cache coherence protocol
 
 The cache subsystem of the Xiangshan core follows the rules of the TileLink
 consistency tree. The cache line states in CoupledL2 include N (Nothing), B
@@ -255,14 +255,14 @@ the two MSHR Tasks respectively:
 
 ### Supports parallel access to requests within the same Set
 
-CoupledL2 supports parallel access to multiple requests with the same Set. For
-multiple requests targeting the same Set, these requests do not require
-replacement way selection until the refill data is received, allowing them to be
-accessed in parallel until the refill data arrives. Upon receiving the refill
-data, the MSHR begins selecting the replacement way and writes the replaced
-block to the lower-level cache. The directory ensures that the replacement way
-selection does not choose a way currently being replaced, guaranteeing that
-multiple requests for the same Set will always select different replacement
+CoupledL2 supports parallel access for multiple requests to the same set. For
+multiple requests to the same set, these requests do not need to select a
+replacement way before receiving refill data, and can therefore be accessed in
+parallel until the refill data arrives. Upon receiving the refill data, the MSHR
+begins selecting a replacement way and writes the evicted block to the
+next-level cache. When selecting a replacement way, the directory must ensure it
+does not select a way that is currently being replaced, thereby guaranteeing
+that multiple requests to the same set will always select different replacement
 ways.
 
 ### Early wake-up of Load instructions
@@ -315,7 +315,7 @@ implemented as follows:
     response; for Acquire requests, L2 returns data and responses to the
     upstream node that issued the Acquire via the grantQueue queue.
 
-### Supports hardware handling of Cache aliases.
+### Supports hardware handling of cache aliasing
 
 The L1 Cache of the Xiangshan core adopts the VIPT indexing method, where the
 DCache is a 64KB 4-way set-associative structure. The index and block offset

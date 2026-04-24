@@ -18,15 +18,15 @@
 | ECC          | Error Correction Code                    | Error Check Code                                         |
 | SECDED.      | Single Error Correct Double Error Detect | Single-bit error correction, double-bit error detection. |
 | TL           | Tile Link.                               | Tile Link Bus Protocol                                   |
-| CHI.         |                                          | CHI 总线协议                                                 |
+| CHI.         | Coherent Hub Interface                   | CHI bus protocol                                         |
 
 ## Design specifications
 
 - Supports ECC Check
-- 支持 CHI DataCheck
-- 支持 CHI Poison
+- Support CHI DataCheck
+- Support CHI Poison
 
-## Cached 访存请求错误处理
+## Cached access request error handling
 
 Basic error handling logic: the Cache Level that detects the error reports it;
 the error status corresponding to the address is saved/propagated.
@@ -40,19 +40,21 @@ the error status corresponding to the address is saved/propagated.
 
 #### ECC Check Code
 
-L2 Cache 目前默认的 ECC 校验码为 SECDED。同时，L2 Cache 支持 parity、SEC 等校验码，可在 Configs
-中修改，编译时进行配置。相关[校验算法参考](https://github.com/OpenXiangShan/Utility/blob/master/src/main/scala/utility/ECC.scala)
+The default ECC code for L2 Cache is currently SECDED. Meanwhile, L2 Cache also
+supports parity, SEC, and other error-correcting codes, which can be modified in
+Configs and configured at compile time. Related [Error Correction Code
+Reference](https://github.com/OpenXiangShan/Utility/blob/master/src/main/scala/utility/ECC.scala).
 
-SECDED requires that for an n-bit data, the number of parity bits r must
-satisfy: 2^r ≥ n + r + 1
+For SECDED, for an $n$-bit data, the required number of check bits $r$ must
+satisfy: $2^r \geq n + r + 1$
 
 #### ECC processing flow
 
-The L2 Cache supports ECC functionality. When the MainPipe refills data to the
-Directory and DataStorage in stage s3, it calculates the check codes for the tag
-and data. The former is stored in the tagArray (SRAM) of the Directory along
-with the tag, while the latter is stored in the array (SRAM) of the DataStorage
-along with the data.
+The L2 Cache supports ECC functionality. When MainPipe refills data to Directory
+and DataStorage in s3, it calculates the check codes for tag and data. The
+former is stored together with the tag in the tagArray (SRAM) of the Directory,
+and the latter is stored together with the data in the array (SRAM) of the
+DataStorage.
 
 1. For tags, ECC encoding/decoding is performed directly on the tag as a unit.
 2. For data, based on physical design and the need for better error detection,
@@ -68,7 +70,7 @@ various Slices, and reports them to the BEU.
 
 ### Bus port
 
-#### TL 总线
+#### TL bus
 
 When the L2 Cache receives data from L1/L3 Cache and detects an error
 (denied/corrupt = 1), the MainPipe sets the tagErr/dataErr in the corresponding
@@ -79,12 +81,15 @@ or the corresponding meta has tagErr/dataErr = 1, the denied/corrupt signals in
 the corresponding channel (e.g., D channel GrantBuffer) are set to 1; otherwise,
 they are set to 0.
 
-- 特别的，对于 TL D 通道返回数据时，若 denied = 1，则需要将对应 corrupt 也置为 1；在当前设计下，L2 Cache 不应认为 L1
-  Cache 持有对应数据 copy（L1 Cache 在后续 Release 时，会直接丢弃对应 copy）
+- Specifically, when data is returned on the TL D channel, if denied = 1, the
+  corresponding corrupt must also be set to 1; in the current design, L2 Cache
+  should not assume that L1 Cache holds a corresponding data copy (L1 Cache will
+  directly discard the corresponding copy upon subsequent Release).
 
-- 特别的，由于 TL C 通道中只有 corrupt 域而不存在 denied 域。故使用 opcode 域用于辅助区分 denied/corrupt。如
-  [SinkC](https://github.com/OpenXiangShan/CoupledL2/blob/master/src/main/scala/coupledL2/SinkC.scala)
-  中
+- Specifically, since the TL C channel only has a corrupt field and no denied
+  field, the opcode field is used to assist in distinguishing denied/corrupt.
+  For example, in
+  [SinkC](https://github.com/OpenXiangShan/CoupledL2/blob/master/src/main/scala/coupledL2/SinkC.scala).
 ```
 task.corrupt := c.corrupt && (c.opcode === ProbeAckData || c.opcode === ReleaseData)
 task.denied := c.corrupt && (c.opcode === ProbeAck || c.opcode === Release)
@@ -92,7 +97,7 @@ task.denied := c.corrupt && (c.opcode === ProbeAck || c.opcode === Release)
 
 #### CHI Bus
 
-L2 Cache 支持可配置的 Poison/DataCheck：
+L2 Cache supports configurable Poison/DataCheck:
 - Poison Field:
     - In DAT, 1 Poison bit is set for every 8 bytes.
     - The L2 Cache adopts an over-poison strategy for Poison.
@@ -107,10 +112,13 @@ L2 Cache 支持可配置的 Poison/DataCheck：
 
 When the L2 Cache receives data from the L3 Cache and detects an error:
 
-1. respErr = NDERR，则不会将对应数据写入 L2 Cache，但会完成其余流水线处理（例如，对于来自 L1 Cache 的 Acquire
-   请求，L2 Cache 将会返回数据并将 denied 和 corrupt 置 1
-2. respErr = NDERR/DERR 或者 poison 域中任意一位为 1 或者 dataCheck 奇校验检验出错误时，则 MainPipe 在
-   s3 写 Directory 时，将对应 meta 中 dataErr 置为 1
+1. If respErr = NDERR, the corresponding data will not be written to L2 Cache,
+   but the remaining pipeline processing will be completed (for example, for
+   Acquire requests from L1 Cache, L2 Cache will return data and set denied and
+   corrupt to 1).
+2. When respErr = NDERR/DERR, or any bit in the poison field is 1, or the
+   dataCheck parity check detects an error, then MainPipe, when writing to
+   Directory in s3, will set dataErr in the corresponding meta to 1.
 3. If dataCheck detects an error, it reuses the ECC error reporting process.
    MainPipe collects the error information in s5 and reports it to BEU
 
@@ -120,11 +128,12 @@ When the L2 Cache transfers data to the L3 Cache:
    = 1, it sets respErr to NDERR and poison to all 0s.
 2. If the L2 Cache detects a data ECC error or the corresponding meta has
    dataErr = 1, it sets respErr to DERR and the poison field to all 1s.
-3. 若 L2 Cache 检测到 data ECC 错误或者对应 meta 中 tagErr = 1 且 dataErr = 1， 则将 respErr 置为
-   NDERR，将 poison 置为全 1
+3. If L2 Cache detects a data ECC error, or the corresponding meta has tagErr =
+   1 and dataErr = 1, then it will set respErr to NDERR and set poison to all
+   1s.
 4. If no errors are detected in the L2 Cache, respErr is set to OK and poison is
    set to all 0s.
-5. The dataCheck field is filled with a parity check code for the data.
+5. The dataCheck field fills in the check code for odd parity check on the data.
 
 * In the current version, the L2-supported Write/Snoop transactions do not allow
   respErr to be NDERR in the relevant data packet transmissions (thus, respErr
@@ -132,14 +141,17 @@ When the L2 Cache transfers data to the L3 Cache:
 
 Coherence State Handling (RN receives a request containing NDERR):
 
-1. 对于分配事务，L2 将正常处理流水线，但是不回将包含 NDERR 请求的相关数据写回 Directory 或者 DataStorage，缓存状态不变
-   （具体相关事务类型为 ReadClean, ReadNotSharedDirty, ReadShared, ReadUnique,
-   CleanUnique, MakeUnique）
+1. For allocation transactions, L2 will process the pipeline normally, but will
+   not write the data related to the NDERR request back to Directory or
+   DataStorage; the cache state remains unchanged (the specific related
+   transaction types are ReadClean, ReadNotSharedDirty, ReadShared, ReadUnique,
+   CleanUnique, MakeUnique).
 2. For release transactions, the L2 processes them normally (specific related
    transaction types include WriteBack, WriteEvictFull, Evict,
    WriteEvictOrEvict).
-3. 对于 Snoop，L2 probe L1（ToN），回复 SnpResp_I 以及 NDERR，一律不 forward（不回复 CompData），暂不将
-   L2 对应缓存行置为 Invalid
+3. For Snoop, L2 probes L1 (ToN), replies with SnpResp_I and NDERR, and does not
+   forward (does not reply with CompData) in any case; it temporarily does not
+   set the corresponding L2 cache line to Invalid.
 4. For other transactions, L2 ensures the corresponding data cache state is not
    upgraded (in the current version, this is guaranteed by 1)
 
@@ -150,7 +162,7 @@ but does not report any errors.
 
 CHI to TL (RXDAT/RXRSP).
 
-1. 若 respErr = NDERR，则置 denied 为 1
+1. If respErr = NDERR, set denied to 1.
 2. If respErr = NDERR/DERR or any bit in the poison field is 1 or dataCheck odd
    parity detects an error, then set corrupt to 1
 3. Otherwise, both denied and corrupt are set to 0.
@@ -165,4 +177,4 @@ TL to CHI (TXDAT).
 
 1. When corrupt = 1, set respErr to DERR and poison to all 1s
 2. When corrupt = 0, set respErr to OK and poison to all 0s
-3. The dataCheck field is filled with a parity check code for the data.
+3. The dataCheck field fills in the check code for odd parity check on the data.

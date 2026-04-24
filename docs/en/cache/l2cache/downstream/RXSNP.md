@@ -1,10 +1,10 @@
 # RXSNP
 
 ## Functional Description
-The RXSNP module processes Snoop requests from the RXSNP bus channel, converts
-them into internal task formats, and sends them to RequestArb. Meanwhile, if
-there is an ongoing MSHR that meets the following conditions, the RXSNP bus is
-blocked from entering SinkB:
+The RXSNP module processes the Snoop requests from the RXSNP bus channel,
+converts them into an internal task format, and then sends them to RequestArb.
+At the same time, if there is an ongoing match in the MSHR that meets the
+following conditions, it blocks the RXSNP bus from entering SinkB:
 - The address is the same and cannot be nested by this Snoop request.
 - The data block to be replaced has the same address as this Snoop request and
   cannot be nested by this Snoop.

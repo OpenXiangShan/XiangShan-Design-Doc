@@ -57,7 +57,7 @@ floating-point unit, it only needs to support calculations in three
 single-precision formats. The input operands and output results of this unit
 should all be $64$-bit, meaning it must support calculations in three formats:
 
-(1) One $f64 = f64 + f64$;
+(1) $1$ $f64 = f64 + f64$;
 
 (2) $1$ $f32 = f32 + f32$;
 
@@ -81,7 +81,7 @@ single-precision formats f32/f16, it can perform 2/4 sets of operations
 simultaneously, maintaining 100% bandwidth utilization. The supported
 single-precision format computations are as follows:
 
-(1) One $f64 = f64 + f64$;
+(1) $1$ $f64 = f64 + f64$;
 
 (2) 2 $f32 = f32 + f32$;
 
@@ -258,7 +258,7 @@ Table: Optimized Dual-Path Floating-Point Addition Algorithm
 |                         Preprocessing + Exchange                          | Normalized Instruction Subtraction + Swap |
 | Significant Digit Addition Conversion | Rounding | Leading Zero Detection |                 Alignment                 |
 |                               Normalization                               |      Significand addition | Rounding      |
-|                              Selection Path                               |              Selection Path               |
+|                                Select path                                |                Select path                |
 
 In the IEEE round-to-nearest ($RTN$) mode, computing $A+B$ and $A+B+1$ suffices
 to address all normalization possibilities (additional computation of $A+B+2$ is
@@ -279,7 +279,7 @@ subtraction with d > 1 is called the far path, while the path for equivalent
 subtraction with d ≤ 1 is called the close path. Cases involving infinity or NaN
 operands are handled separately and do not belong to the far or close paths.
 
-##### $far$ path
+##### Far path
 
 The $far$ path algorithm is illustrated in the figure, with the main steps as
 follows:
@@ -345,7 +345,7 @@ final result is selected between the overflow result and the normal computation
 result based on $overflow$. The exception flags in the $far$ path only produce
 overflow and inexact results.
 
-##### $close$ path
+##### Close path
 
 In the $close$ path, it must be an effective subtraction with $d \leq 1$,
 specifically categorized as $d=0$ or $d=1$. The algorithm is illustrated in the
@@ -637,13 +637,13 @@ multiplication.
 
 Table: Comparison of Three Algorithms for Unsigned Integer Multiplication
 
-|  Algorithm   | Delay ($ps$) | Area ($um²$) | Pipelining feasibility |
-| :----------: | :----------: | :----------: | :--------------------: |
-|  Method one  |   $285.15$   |  $1458.95$   |           No           |
-|  Method two  |   $320.41$   |  $2426.34$   |          Yes           |
-| Method three |   $302.19$   |  $2042.46$   |          Yes           |
+|  Algorithm   | Latency ($ps$) | Area ($um²$) | Pipelining feasibility |
+| :----------: | :------------: | :----------: | :--------------------: |
+|  Method one  |    $285.15$    |  $1458.95$   |           No           |
+|  Method two  |    $320.41$    |  $2426.34$   |          Yes           |
+| Method three |    $302.19$    |  $2042.46$   |          Yes           |
 
-##### $Booth$ encoding
+##### Booth encoding
 
 The purpose of Booth encoding is to reduce the number of partial products in a
 multiplier. Taking the binary unsigned integer multiplication C=A*B as an
@@ -785,7 +785,7 @@ concludes the introduction to Booth encoding. Note that the example uses an
 digits, $f32$ has an even number, requiring slight differences in zero-padding
 the most significant bit. Other steps are similar and thus omitted.
 
-##### $CSA$ Compression
+##### CSA compression
 
 $Carry$-$Save$-$Adder$ is a carry-save adder that compresses $n$ addends into
 $m$ addends ($m
@@ -921,21 +921,21 @@ synthesis results for different input XOR gates are shown in the table.
 
 Table: Synthesis Results of Different Input XOR Gates
 
-|     $106$ bits      | Delay ($ps$) | Area ($um²$) |
-| :-----------------: | :----------: | :----------: |
-|       $A$^$B$       |   $13.74$    |  $38.66880$  |
-|     $A$^$B$^$C$     |   $23.01$    |  $63.09120$  |
-|   $A$^$B$^$C$^$D$   |   $24.69$    |  $87.51360$  |
-| $A$^$B$^$C$^$D$^$E$ |   $37.21$    |  $99.72480$  |
+|      $106bit$       | Latency ($ps$) | Area ($um²$) |
+| :-----------------: | :------------: | :----------: |
+|       $A$^$B$       |    $13.74$     |  $38.66880$  |
+|     $A$^$B$^$C$     |    $23.01$     |  $63.09120$  |
+|   $A$^$B$^$C$^$D$   |    $24.69$     |  $87.51360$  |
+| $A$^$B$^$C$^$D$^$E$ |    $37.21$     |  $99.72480$  |
 
 The synthesis results of $CSA3\_2$ and $CSA4\_2$ are shown in the table.
 
 Table: Synthesis Results of $CSA3\_2$ and $CSA4\_2$
 
-| $106$ bits | Delay ($ps$) | Area ($um²$) |
-| :--------: | :----------: | :----------: |
-| $CSA3\_2$  |   $23.23$    | $104.42880$  |
-| $CSA4\_2$  |   $40.63$    | $237.86881$  |
+| $106bit$  | Latency ($ps$) | Area ($um²$) |
+| :-------: | :------------: | :----------: |
+| $CSA3\_2$ |    $23.23$     | $104.42880$  |
+| $CSA4\_2$ |    $40.63$     | $237.86881$  |
 
 It can be seen that although $CSA4\_2$ theoretically has a delay of three XOR
 gates and $CSA3\_2$ theoretically has a delay of two XOR gates, in actual
@@ -944,7 +944,7 @@ $CSA3\_2$. Therefore, $CSA3\_2$ should be used whenever possible, unless one
 level of $CSA4\_2$ can replace two levels of $CSA3\_2$, such as in $4->2$
 compression or $8->2$ compression.
 
-##### CSAn_2
+##### CSAn\_2
 
 For two unsigned integer multiplications using Booth encoding, the number of
 partial products is ceil((n+1)/2). To ensure correct carry propagation, the
@@ -1138,7 +1138,7 @@ for subtraction). Since $adder$ may be negative, an extra $1$-bit is extended
 solely for sign determination of $adder$, which is later discarded. $adder\_inv$
 inverts $adder$ when it is negative and removes this sign bit.
 
-##### $LZD$, left shift, rounded and unrounded mantissa results
+##### LZD, left shift, rounding, and unrounded tail result
 
 After computing $adder\_inv$, a leading-zero detection must be performed on
 $adder\_inv$ to determine the number of left shifts required, thereby
@@ -1474,32 +1474,32 @@ presents the quotient selection function after logical correction.
 
 Table: Standard Quotient Selection Function
 
-|  $4 × rem[i]$   | $q_{i+1}$ |
-| :-------------: | :-------: |
-|  $[13/8,31/8]$  |   $+2$    |
-|  $[4/8,12/8]$   |   $+1$    |
-|  $[-3/8,3/8]$   |    $0$    |
-| $[-12/8,-4/8]$  |   $-1$    |
-| $[-32/8,-13/8]$ |   $-2$    |
+| $4 \times rem[i]$ | $q_{i+1}$ |
+| :---------------: | :-------: |
+|   $[13/8,31/8]$   |   $+2$    |
+|   $[4/8,12/8]$    |   $+1$    |
+|   $[-3/8,3/8]$    |    $0$    |
+|  $[-12/8,-4/8]$   |   $-1$    |
+|  $[-32/8,-13/8]$  |   $-2$    |
 
 Table: Quotient Selection Function After Logical Correction
 
-|  $4 × rem[i]$   | $carry$ | $q_{i+1}$ |
-| :-------------: | :-----: | :-------: |
-|     $31/8$      |   $1$   |   $+2$    |
-|  $[13/8,30/8]$  |    -    |   $+2$    |
-|     $12/8$      |   $0$   |   $+2$    |
-|     $12/8$      |   $1$   |   $+1$    |
-|  $[4/8,11/8]$   |    -    |   $+1$    |
-|      $3/8$      |   $0$   |   $+1$    |
-|      $3/8$      |   $1$   |    $0$    |
-|  $[-3/8,2/8]$   |    -    |    $0$    |
-|     $-4/8$      |   $0$   |    $0$    |
-|     $-4/8$      |   $1$   |   $-1$    |
-| $[-12/8, -5/8]$ |    -    |   $-1$    |
-|     $-13/8$     |   $0$   |   $-1$    |
-|     $-13/8$     |   $1$   |   $-2$    |
-| $[-32/8,14/8]$  |    -    |   $-2$    |
+| $4 \times rem[i]$ | $carry$ | $q_{i+1}$ |
+| :---------------: | :-----: | :-------: |
+|      $31/8$       |   $1$   |   $+2$    |
+|   $[13/8,30/8]$   |    -    |   $+2$    |
+|      $12/8$       |   $0$   |   $+2$    |
+|      $12/8$       |   $1$   |   $+1$    |
+|   $[4/8,11/8]$    |    -    |   $+1$    |
+|       $3/8$       |   $0$   |   $+1$    |
+|       $3/8$       |   $1$   |    $0$    |
+|   $[-3/8,2/8]$    |    -    |    $0$    |
+|      $-4/8$       |   $0$   |    $0$    |
+|      $-4/8$       |   $1$   |   $-1$    |
+|  $[-12/8, -5/8]$  |    -    |   $-1$    |
+|      $-13/8$      |   $0$   |   $-1$    |
+|      $-13/8$      |   $1$   |   $-2$    |
+|  $[-32/8,14/8]$   |    -    |   $-2$    |
 
 Convert the redundant remainder representation of the iteratively output digits
 back to a standard remainder. Use $On$ $the$ $Fly$ $Conversion$ to compute both
@@ -1745,7 +1745,7 @@ operand; $vfclass$ has only one vector register as the source operand.
 
 Table: $VFALU$ Opcode
 
-| $op\_code$ | Corresponding instruction | Operand format |           Meaning           |
+| $op\_code$ | Corresponding Instruction | Operand Format |           Meaning           |
 | :--------: | :-----------------------: | :------------: | :-------------------------: |
 |    $0$     |        $vf(w)add$         |    $vv,vf$     |          Addition           |
 |    $1$     |        $vf(w)sub$         |    $vv,vf$     |         Subtraction         |
@@ -1777,22 +1777,22 @@ performed.
 
 Table: $VFALU$ interface and meanings
 
-|    Interface    | Direction | Bit Width |                            Meaning                            |
+|    interface    | direction | bit width |                            Meaning                            |
 | :-------------: | :-------: | :-------: | :-----------------------------------------------------------: |
-|      fp_a       |  $input$  |   $64$    |                     Source operand $vs2$                      |
+|     $fp\_a$     |  $input$  |   $64$    |                     Source operand $vs2$                      |
 |     $fp\_b$     |  $input$  |   $64$    |                     Source operand $vs1$                      |
 |   $widen\_a$    |  $input$  |   $64$    |                         $widen\_vs2$                          |
 |   $widen\_b$    |  $input$  |   $64$    |                         $widen\_vs1$                          |
-|     $frs1$      |  $input$  |   $64$    |                 Floating-Point Register Data                  |
-|   $is\_frs1$    |  $input$  |   $64$    |       Addend sourced from floating-point register data        |
+|     $frs1$      |  $input$  |   $64$    |                 Floating-point register data                  |
+|   $is\_frs1$    |  $input$  |   $64$    |      The addend comes from floating-point register data       |
 |     $mask$      |  $input$  |    $4$    |        Participate in $merge$ instruction computation         |
-|   $uop\_idx$    |  $input$  |    $1$    |             Select upper/lower half when $widen$              |
+|   $uop\_idx$    |  $input$  |    $1$    |             Select the high/low half when $widen$             |
 |  $round\_mode$  |  $input$  |    $3$    |                         Rounding mode                         |
 |  $fp\_format$   |  $input$  |    $2$    |                     Floating-point format                     |
 | $res\_widening$ |  $input$  |    $1$    |                      $widen$ instruction                      |
 | $opb\_widening$ |  $input$  |    $1$    | Is the source operand $vs1$ in the same format as the result? |
 |   $op\_code$    |  $input$  |    $5$    |                            Opcode                             |
-|    fp_result    | $output$  |   $64$    |                      Computation result                       |
+|  $fp\_result$   | $output$  |   $64$    |                      Computation result                       |
 |    $fflags$     | $output$  |   $20$    |                           Flag bits                           |
 
 ### Vector Floating-Point Fused Multiply-Add Unit
@@ -1862,7 +1862,7 @@ register $frs1$.
 
 Table: $VFMA$ Opcode
 
-| $op\_code$ | Corresponding instruction | Operand format | Meaning                              |
+| $op\_code$ | Corresponding Instruction | Operand Format | Meaning                              |
 | ---------- | ------------------------- | -------------- | ------------------------------------ |
 | $0$        | $vf(w)mul$                | $vv,vf$        | $vd[i] = vs[2] × vs1[i]$             |
 | $1$        | $vf(w)macc$               | $vv,vf$        | $vd[i] = +(vs1[i] × vs2[i]) + vd[i]$ |
@@ -1884,22 +1884,22 @@ $widen\_b$. $frs1$ and $is\_frs1$ are used to support $vf$ instructions.
 
 Table: $VFMA$ Interface and Meanings
 
-|    Interface    | Direction | Bit Width |                     Meaning                      |
-| :-------------: | :-------: | :-------: | :----------------------------------------------: |
-|      fp_a       |  $input$  |   $64$    |               Source operand $vs2$               |
-|     $fp\_b$     |  $input$  |   $64$    |               Source operand $vs1$               |
-|     $fp\_c$     |  $input$  |   $64$    |               Source operand $vd$                |
-|   $widen\_a$    |  $input$  |   $64$    |                   $widen\_vs2$                   |
-|   $widen\_b$    |  $input$  |   $64$    |                   $widen\_vs1$                   |
-|     $frs1$      |  $input$  |   $64$    |           Floating-Point Register Data           |
-|   $is\_frs1$    |  $input$  |   $64$    | Addend sourced from floating-point register data |
-|   $uop\_idx$    |  $input$  |    $1$    |       Select upper/lower half when $widen$       |
-|  $round\_mode$  |  $input$  |    $3$    |                  Rounding mode                   |
-|  $fp\_format$   |  $input$  |    $2$    |              Floating-point format               |
-| $res\_widening$ |  $input$  |    $1$    |               $widen$ instruction                |
-|   $op\_code$    |  $input$  |    $5$    |                      Opcode                      |
-|    fp_result    | $output$  |   $64$    |                Computation result                |
-|    $fflags$     | $output$  |   $20$    |                    Flag bits                     |
+|    interface    | direction | bit width |                      Meaning                       |
+| :-------------: | :-------: | :-------: | :------------------------------------------------: |
+|     $fp\_a$     |  $input$  |   $64$    |                Source operand $vs2$                |
+|     $fp\_b$     |  $input$  |   $64$    |                Source operand $vs1$                |
+|     $fp\_c$     |  $input$  |   $64$    |                Source operand $vd$                 |
+|   $widen\_a$    |  $input$  |   $64$    |                    $widen\_vs2$                    |
+|   $widen\_b$    |  $input$  |   $64$    |                    $widen\_vs1$                    |
+|     $frs1$      |  $input$  |   $64$    |            Floating-point register data            |
+|   $is\_frs1$    |  $input$  |   $64$    | The addend comes from floating-point register data |
+|   $uop\_idx$    |  $input$  |    $1$    |       Select the high/low half when $widen$        |
+|  $round\_mode$  |  $input$  |    $3$    |                   Rounding mode                    |
+|  $fp\_format$   |  $input$  |    $2$    |               Floating-point format                |
+| $res\_widening$ |  $input$  |    $1$    |                $widen$ instruction                 |
+|   $op\_code$    |  $input$  |    $5$    |                       Opcode                       |
+|  $fp\_result$   | $output$  |   $64$    |                 Computation result                 |
+|    $fflags$     | $output$  |   $20$    |                     Flag bits                      |
 
 ### Vector floating-point divider
 
@@ -2019,7 +2019,7 @@ $VFDIV$, with the interfaces as shown in the table below.
 
 Table: $VFDIV$ Interface and Meanings
 
-| Interface          | Direction | Bit Width | Meaning                                            |
+| interface          | direction | bit width | Meaning                                            |
 | ------------------ | --------- | --------- | -------------------------------------------------- |
 | $start\_valid\_i$  | $input$   | $1$       | Handshake signal                                   |
 | $finish\_ready\_i$ | $input$   | $1$       | Handshake signal                                   |
@@ -2037,7 +2037,7 @@ Table: $VFDIV$ Interface and Meanings
 | $fpdiv\_res\_o$    | $output$  | $64$      | Computation result                                 |
 | $fflags\_o$        | $output$  | $20$      | Flag bits                                          |
 
-### Vector format conversion module $VCVT$
+### Vector Format Conversion Module VCVT
 
 The $VCVT$ module is a three-stage pipelined vector floating-point format
 conversion module. It instantiates two $VectorCvt$ submodules capable of
@@ -2077,7 +2077,7 @@ conversion process to a certain extent.
 Building on this, $VFCVT64$ is divided into 5 categories: $int -> fp$, $fp ->
 fp$ widen, $fp -> fp$ narrow, estimate7 ($rsqrt7$ & $rec7$), and $fp -> int$.
 
-#### $FuopType$ decoding logic
+#### FuopType Decode Logic
 
 For the $cvt$ instruction: its $fuopType$ consists of $9$ bits, with each bit
 representing the following information:

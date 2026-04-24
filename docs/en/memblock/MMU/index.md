@@ -43,7 +43,7 @@ The overall design specifications of the MMU module are as follows:
 5. Supports dynamic and static PMA checks
 6. Supports ASID
 7. Support Sfence.vma
-8. Support software updates for A/D bits
+8. Support software update A/D bits
 9. Supports two-stage address translation with the H extension.
 10. Supports the Sv39x4 paging mechanism
 11. Supports VMID
@@ -51,20 +51,22 @@ The overall design specifications of the MMU module are as follows:
 
 ## Functional Description
 
-The MMU module of Xiangshan consists of L1 TLB, Repeater, L2 TLB, PMP, and PMA
-modules, with the L2TLB module further divided into Page Cache, Page Table
-Walker, Last Level Page Table Walker, Miss Queue, and Prefetcher. Before memory
-read/write operations within the core, including frontend instruction fetch and
-backend memory access, address translation is performed by the MMU module.
-Frontend instruction fetch and backend memory access perform address translation
-via ITLB and DTLB, respectively, both using non-blocking access. The TLB must
-return whether a request misses to the request source, which then schedules a
-resend of the TLB query until a hit occurs. For missed Load requests, the
-Kunming Lake architecture supports TLB Hint, meaning that when the L2 TLB
-refills the page table into the L1 TLB, it can precisely wake up Load
-instructions blocked due to TLB misses for that virtual address. When L1 TLB
-(ITLB or DTLB) misses, it accesses the L2 TLB. If the L2 TLB also misses, the
-Page Table Walker accesses the page table in memory.
+The MMU module of Xiangshan consists of L1 TLB, Repeater, L2 TLB, PMP and PMA
+modules. The L2TLB module is further divided into five parts: Page Cache, Page
+Table Walker, Last Level Page Table Walker, Miss Queue, and Prefetcher. Before
+memory read and write operations within the core, including front-end
+instruction fetch and back-end memory access, address translation must be
+performed by the MMU module. Front-end instruction fetch and back-end memory
+access perform address translation through ITLB and DTLB respectively, both
+using non-blocking access. Specifically, MMIO uses blocking ITLB for address
+translation. The TLB needs to return whether a request is a miss, report this to
+the request source, and the request source will then schedule and resend the TLB
+query request until a hit occurs. For missed Load requests, the Kunminghu
+architecture supports TLB Hint, meaning that when the L2 TLB refills the page
+table into the L1 TLB, it can precisely wake up the Load instruction that was
+stalled due to the TLB miss of that virtual address. When a miss occurs in the
+L1 TLB (ITLB and DTLB), the L2 TLB is accessed. If the L2 TLB still misses, the
+page table in memory is accessed via the Page Table Walker.
 
 The Repeater serves as a request buffer between the L1 TLB and L2 TLB, adding
 pipeline stages due to the significant physical distance between them. Since
@@ -106,11 +108,11 @@ both frontend instruction fetch and backend memory access employ non-blocking
 TLB access—when a request misses, the miss information is returned, and the
 request source schedules a resend of the TLB query until a hit occurs.
 
-Additionally, the memory access features 2 Load pipelines, 2 Store pipelines,
-along with an SMS prefetcher and an L1 Load stream & stride prefetcher. To
+Meanwhile, the memory access subsystem has 3 Load pipelines, 2 Store pipelines,
+as well as an SMS prefetcher and an L1 Load stream & stride prefetcher. To
 handle numerous requests, the two Load pipelines and the L1 Load stream & stride
-prefetcher utilize the Load DTLB, the two Store pipelines use the Store DTLB,
-and prefetch requests employ the Prefetch DTLB, totaling 3 DTLBs.
+prefetcher use the Load DTLB, the two Store pipelines use the Store DTLB, and
+prefetch requests use the Prefetch DTLB, for a total of 3 DTLBs.
 
 To avoid duplicate entries in the TLB, the ITLB repeater and DTLB repeater
 receive requests from the ITLB and DTLB respectively, filtering out duplicate
@@ -324,7 +326,7 @@ Table: HGATP Register Format {#tbl:MMU-CSR_HGATP}
 |  [57:44]  |   VMID    |                                                 Virtual machine identifier. For the Sv39x4 address translation mode adopted by the Xiangshan Kunminghu architecture, the maximum VMID length is 14.                                                  |
 |  [43:0]   |    PPN    |                                               Represents the physical page number of the root page table for the second-stage translation, obtained by right-shifting the physical address by 12 bits.                                               |
 
-### Support software updates for A/D bits
+### Support software update A/D bits
 
 Xiangshan supports software management of A/D bits in page tables. The A bit
 indicates that the page has been read, written, or fetched since the last time
@@ -397,24 +399,24 @@ Possible exceptions and the MMU module's handling process are shown in
 
 Table: Possible MMU exceptions and handling procedures {#tbl:MMU-exceptions}
 
-| **module** |     **Possible Exceptions**     |                                 ** processing flow **                                  |
-| :--------: | :-----------------------------: | :------------------------------------------------------------------------------------: |
-|    ITLB    |                                 |                                                                                        |
-|            |    Generate inst page fault     |            Deliver to Icache or IFU for processing based on request source             |
-|            | Generate inst guest page fault  |            Deliver to Icache or IFU for processing based on request source             |
-|            |   Generate inst access fault    |            Deliver to Icache or IFU for processing based on request source             |
-|    DTLB    |                                 |                                                                                        |
-|            |   Generates a load page fault   |                         Hand over to LoadUnits for processing.                         |
-|            | Generate load guest page fault  |                         Hand over to LoadUnits for processing.                         |
-|            |    Generate store page fault    | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|            | Generate store guest page fault | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|            |  Generate a load access fault   |                         Hand over to LoadUnits for processing.                         |
-|            |   Generate store access fault   | Based on the request source, it is processed by StoreUnits or AtomicsUnit respectively |
-|   L2 TLB   |                                 |                                                                                        |
-|            |    Generate guest page fault    |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |       Generate page fault       |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |      Generate access fault      |          Delivered to L1 TLB, which processes the request based on its origin          |
-|            |         ECC check error         |       Invalidate the current entry, return a miss result, and restart Page Walk.       |
+| **module** |     **Possible Exceptions**     |                                ** processing flow **                                |
+| :--------: | :-----------------------------: | :---------------------------------------------------------------------------------: |
+|    ITLB    |                                 |                                                                                     |
+|            |    Generate inst page fault     |         Deliver to Icache or IFU for processing based on the request source         |
+|            | Generate inst guest page fault  |         Deliver to Icache or IFU for processing based on the request source         |
+|            |   Generate inst access fault    |         Deliver to Icache or IFU for processing based on the request source         |
+|    DTLB    |                                 |                                                                                     |
+|            |   Generates a load page fault   |                         Deliver to LoadUnits for processing                         |
+|            | Generate load guest page fault  |                         Deliver to LoadUnits for processing                         |
+|            |    Generate store page fault    |   Deliver to StoreUnits or AtomicsUnit for processing based on the request source   |
+|            | Generate store guest page fault |   Deliver to StoreUnits or AtomicsUnit for processing based on the request source   |
+|            |  Generate a load access fault   |                         Deliver to LoadUnits for processing                         |
+|            |   Generate store access fault   |   Deliver to StoreUnits or AtomicsUnit for processing based on the request source   |
+|   L2 TLB   |                                 |                                                                                     |
+|            |    Generate guest page fault    | Deliver to L1 TLB, which then dispatches for processing based on the request source |
+|            |       Generate page fault       | Deliver to L1 TLB, which then dispatches for processing based on the request source |
+|            |      Generate access fault      | Deliver to L1 TLB, which then dispatches for processing based on the request source |
+|            |         ECC check error         |     Invalidate the current entry, return a miss result, and restart Page Walk.      |
 
 
 ## Overall Design {#sec:MMU-overall}
@@ -423,17 +425,16 @@ The overall architecture of the MMU is shown in [@fig:MMU-arch-overall].
 
 ![MMU Module Overall Block Diagram](figure/image9.jpeg){#fig:MMU-arch-overall}
 
-The ITLB receives PTW requests from the Frontend, while the DTLB receives PTW
-requests from the Memblock. PTW requests from the Frontend include 3 requests
+The ITLB receives PTW requests from the Frontend, and the DTLB receives PTW
+requests from the Memblock. PTW requests from the Frontend include 2 requests
 from the ICache and 1 request from the IFU. PTW requests from the Memblock
-include 2 requests from the LoadUnit (with the AtomicsUnit occupying one of the
-LoadUnit's request channels), 1 request from the L1 Load stream & stride
-prefetcher, 2 requests from the StoreUnit, and 1 request from the SMSPrefetcher.
-The ITLB and DTLB connect to the L2 TLB via Repeaters, both supporting
-non-blocking access. These Repeaters, in addition to their pipelining function,
-incorporate a duplicate request filtering mechanism to eliminate redundant
-requests sent from the L1 TLB to the L2 TLB, preventing duplicates in the L1
-TLB.
+include 3 requests from the LoadUnit (with the AtomicsUnit occupying 1 request
+channel of the LoadUnit), 1 request from the L1 Load stream & stride prefetcher,
+2 requests from the StoreUnit, and 1 request from the SMSPrefetcher. The ITLB
+and DTLB connect to the L2 TLB via Repeaters, all using non-blocking access.
+Based on the pipeline function, these Repeaters add the ability to filter
+duplicate requests, filtering out duplicate requests sent from the L1 TLB to the
+L2 TLB, thus avoiding duplicate entries in the L1 TLB.
 
 Requests from the ITLB and DTLB are first arbitrated (via a 2-to-1 Arbiter) and
 then access the Page Cache. For non-two-stage address translation requests, if a

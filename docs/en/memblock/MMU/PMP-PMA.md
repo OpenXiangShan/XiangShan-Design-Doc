@@ -24,8 +24,8 @@ module:
 
 ## Design specifications
 
-1. Supports physical address protection
-2. Supports physical address attributes
+1. Support Physical Address Protection
+2. Support Physical Address Attributes
 3. Supports parallel execution checks for PMP and PMA
 4. Supports dynamic and static checking
 5. Supports distributed PMP and distributed PMA
@@ -33,7 +33,7 @@ module:
 
 ## Function
 
-### Supports physical address protection
+### Support Physical Address Protection
 
 The Xiangshan processor supports physical address protection (PMP) checks, with
 PMP defaulting to 16 entries, which can be modified parametrically. For timing
@@ -47,7 +47,7 @@ For the format, reset values, etc., of PMP registers, please refer to the
 Xiangshan Open-Source Processor User Manual and the RISC-V Privileged Level
 Manual.
 
-### Supports physical address attributes
+### Support Physical Address Attributes
 
 The implementation of Physical Memory Attributes (PMA) adopts a PMP-like
 approach, utilizing two reserved bits in the PMP Configure register, set as
@@ -174,31 +174,31 @@ The relevant information required for PMP and PMA check requests is shown in
 Table: Relevant information required for PMP and PMA check requests
 {#tbl:PMP-PMA-req-info}
 
-| PMPChecker module     | Information required                                                                                                                                           | Source                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Frontend              |                                                                                                                                                                |                                                                                    |
-|                       | PMP and PMA Configuration Registers                                                                                                                            | Frontend pmp                                                                       |
-|                       | PMP and PMA Address Registers                                                                                                                                  | Frontend pmp                                                                       |
-|                       | The mask for PMP and PMA, i.e., the number of consecutive 1s from low to high in the address registers, with a minimum of 12                                   | Frontend pmp                                                                       |
-|                       | The queried paddr                                                                                                                                              | Icache, IFU                                                                        |
-|                       | The queried cmd, ITLB is fixed at 2, indicating execution permission is required                                                                               | Icache, IFU                                                                        |
-| Memblock              |                                                                                                                                                                |                                                                                    |
-|                       | PMP and PMA Configuration Registers                                                                                                                            | Memblock PMP                                                                       |
-|                       | PMP and PMA Address Registers                                                                                                                                  | Memblock PMP                                                                       |
-|                       | The mask for PMP and PMA, i.e., the number of consecutive 1s from low to high in the address registers, with a minimum of 12                                   | Memblock PMP                                                                       |
-|                       | The queried paddr                                                                                                                                              | LoadUnits, L1 Load Stream & Stride Prefetch StoreUnits, AtomicsUnit, SMSprefetcher |
-|                       | The queried cmd, where DTLB may be 0, 1, 4, or 5; representing read, write, atom_read, and atom_write permissions respectively.                                | LoadUnits, L1 Load Stream & Stride Prefetch StoreUnits, AtomicsUnit, SMSprefetcher |
-| Memblock static check |                                                                                                                                                                |                                                                                    |
-|                       | PMP and PMA Configuration Registers                                                                                                                            | Memblock PMP                                                                       |
-|                       | PMP and PMA Address Registers                                                                                                                                  | Memblock PMP                                                                       |
-|                       | PMP and PMA mask, where the mask format has the lower i bits as 1 and higher bits as 0, with i being the count of log2(address space matched by the PMP entry) | Memblock PMP                                                                       |
-|                       | The queried paddr                                                                                                                                              | PTW returned by L2 TLB                                                             |
-| L2 TLB                |                                                                                                                                                                |                                                                                    |
-|                       | PMP and PMA Configuration Registers                                                                                                                            | L2 TLB PMP                                                                         |
-|                       | PMP and PMA Address Registers                                                                                                                                  | L2 TLB PMP                                                                         |
-|                       | PMP and PMA mask, where the mask format has the lower i bits as 1 and higher bits as 0, with i being the count of log2(address space matched by the PMP entry) | L2 TLB PMP                                                                         |
-|                       | The queried paddr                                                                                                                                              | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker      |
-|                       | The query cmd for L2 TLB is fixed at 0, indicating read permission is required.                                                                                | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker      |
+| PMPChecker module     | Information required                                                                                                                        | Source                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Frontend              |                                                                                                                                             |                                                                                    |
+|                       | PMP and PMA Configuration Registers                                                                                                         | Frontend pmp                                                                       |
+|                       | PMP and PMA Address Registers                                                                                                               | Frontend pmp                                                                       |
+|                       | mask of PMP and PMA, i.e., the number of consecutive 1s from low to high in the address register, minimum of 12                             | Frontend pmp                                                                       |
+|                       | queried paddr                                                                                                                               | Icache, IFU                                                                        |
+|                       | The queried cmd, ITLB is fixed at 2, indicating execution permission is required                                                            | Icache, IFU                                                                        |
+| Memblock              |                                                                                                                                             |                                                                                    |
+|                       | PMP and PMA Configuration Registers                                                                                                         | Memblock pmp                                                                       |
+|                       | PMP and PMA Address Registers                                                                                                               | Memblock pmp                                                                       |
+|                       | mask of PMP and PMA, i.e., the number of consecutive 1s from low to high in the address register, minimum of 12                             | Memblock pmp                                                                       |
+|                       | queried paddr                                                                                                                               | LoadUnits, L1 Load Stream & Stride Prefetch StoreUnits, AtomicsUnit, SMSprefetcher |
+|                       | The queried cmd, where DTLB may be 0, 1, 4, or 5; representing read, write, atom_read, and atom_write permissions respectively.             | LoadUnits, L1 Load Stream & Stride Prefetch StoreUnits, AtomicsUnit, SMSprefetcher |
+| Memblock static check |                                                                                                                                             |                                                                                    |
+|                       | PMP and PMA Configuration Registers                                                                                                         | Memblock pmp                                                                       |
+|                       | PMP and PMA Address Registers                                                                                                               | Memblock pmp                                                                       |
+|                       | Mask of PMP and PMA, the form of the mask is low i bits are 1, high bits are 0, where i is log2(the address space matched by the PMP entry) | Memblock pmp                                                                       |
+|                       | queried paddr                                                                                                                               | PTW returned by L2 TLB                                                             |
+| L2 TLB                |                                                                                                                                             |                                                                                    |
+|                       | PMP and PMA Configuration Registers                                                                                                         | L2 TLB pmp                                                                         |
+|                       | PMP and PMA Address Registers                                                                                                               | L2 TLB pmp                                                                         |
+|                       | Mask of PMP and PMA, the form of the mask is low i bits are 1, high bits are 0, where i is log2(the address space matched by the PMP entry) | L2 TLB pmp                                                                         |
+|                       | queried paddr                                                                                                                               | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker      |
+|                       | The query cmd for L2 TLB is fixed at 0, indicating read permission is required.                                                             | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker      |
 
 PMPChecker needs to return to ITLB, DTLB, and L2 TLB whether an inst access
 fault (ITLB), load access fault (LoadUnits, L2 TLB), store access fault
@@ -214,24 +214,24 @@ cycle. The relevant information returned by PMP and PMA checks is shown in
 Table: Relevant information required for PMP and PMA checks
 {#tbl:PMP-PMA-resp-info}
 
-| PMPChecker module      | Information to be returned                | Destination                                                                   |
-| ---------------------- | ----------------------------------------- | ----------------------------------------------------------------------------- |
-| Frontend               |                                           |                                                                               |
-|                        | Whether an inst access fault occurs       | Icache, IFU                                                                   |
-|                        | Whether the address belongs to MMIO space | Icache, IFU                                                                   |
-| Memblock dynamic check |                                           |                                                                               |
-|                        | Whether a load access fault occurs        | LoadUnits                                                                     |
-|                        | Whether a store access fault occurs       | StoreUnits, AtomicsUnit                                                       |
-|                        | Whether the address belongs to MMIO space | LoadUnits, StoreUnits, AtomicsUnit                                            |
-| Memblock static check  |                                           |                                                                               |
-|                        | Is the address cacheable                  | DTLB                                                                          |
-|                        | Whether the address is atomic             | DTLB                                                                          |
-|                        | Whether the address is executable         | DTLB                                                                          |
-|                        | Whether the address is writable           | DTLB                                                                          |
-|                        | Is the address readable                   | DTLB                                                                          |
-| L2 TLB                 |                                           |                                                                               |
-|                        | Whether a load access fault occurs        | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker |
-|                        | Whether the address belongs to MMIO space | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker |
+| PMPChecker module      | Information to be returned                    | Destination                                                                   |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Frontend               |                                               |                                                                               |
+|                        | Whether an inst access fault occurs           | Icache, IFU                                                                   |
+|                        | Whether the address belongs to the MMIO space | Icache, IFU                                                                   |
+| Memblock dynamic check |                                               |                                                                               |
+|                        | Whether a load access fault occurs            | LoadUnits                                                                     |
+|                        | Whether a store access fault occurs           | StoreUnits, AtomicsUnit                                                       |
+|                        | Whether the address belongs to the MMIO space | LoadUnits, StoreUnits, AtomicsUnit                                            |
+| Memblock static check  |                                               |                                                                               |
+|                        | Is the address cacheable                      | DTLB                                                                          |
+|                        | Whether the address is atomic                 | DTLB                                                                          |
+|                        | Whether the address is executable             | DTLB                                                                          |
+|                        | Whether the address is writable               | DTLB                                                                          |
+|                        | Is the address readable                       | DTLB                                                                          |
+| L2 TLB                 |                                               |                                                                               |
+|                        | Whether a load access fault occurs            | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker |
+|                        | Whether the address belongs to the MMIO space | Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table Walker |
 
 
 ### Exception handling

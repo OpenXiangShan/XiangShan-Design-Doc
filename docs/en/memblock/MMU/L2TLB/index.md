@@ -25,55 +25,63 @@ the tertiary module section of this document.
 
 ## Function
 
-L2 TLB is a larger page table cache shared by ITLB and DTLB. When an L1 TLB miss
-occurs, a Page Table Walk request is sent to L2 TLB. L2 TLB consists of Page
-Cache (see Section 5.3.7), Page Table Walker (see Section 5.3.8), Last Level
-Page Table Walker (see Section 5.3.9), Hypervisor Page Table Walker (see Section
-5.3.10), Miss Queue (see Section 5.3.11), and Prefetcher (see Section 5.3.12).
+The L2 TLB is a larger page table cache shared by the ITLB and DTLB. When an L1
+TLB miss occurs, a Page Table Walk request is sent to the L2 TLB. The L2 TLB is
+divided into six parts: Page Cache (see Section 5.3.7), Page Table Walker (see
+Section 5.3.8), Last Level Page Table Walker (see Section 5.3.9), Hypervisor
+Page Table Walker (see Section 5.3.10), Miss Queue (see Section 5.3.11), and
+Prefetcher (see Section 5.3.12).
 
-Requests from L1 TLB first access the Page Cache. For non-two-stage address
-translation requests, if a leaf node is hit, it is directly returned to L1 TLB.
-Otherwise, based on the page table level hit in Page Cache and the availability
-of Page Table Walker and Last Level Page Table Walker, the request enters Page
-Table Walker, Last Level Page Table Walker, or Miss Queue (see Section 5.3.7).
-For two-stage address translation requests: if the request is onlyStage1, it is
-processed the same way as non-two-stage requests; if onlyStage2 and a leaf page
-table is hit, it is directly returned; if not hit, it is sent to Page Table
-Walker for translation; if the request is allStage, since Page Cache can only
-query one page table at a time, it first queries the first-stage page table.
-There are two scenarios: if the first-stage page table hits, it is sent to Page
-Table Walker for subsequent translation; if the first-stage page table does not
-hit a leaf node, it enters Page Table Walker, Last Level Page Table Walker, or
-Miss Queue based on the hit page table level and the availability of Page Table
-Walker and Last Level Page Table Walker. To accelerate page table access, Page
-Cache caches all three levels of page tables separately, allowing simultaneous
-queries (see Section 5.3.7). Page Cache supports ECC verification; if an ECC
-error is detected, the entry is refreshed, and Page Walk is restarted.
+Requests from the L1 TLB will first access the Page Cache. For non-two-stage
+address translation requests, if a leaf node is hit, the result is directly
+returned to the L1 TLB. Otherwise, based on the page table level hit in the Page
+Cache and the availability of the Page Table Walker and the Last Level Page
+Table Walker, the request enters the Page Table Walker, Last Level Page Table
+Walker, or Miss Queue (see Section 5.3.7). For two-stage address translation
+requests, if the request is onlyStage1, the processing is the same as for
+non-two-stage requests; if the request is onlyStage2, and a leaf page table
+entry is hit, the result is directly returned; if not hit, it is sent to the
+Page Table Walker for translation. If the request is allStage, since the Page
+Cache can only query one page table level at a time, it first queries the
+first-stage page table. This results in two cases: if the first-stage page table
+is hit, the request is sent to the Page Table Walker to proceed with subsequent
+translation; if the first-stage page table does not hit a leaf node, the request
+enters the Page Table Walker, Last Level Page Table Walker, or Miss Queue based
+on the hit page table level and the availability of the Page Table Walker and
+Last Level Page Table Walker. To accelerate page table access, the Page Cache
+caches all three page table levels separately, allowing simultaneous queries of
+the three levels (see Section 5.3.7). The Page Cache supports ECC checking. If
+an ECC error is detected, the entry is invalidated, and a Page Table Walk is
+performed again.
 
-The Page Table Walker handles requests from the Page Cache to perform Hardware
-Page Table Walk. For non-two-stage address translation requests, it only
-accesses the first two levels (1GB and 2MB) of page tables, leaving 4KB page
-table access to the Last Level Page Table Walker. If the Page Table Walker
-reaches a leaf node (large page), it returns the result to the L1 TLB;
-otherwise, it forwards the request to the Last Level Page Table Walker for the
-final level of access. The Page Table Walker can only process one request at a
-time and cannot parallelize access to the first two levels. For two-stage
-address translation requests: (1) If it is an allStage request and the
-first-stage translation hits, PTW sends a second-stage request to the Page
-Cache. If it misses, the request is forwarded to the Hypervisor Page Table
-Walker, and the second-stage result is returned to PTW. (2) If it is an allStage
-request and the first-stage leaf node misses, PTW processing resembles
-non-virtualized requests, except that physical addresses encountered are guest
-physical addresses and require a second-stage translation before memory access
-(see the Page Table Walker module description for details). (3) For onlyStage2
-requests, PTW sends a second-stage translation request externally and returns
-the response to L1TLB. (4) For onlyStage1 requests, PTW handles them internally
-the same way as non-virtualized requests.
+The Page Table Walker receives requests from the Page Cache and performs
+Hardware Page Table Walks. For non-two-stage address translation requests, the
+Page Table Walker only accesses the first two page table levels (1GB and 2MB),
+not the 4KB page table; accesses to the 4KB page table are handled by the Last
+Level Page Table Walker. If the Page Table Walker reaches a leaf node (a huge
+page), it returns the result to the L1 TLB; otherwise, it needs to forward the
+request to the Last Level Page Table Walker for the final page table level
+access. The Page Table Walker can only process one request at a time and cannot
+access the first two page table levels in parallel. For two-stage address
+translation requests, first, if it is an allStage request and the first-stage
+page table translation hits, the PTW sends a second-stage request to the Page
+Cache for lookup; if there is no hit, it is sent to the Hypervisor Page Table
+Walker. The second-stage translation result is returned to the PTW. Second, if
+it is an allStage request and the first-stage page table translation does not
+hit a leaf node, the PTW's translation process is similar to non-virtualized
+request translation, with the difference being that the physical addresses
+generated during the PTW translation are guest physical addresses, requiring a
+second-stage address translation before memory access; details can be found in
+the Page Table Walker module introduction. Third, if it is an onlyStage2
+request, the PTW sends a second-stage translation request externally; upon
+receiving the response, it returns the result to the L1 TLB. Fourth, if it is an
+onlyStage1 request, the internal processing of the PTW is consistent with
+non-virtualized request processing.
 
-The Miss Queue receives requests from the Page Cache and Last Level Page Table
-Walker, waiting for the next access to the Page Cache. The Prefetcher employs
-the Next-Line prefetching algorithm, generating the next prefetch request upon a
-miss or a hit on a prefetched entry.
+The Miss Queue receives requests from the Page Cache and the Last Level Page
+Table Walker, waiting for the next access to the Page Cache. The Prefetcher uses
+a Next-Line prefetching algorithm; it generates a subsequent prefetch request
+when a miss occurs or when a hit entry is a prefetched entry.
 
 ### Receives requests from L1 TLB and returns responses
 
@@ -209,49 +217,56 @@ As shown in [@fig:L2TLB-overall], the L2 TLB is divided into six parts: Page
 Cache, Page Table Walker, Last Level Page Table Walker, Hypervisor Page Table
 Walker, Miss Queue, and Prefetcher.
 
-Requests from L1 TLB first access the Page Cache. For non-two-stage address
-translation requests, if a leaf node is hit, it is directly returned to L1 TLB.
-Otherwise, based on the page table level hit in Page Cache and the availability
-of Page Table Walker and Last Level Page Table Walker, the request enters Page
-Table Walker, Last Level Page Table Walker, or Miss Queue (see Section 5.3.7).
-For two-stage address translation requests: if the request is onlyStage1, it is
-processed the same way as non-two-stage requests; if onlyStage2 and a leaf page
-table is hit, it is directly returned; if not hit, it is sent to Page Table
-Walker for translation; if the request is allStage, since Page Cache can only
-query one page table at a time, it first queries the first-stage page table.
-There are two scenarios: if the first-stage page table hits, it is sent to Page
-Table Walker for subsequent translation; if the first-stage page table does not
-hit a leaf node, it enters Page Table Walker, Last Level Page Table Walker, or
-Miss Queue based on the hit page table level and the availability of Page Table
-Walker and Last Level Page Table Walker. To accelerate page table access, Page
-Cache caches all three levels of page tables separately, allowing simultaneous
-queries (see Section 5.3.7). Page Cache supports ECC verification; if an ECC
-error is detected, the entry is refreshed, and Page Walk is restarted.
+Requests from the L1 TLB will first access the Page Cache. For non-two-stage
+address translation requests, if a leaf node is hit, the result is directly
+returned to the L1 TLB. Otherwise, based on the page table level hit in the Page
+Cache and the availability of the Page Table Walker and the Last Level Page
+Table Walker, the request enters the Page Table Walker, Last Level Page Table
+Walker, or Miss Queue (see Section 5.3.7). For two-stage address translation
+requests, if the request is onlyStage1, the processing is the same as for
+non-two-stage requests; if the request is onlyStage2, and a leaf page table
+entry is hit, the result is directly returned; if not hit, it is sent to the
+Page Table Walker for translation. If the request is allStage, since the Page
+Cache can only query one page table level at a time, it first queries the
+first-stage page table. This results in two cases: if the first-stage page table
+is hit, the request is sent to the Page Table Walker to proceed with subsequent
+translation; if the first-stage page table does not hit a leaf node, the request
+enters the Page Table Walker, Last Level Page Table Walker, or Miss Queue based
+on the hit page table level and the availability of the Page Table Walker and
+Last Level Page Table Walker. To accelerate page table access, the Page Cache
+caches all three page table levels separately, allowing simultaneous queries of
+the three levels (see Section 5.3.7). The Page Cache supports ECC checking. If
+an ECC error is detected, the entry is invalidated, and a Page Walk is performed
+again.
 
-The Page Table Walker handles requests from the Page Cache to perform Hardware
-Page Table Walk. For non-two-stage address translation requests, it only
-accesses the first two levels (1GB and 2MB) of page tables, leaving 4KB page
-table access to the Last Level Page Table Walker. If the Page Table Walker
-reaches a leaf node (large page), it returns the result to the L1 TLB;
-otherwise, it forwards the request to the Last Level Page Table Walker for the
-final level of access. The Page Table Walker can only process one request at a
-time and cannot parallelize access to the first two levels. For two-stage
-address translation requests: (1) If it is an allStage request and the
-first-stage translation hits, PTW sends a second-stage request to the Page
-Cache. If it misses, the request is forwarded to the Hypervisor Page Table
-Walker, and the second-stage result is returned to PTW. (2) If it is an allStage
-request and the first-stage leaf node misses, PTW processing resembles
-non-virtualized requests, except that physical addresses encountered are guest
-physical addresses and require a second-stage translation before memory access
-(see the Page Table Walker module description for details). (3) For onlyStage2
-requests, PTW sends a second-stage translation request externally and returns
-the response to L1TLB. (4) For onlyStage1 requests, PTW handles them internally
-the same way as non-virtualized requests.
+The Page Table Walker receives requests from the Page Cache and performs
+Hardware Page Table Walks. For non-two-stage address translation requests, the
+Page Table Walker only accesses the first two page table levels (1GB and 2MB),
+not the 4KB page table; accesses to the 4KB page table are handled by the Last
+Level Page Table Walker. If the Page Table Walker reaches a leaf node (a huge
+page), it returns the result to the L1 TLB; otherwise, it needs to forward the
+request to the Last Level Page Table Walker for the final page table level
+access. The Page Table Walker can only process one request at a time and cannot
+access the first two page table levels in parallel. For two-stage address
+translation requests, first, if it is an allStage request and the first-stage
+page table translation hits, the PTW sends a second-stage request to the Page
+Cache for lookup; if there is no hit, it is sent to the Hypervisor Page Table
+Walker. The second-stage translation result is returned to the PTW. Second, if
+it is an allStage request and the first-stage page table translation does not
+hit a leaf node, the PTW's translation process is similar to non-virtualized
+request translation, with the difference being that the physical addresses
+generated during the PTW translation are guest physical addresses, requiring a
+second-stage address translation before memory access; details can be found in
+the Page Table Walker module introduction. Third, if it is an onlyStage2
+request, the PTW sends a second-stage translation request externally; upon
+receiving the response, it returns the result to the L1 TLB. Fourth, if it is an
+onlyStage1 request, the internal processing of the PTW is consistent with
+non-virtualized request processing.
 
-The Miss Queue receives requests from the Page Cache and Last Level Page Table
-Walker, waiting for the next access to the Page Cache. The Prefetcher employs
-the Next-Line prefetching algorithm, generating the next prefetch request upon a
-miss or a hit on a prefetched entry.
+The Miss Queue receives requests from the Page Cache and the Last Level Page
+Table Walker, waiting for the next access to the Page Cache. The Prefetcher uses
+a Next-Line prefetching algorithm; it generates a subsequent prefetch request
+when a miss occurs or when a hit entry is a prefetched entry.
 
 The diagram involves the following arbiters, named as in the chisel code:
 
@@ -270,11 +285,11 @@ The diagram involves the following arbiters, named as in the chisel code:
   Last Level Page Table Walker, outputting to outArb.
 * mq_arb: A 2-to-1 arbiter with inputs from Page Cache and Last Level Page Table
   Walker; output goes to the Miss Queue.
-* mem_arb: A 3-to-1 arbiter with inputs from Page Table Walker, Last Level Page
-  Table Walker, and Last Level Page Table Walker; output to L2 Cache (Last Level
-  Page Table Walker also has an internal mem_arb that arbitrates all PTW items
-  sent by Last Level Page Table Walker to L2 Cache before passing them to this
-  mem_arb)
+* mem_arb: a 3-to-1 arbiter, with inputs from the Page Table Walker, Last Level
+  Page Table Walker, and Hypervisor Page Table Walker; the output goes to the L2
+  Cache (the Last Level Page Table Walker also has an internal mem_arb that
+  arbitrates all PTW entries sent from the Last Level Page Table Walker to the
+  L2 Cache before passing them to this mem_arb)
 
 ![L2 TLB module hit path](../figure/image36.jpeg){#fig:L2TLB-hit-passthrough}
 
@@ -320,8 +335,8 @@ to L1 TLB. Page Table Walker may generate responses in the following scenarios:
   TLB
 * For requests involving only the second-stage translation, after receiving the
   second-stage translation result
-* For requests involving two-stage translation, both the first-stage leaf page
-  table and the second-stage leaf page table are obtained.
+* For requests with both stages of translation, after obtaining both the
+  first-stage leaf page table and the second-stage leaf page table
 * Second-stage translation results in a Page fault or Access fault
 * PMP or PMA checks result in a Page fault or Access fault, which also needs to
   be returned to L1 TLB
@@ -331,8 +346,8 @@ including the following possibilities:
 
 * Non-two-stage translation requests and single-stage translation requests
   accessing leaf nodes (4KB pages)
-* For requests involving two-stage translation, both the first-stage leaf page
-  table and the second-stage leaf page table are obtained.
+* For requests with both stages of translation, after obtaining both the
+  first-stage leaf page table and the second-stage leaf page table
 * PMP or PMA checks result in an Access fault
 
 ## Interface timing

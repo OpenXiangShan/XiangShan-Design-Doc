@@ -4,17 +4,17 @@
 
 Table 1.1 Terminology
 
-| **abbreviation** | **Full name**                                     | **Description**                                                                                                 |
-| ---------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| BPU              | Branch Prediction Unit                            | Branch Prediction Unit                                                                                          |
-| IFU              | Instruction Fetch Unit                            | Fetch Unit                                                                                                      |
-| FTQ              | Fetch Target Queue.                               | Fetch Target Unit                                                                                               |
-| uFTB             | Micro Fetch Target Buffer                         | Branch Target Buffer                                                                                            |
-| FTB              | Fetch Target Buffer                               | Fetch Target Buffer.                                                                                            |
-| TAGE             | TAgged GEometric length predictor                 | A conditional branch predictor                                                                                  |
-| SC.              | Statistical Corrector Predictor                   | A conditional branch predictor used to correct TAGE predictions under statistically biased conditions           |
-| ITTAGE           | Indirect Target TAgged GEometric length predictor | A branch predictor used to predict the target address of indirect jump instructions                             |
-| RAS              | Return Address Stack                              | A branch predictor used to predict the target address of return instructions corresponding to call instructions |
+| **abbreviation** | **Full name**                                     | ** describing **                                                                                      |
+| ---------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| BPU              | Branch Prediction Unit                            | Branch Prediction Unit                                                                                |
+| IFU              | Instruction Fetch Unit                            | Fetch Unit                                                                                            |
+| FTQ              | Fetch Target Queue.                               | Fetch target queue                                                                                    |
+| uFTB             | Micro Fetch Target Buffer                         | Micro-op fetch target buffer                                                                          |
+| FTB              | Fetch Target Buffer                               | Fetch Target Buffer.                                                                                  |
+| TAGE             | TAgged GEometric length predictor                 | A conditional branch predictor                                                                        |
+| SC.              | Statistical Corrector Predictor                   | A conditional branch predictor used to correct TAGE predictions under statistically biased conditions |
+| ITTAGE           | Indirect Target TAgged GEometric length predictor | A branch predictor used to predict the target address of indirect jump instructions                   |
+| RAS              | Return Address Stack                              | A branch predictor used to predict the return address of a CALL instruction                           |
 
 ## Design specifications
 
@@ -369,10 +369,10 @@ history.
 
 ##### TAGE Prediction Timing
 
-TAGE is a high-precision conditional branch direction predictor. It uses branch
-histories of varying lengths and the current PC value to address multiple SRAM
-tables. When hits occur in multiple tables, the prediction result from the entry
-with the longest matching history is prioritized as the final result.
+TAGE is a high-accuracy conditional branch direction predictor. It uses branch
+histories of different lengths and the current PC value to index multiple SRAM
+tables. When a hit occurs in multiple tables, the prediction result from the
+entry with the longest matching history is selected as the final result.
 
 TAGE requires a 2-cycle delay:
 
@@ -743,7 +743,7 @@ with a target jump address of 0x200000e0e.
 
 ## Register Configuration
 
-| **register** | **address** | **reset value** | **attribute** | **Description**                                                                                                                                                                                                             |
+| **register** | **address** | **reset value** | **attribute** | ** describing **                                                                                                                                                                                                            |
 | ------------ | ----------- | --------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | sbpctl       | 0x5C0       | 64'd0           | RW            | bit0: uFTB enable signal<br>bit1: FTB enable signal<br>bit2: BIM enable signal (reserved)<br>bit3: TAGE enable signal<br>bit4: SC enable signal<br>bit5: RAS enable signal<br>bit6: loop predictor enable signal (reserved) |
 

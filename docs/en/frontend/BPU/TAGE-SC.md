@@ -7,15 +7,14 @@ architecture, classified as an Accurate Predictor (APD). TAGE leverages multiple
 prediction tables with varying history lengths to exploit extremely long branch
 history information, while SC serves as a statistical corrector.
 
-TAGE consists of a base prediction table and multiple history tables. The base
-prediction table is indexed by the PC, while the history tables are indexed by
-the XOR result of the PC and a folded version of the branch history of a certain
-length. Different history tables use branch histories of varying lengths. During
-prediction, a tag is also calculated by XORing the PC with another folded
-version of the branch history corresponding to each history table, which is then
-matched against the tag read from the table. A match indicates a hit for that
-table. The final result depends on the prediction from the history table with
-the longest matching history length.
+TAGE consists of a base predictor and multiple history tables. The base
+predictor is indexed by PC, while the history tables are indexed by the XOR
+result of PC and a folded branch history of a certain length. Different history
+tables use different branch history lengths. During prediction, the PC is also
+XORed with another folded result of the branch history corresponding to each
+history table to compute a tag, which is matched against the tag read from the
+table. If a match is successful, that table hits. The final result depends on
+the prediction of the table with the longest history that hits.
 
 When SC determines that TAGE has a high probability of misprediction, it inverts
 the final prediction result.
@@ -37,15 +36,16 @@ highest historical accuracy as the final branch prediction criterion.
 Compared to traditional hybrid predictors, TAGE incorporates two new design
 features that significantly improve its prediction accuracy:
 
-- Tag data is added to each entry in the prediction tables. In traditional
-  priority branch predictors, only branch history and the current branch
-  instruction's PC value are often used as the basis for fetching from the
-  prediction table. This can lead to multiple different branch instructions
-  pointing to the same prediction table entry (aliasing), which particularly
-  affects the prediction accuracy of the shorter history length parts in hybrid
-  predictors. Therefore, in the TAGE design, the partial tagging method better
-  matches the current instruction with the actual entries in the prediction
-  table, significantly reducing the occurrence of such situations.
+- Tag data is added to entries in each prediction table. In traditional priority
+  branch predictors, only the branch history and the PC value of the current
+  branch instruction are often used as the basis for indexing the prediction
+  table. This situation can lead to aliasing, where multiple different branch
+  instructions map to the same prediction table entry. This aliasing has a
+  particularly significant impact on the prediction accuracy of the part of the
+  hybrid predictor that uses shorter branch history lengths. Therefore, in the
+  TAGE design, the partial tagging method allows for better actual matching of
+  the current instruction with the entries in the prediction table, thereby
+  largely avoiding the occurrence of the above situation.
 - Geometrically varying branch history lengths are used to index different
   prediction tables, significantly improving the granularity of table entry
   selection during branch prediction. Additionally, a usefulness counter is
@@ -64,10 +64,10 @@ instructions in various code contexts.
 
 ### TAGE: Hardware Implementation
 
-TAGE is a high-precision conditional branch direction predictor. It uses branch
-histories of varying lengths and the current PC value to address multiple SRAM
-tables. When hits occur in multiple tables, the prediction result from the entry
-with the longest matching history is prioritized as the final result.
+TAGE is a high-accuracy conditional branch direction predictor. It uses branch
+histories of different lengths and the current PC value to index multiple SRAM
+tables. When a hit occurs in multiple tables, the prediction result from the
+entry with the longest matching history is selected as the final result.
 
 ![TAGE Principle](../figure/BPU/TAGE-SC/principle.png)
 
@@ -76,17 +76,18 @@ baseline predictor T0 and four tagged prediction tables T1-T4. Basic information
 about the baseline predictor and the tagged prediction tables is provided in the
 table below.
 
-| **predictor**           | ** with tag** | ** function **                                                                                            | ** entry composition **                                                                                                                          | **item count**                |
-| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| Baseline Predictor T0   | No            | Used to provide prediction results when none of the four local tag prediction tables' tags match.         | ctr is 2 bits (the highest bit provides the prediction result: 1 for jump, 0 for no jump).                                                       | set 2048way 2                 |
-| Prediction tables T1-T4 | Yes           | When there is a tag match, the one with the longest history is selected to provide the prediction result. | valid 1bit, tag 8bits, sctr 3bits (the highest bit indicates the prediction result: 1 for taken, 0 for not taken), us: 1bit (usefulness counter) | T1-T4 each have 4096 entries. |
+| **predictor**           | ** with tag** | ** function **                                                                                            | ** entry composition **                                                                                                                             | **item count**                |
+| ----------------------- | ------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Baseline Predictor T0   | No            | Used to provide prediction results when none of the four local tag prediction tables' tags match.         | ctr is 2 bits (the highest bit provides the prediction result: 1 for jump, 0 for no jump).                                                          | set 2048way 2                 |
+| Prediction tables T1-T4 | Yes           | When there is a tag match, the one with the longest history is selected to provide the prediction result. | valid 1bit, tag 8bits, ctr 3bits (the most significant bit gives the prediction result: 1 for taken, 0 for not taken) us: 1bit (usefulness counter) | T1-T4 each have 4096 entries. |
 
-Note: The "way" in the table above is a parameter name in the SRAMTemplate class
-in Chisel. The value of this parameter indicates how many copies of the same
-type of data are stored in the SRAM, not necessarily representing the
-conventional sense of "way" that requires tag matching. T0 has two ways because
-the prediction block can contain up to two branch instructions, with different
-ways used to predict the two distinct branch instructions within the block.
+Note: The way in the above table is a parameter name of the SRAMTemplate class
+in Chisel. The value of this parameter represents how many copies of the same
+type of data are stored in the SRAM, and does not necessarily represent the way
+that requires tag matching in the usual sense. T0 has two ways because there are
+at most two branch instructions within a prediction block; different ways are
+used to predict two different branch instructions within the prediction block,
+respectively.
 
 The prediction contents for the two jump instructions in each prediction block
 are stored and updated separately. The 4096 entries of the tagged prediction
@@ -97,13 +98,14 @@ two branch instructions in the same prediction block share the same index but
 access different banks, potentially resulting in one hit and one miss when
 reading prediction results from both banks simultaneously.
 
-Each prediction table in a TAGE-style predictor has a specific history length.
-To enable the originally long global branch history table to index or match tags
-with the PC through XOR operations, the lengthy branch history sequence is
-divided into multiple segments, which are then XORed together. The length of
-each segment is typically equal to the logarithm of the history table depth. Due
-to the frequent XOR operations, folded history is stored directly to avoid the
-latency of multi-level XOR operations on the prediction path.
+Each prediction table of a TAGE-class predictor has a specific history length.
+To allow a very long global branch history table to be used for prediction table
+indexing or tag matching after XORing with the PC, the very long branch history
+sequence needs to be divided into many segments, all of which are then XORed
+together. The length of each segment is generally equal to the logarithm of the
+history table depth. Since the number of XOR operations is generally large, to
+avoid the delay of multiple levels of XOR on the prediction path, we directly
+store the folded history.
 
 Each prediction table has three corresponding folded branch histories: one for
 indexing the prediction table and two for tag matching. The BPU module maintains
@@ -116,21 +118,21 @@ position indicated by ptr:
 | ** history**                             | **index folded branch history length** | **tag folded branch history 1 length** | ** tag folded branch history 2 length** | ** Design principle **                                                |
 | ---------------------------------------- | -------------------------------------- | -------------------------------------- | --------------------------------------- | --------------------------------------------------------------------- |
 | Global branch history ghv                | 256 bits (non-folded)                  | None                                   | None                                    | Each bit represents whether the corresponding branch is taken or not. |
-| T1 corresponds to folded branch history  | 8-bit                                  | 8-bit                                  | 7 bits                                  | ghv takes the lower 8 bits of ptr for folded XOR                      |
-| T2 corresponds to folded branch history  | 11 bits                                | 8-bit                                  | 7 bits                                  | ghv takes the lower 13 bits from ptr, folds, and XORs them.           |
-| T3 corresponds to folded branch history. | 11 bits                                | 8-bit                                  | 7 bits                                  | ghv takes the lower 32 bits of ptr for folded XOR                     |
-| T4 corresponds to folded branch history  | 11 bits                                | 8-bit                                  | 7 bits                                  | ghv takes the lower 119 bits from ptr for folded XOR.                 |
+| T1 corresponds to folded branch history  | 8 bits                                 | 8 bits                                 | 7 bits                                  | ghv takes the lower 8 bits of ptr for folded XOR                      |
+| T2 corresponds to folded branch history  | 11 bits                                | 8 bits                                 | 7 bits                                  | ghv takes the lower 13 bits from ptr, folds, and XORs them.           |
+| T3 corresponds to folded branch history. | 11 bits                                | 8 bits                                 | 7 bits                                  | ghv takes the lower 32 bits of ptr for folded XOR                     |
+| T4 corresponds to folded branch history  | 11 bits                                | 8 bits                                 | 7 bits                                  | ghv takes the lower 119 bits from ptr for folded XOR.                 |
 
 ![Folded History Actual
 Implementation](../figure/BPU/TAGE-SC/folded_history.png)
 
 As shown in the figure above, for timing considerations, the specific
-implementation of the folded branch history is not the folding in the design
-principle. Instead, the oldest bit of the pre-folded branch history (h[12] in
-the figure) and the newest bit (h[0] in the figure) are XORed to the
-corresponding positions (c[1] and c[4] in the figure), followed by a shift
-operation (transforming into c[0] and c[2] in the figure). The pseudocode is as
-follows:
+implementation of folding the branch history is not the folding described in the
+design principle. Instead, the oldest bit (corresponding to h[12] in the figure)
+and the newest bit (corresponding to h[0] in the figure) of the branch history
+before folding are XORed into the corresponding positions (corresponding to c[1]
+and c[4] in the figure), and then a shift operation is performed (corresponding
+to becoming c[0] and c[2] in the figure). The pseudocode is shown below:
 
 c[0] <= c[4] ^ h[0];
 
@@ -142,11 +144,11 @@ c[3] <= c[2];
 
 c[4] \&lt;= c[3];
 
-The branch history table is not only updated after backend commit; each stage
-from s1 to s3 may update it, updating the pointer and value. If new results are
-generated in s1~s3, the pointer is restored, and new values are updated.
-However, if the prediction is correct, no modification is made (as it was
-already updated previously).
+The branch history table is not only updated after the backend commits. It may
+be updated at every stage s1~s3. During an update, the pointer and the value are
+updated. If a new result is produced in s1~s3, the pointer will be restored, and
+the new value will be updated. However, if there is no prediction error, no
+modification will be made (because it has already been updated before).
 
 Note: As seen in the specific configuration table of TAGE's folded branch
 history, there are two folded branch histories for tags. Both use the same
@@ -189,20 +191,22 @@ First, define the predictor with the longest required history length among all
 prediction tables that produce a tag match as the provider, while the remaining
 prediction tables (if any) that produce a tag match are referred to as altpred.
 
-The TAGE entry includes a usefulness field. When the provider predicts correctly
-and the altpred predicts incorrectly, the provider's usefulness is set to 1,
-indicating that the entry is useful and will not be treated as an empty entry by
-the allocation algorithm during training. When the provider's prediction is
-confirmed to be correct, and the provider's prediction differs from the
-altpred's result, the provider's usefulness field is set. If the branch
-instruction actually jumps, the corresponding provider entry's ctr counter is
-incremented by 1; if the branch instruction does not jump, the ctr counter is
-decremented. If a misprediction requires updating the TAGE entry, and the
-misprediction is not caused by using altpred while discarding the correct
-provider, it indicates the need to add an entry. However, this does not
-necessarily guarantee the addition of an entry. It also requires that the
-provider's prediction table is not the one with the longest required history
-length, in which case the entry addition operation is performed.
+The TAGE entry contains a usefulness field. When the provider predicts correctly
+and altpred predicts incorrectly, the provider's usefulness is set to 1,
+indicating that this entry is a useful entry and will not be allocated out as a
+free entry by the allocation algorithm during training. When the prediction made
+by the provider is confirmed to be correct, and the prediction result of the
+provider differs from that of altpred at that time, the provider's usefulness
+field is set to 0; if the branch instruction is actually taken, the ctr counter
+of the corresponding provider entry is incremented by 1; if the branch
+instruction is actually not taken, the ctr counter of the corresponding provider
+entry is decremented by 1; if a misprediction necessitates an update of the TAGE
+entry, and the misprediction is not caused by discarding the correct provider by
+using altpred, it indicates that an entry needs to be allocated. However, an
+entry may not necessarily be allocated at this time. It is also required that
+the prediction table from which the provider originates is not the table with
+the longest required history; only then is the entry allocation operation
+performed.
 
 Here is a logical example to determine whether the prediction table from which
 the provider originates is not the one with the longest required history length:
@@ -219,30 +223,32 @@ history lengths than the provider.
 
 Take another example. Initially, the prediction tables are all empty, and there
 is no provider. At this time, the corresponding s1_providers(i) is 0, and
-s1_provideds(i) is false. Then, Fill(TageNTables, s1_provideds(i).asUInt) is
-0b0000. The bitwise AND of these values and their inversion will definitely
-yield 0b1111, indicating that T1~T4 belong to the so-called prediction tables
-with longer history lengths than the provider.
+s1_provideds(i) is false. Then Fill(TageNTables, s1_provideds(i).asUInt) is
+0b0000. The bitwise AND of the two, inverted, definitely yields 0b1111,
+indicating that T1~T4 all belong to tables with a longer history than the
+provider.
 
 The specific steps for adding a new table entry are as follows:
 
-The entry addition operation first reads the usefulness fields of all prediction
-tables with history lengths longer than the provider's. If any table's
-usefulness field is 0, a corresponding entry is allocated in that table; if no
-such table is found, the allocation fails. When multiple prediction tables
-(e.g., Tj and Tk) have usefulness fields of 0, the entry allocation is random.
-During allocation, certain tables are randomly masked to prevent repeated
-allocations to the same table. The masking implementation involves: among the
-candidate history tables (those with lengths greater than the provider's and
-u=0), a random number is used to mask some tables. If the first masked entry is
-unavailable, the first unmasked entry is selected. The randomness in entry
-allocation is achieved using a 64-bit linear feedback shift register (LFSR64)
-primitive from the Chisel util package, corresponding to the allocLFSR_lfsr
-register in the Verilog code. During training, a 7-bit saturating counter
-bankTickCtrs tracks the difference between allocation failures and successes.
-When allocation failures accumulate sufficiently, causing bankTickCtrs to
-saturate, a global useful bit reset is triggered, clearing all usefulness
-fields.
+The entry allocation operation first reads the usefulness of all prediction
+tables whose history length is longer than the provider's. If the usefulness
+field value of a certain table is 0, then a corresponding entry is allocated in
+that table; if no table with a usefulness field value of 0 is found, the
+allocation fails. When the usefulness field of multiple prediction tables (e.g.,
+Tj and Tk) is 0, the entry allocation probability is random. During allocation,
+some tables are randomly masked so that the same table is not always allocated.
+The specific implementation of this mask is: among the candidate history tables
+(all history tables with a length greater than the provider and with u=0), a
+random number is used to randomly mask out some tables. If the first entry of
+the masked set is unavailable, the first one that is not masked is selected. The
+randomness of the entry allocation here is implemented using the 64-bit Linear
+Feedback Shift Register primitive LFSR64 from Chisel's util package to generate
+pseudo-random numbers. In the Verilog code, this corresponds to the
+allocLFSR_lfsr register. During training, a 7-bit saturating counter,
+bankTickCtrs, counts the number of allocation failures minus the number of
+successes. When the number of allocation failures is sufficiently high and the
+bankTickCtrs saturates, a global useful bit reset is triggered, clearing all
+usefulness fields.
 
 Finally, during initialization or when allocating new entries in the TAGE table,
 all ctr counters in the entries are set to 0, and all usefulness fields are set
@@ -273,21 +279,24 @@ alternative prediction, resulting in minimal accuracy loss.
 The specific implementation of the alternative prediction logic is as follows:
 
 ProviderUnconf indicates insufficient confidence in the longest history match
-result. When the provider's corresponding ctr value is 0b100 or 0b011, it means
-the confidence in the longest history match result is high, and providerUnconf
-is false. When the provider's corresponding ctr value is 0b01 or 0b10, it means
-the confidence is insufficient, and providerUnconf is true.
+result. When the ctr value corresponding to the provider is 0b100 or 0b011, it
+indicates that the confidence in the longest history match result is sufficient;
+at this time, providerUnconf is false. When the ctr value corresponding to the
+provider is 0b01 or 0b10, it indicates that the confidence in the longest
+history match result is insufficient; at this time, providerUnconf is true.
 
-useAltOnNaCtrs is a counter group consisting of 128 4-bit saturating counters,
-each initialized to 0b1000. When TAGE receives a training update request, if the
-training prediction shows that the provider's prediction differs from altpred
-and the provider's prediction lacks confidence, the correctness of the
-alternative prediction is evaluated. If the alternative prediction is correct
-while the provider's is wrong, the corresponding useAltOnNaCtrs counter
-increments by 1; if the alternative prediction is wrong while the provider's is
-correct, the counter decrements by 1. Since useAltOnNaCtrs are saturating
-counters, their values remain unchanged when already at 0b1111 (correct) or
-0b0000 (wrong).
+useAltOnNaCtrs is a counter array consisting of 128 4-bit saturating counters,
+each initialized to 0b1000. When TAGE receives a training update request, if in
+the prediction being trained, it is found that the provider's prediction result
+differs from altpred, and the confidence in the provider's prediction result is
+insufficient, then it evaluates whether the alternate prediction result is
+correct. If the alternate prediction is correct and the provider is wrong, the
+corresponding useAltOnNaCtrs counter value is incremented by 1; if the alternate
+prediction is wrong and the provider is correct, the corresponding
+useAltOnNaCtrs counter value is decremented by 1. Since useAltOnNaCtrs is a
+saturating counter, when its value is already 0b1111 and the case is correct, or
+when it is already 0b0000 and the case is wrong, the useAltOnNaCtrs value
+remains unchanged.
 
 useAltOnNa is obtained by indexing the useAltOnNaCtrs counter group with pc(7,
 1), i.e., the corresponding lower bits of the PC, and taking the highest bit of
@@ -335,11 +344,12 @@ wrbypass.
 
 - index = pc[11:1] ^ folded_hist(11bit)
 - tag = pc[11:1] ^ folded_hist(8bit) ^ (folded_hist(7bit) << 1)
-- The history employs basic segmented XOR folding.
-- Each item has two branches and two corresponding relationships between the two
-  slots in the FTB, selected by pc[1]. Due to the establishment mechanism of FTB
-  entries, the utilization rate of the first slot is higher than the second.
-  This measure can alleviate such uneven distribution.
+- History uses basic segmented XOR folding
+- Two branch instructions per entry, and the two corresponding relationships
+  between the two slots of the FTB. The selection is made using pc[1]. Due to
+  the establishment mechanism of the FTB entry, the usage rate of the first slot
+  will be higher than that of the second. This measure can alleviate this uneven
+  distribution.
 - The base table and use_alt_on_na directly use the lower bits of the PC for
   indexing.
 
@@ -357,9 +367,9 @@ wrbypass.
 - s2 uses the prediction results, compares them with the s1 results within the
   BPU, and determines whether the pipeline needs to be flushed.
 
-### Training process
+### Training flow
 
-![Training Process](../figure/BPU/TAGE-SC/tage_update.svg)
+![Training flow](../figure/BPU/TAGE-SC/tage_update.svg)
 
 Upon receiving a training request from FTQ, updates are made based on the
 information recorded during prediction. The update process is divided into two
@@ -388,11 +398,10 @@ externally to the history table. Details are as follows:
     useful bit of 0 are considered successful allocations, while those with a
     useful bit of 1 are considered failures. The difference between the two
     counts serves as the absolute value for this adjustment.
-- use_alt_on_na training: When the provider's ctr is at its two weakest values
-  and the alternative prediction differs from the provider's direction, the
-  use_alt_on_na saturating counter indexed by the lower bits of pc is
-  incremented or decremented based on the correctness of the alternative
-  prediction.
+- use_alt_on_na training: when provider's ctr has the two weakest values and the
+  alternate prediction and provider directions differ, based on the correctness
+  of the alternate prediction, increment or decrement the use_alt_on_na
+  saturating counter at the low bits of pc
 
 The second pipeline stage sends update requests into each prediction table,
 attempting to write to SRAM.
@@ -419,12 +428,13 @@ attempting to write to SRAM.
 
 ### SC: Design Concept
 
-In some applications, certain branch behaviors exhibit a statistical prediction
-bias with weak correlation to branch history or path. For these branches, using
-counters to capture statistical bias is more effective than TAGE. TAGE is highly
-effective in predicting strongly correlated branches but fails to predict
-branches with statistical bias, such as those with a slight deviation in one
-direction but no strong correlation to historical paths.
+In some applications, certain branch behaviors have a weak correlation with
+branch history or path, exhibiting a statistical prediction bias. For these
+branches, using counter-based methods to capture statistical bias is more
+effective than TAGE. TAGE is very effective in predicting highly correlated
+branches, but fails to predict branches with statistical bias, such as those
+with a slight bias towards one direction but without a strong correlation with
+history path.
 
 The purpose of SC statistical correction is to detect less reliable predictions
 and recover them. SC is responsible for predicting condition branch instructions
@@ -506,13 +516,14 @@ SC requires a 3-cycle delay:
 
 ### SC: Wrbypass
 
-Wrbypass contains both Mem and Cam, used to sequence updates. Every SC update is
-written to this wrbypass and the corresponding prediction table's SRAM. During
-each update, the wrbypass is checked. If a hit occurs, the read SC ctr value is
-used as the old value, discarding the old ctr value brought back from the
-backend with the branch instruction. This ensures that if a branch is updated
-repeatedly, wrbypass guarantees that one update will always obtain the final
-value from the adjacent previous update.
+Wrbypass contains both Mem and Cam, used to order updates. Each SC update writes
+to this wrbypass as well as to the corresponding prediction table's SRAM. At
+every update, the wrbypass is checked; if there is a hit, the read SC's ctr
+value is used as the old value, and the previous ctr old value that was carried
+with the branch instruction to the backend and sent back to the frontend is
+discarded. This way, if a branch is repeatedly updated, the wrbypass can ensure
+that a given update always retrieves the final value of the immediately
+preceding update.
 
 SC's T1~T4 each have 2 wrbypasses. In the wrbypass of each prediction table, Mem
 has 16 entries, each storing 2 entries of the prediction table; Cam has 16
@@ -561,11 +572,12 @@ When io_s0_fire is high, the input io_in_bits data is valid.
 ### Indexing method
 
 - index = pc[8:1] ^ folded_hist(8bit)
-- The history employs basic segmented XOR folding.
-- Each item has two branches and two corresponding relationships between the two
-  slots in the FTB, selected by pc[1]. Due to the establishment mechanism of FTB
-  entries, the utilization rate of the first slot is higher than the second.
-  This measure can alleviate such uneven distribution.
+- History uses basic segmented XOR folding
+- Two branch instructions per entry, and the two corresponding relationships
+  between the two slots of the FTB. The selection is made using pc[1]. Due to
+  the establishment mechanism of the FTB entry, the usage rate of the first slot
+  will be higher than that of the second. This measure can alleviate this uneven
+  distribution.
 
 ### Prediction flow
 
@@ -580,7 +592,7 @@ When io_s0_fire is high, the input io_in_bits data is valid.
 - s3 uses the direction result and compares it with the s2 result within the BPU
   to determine whether the pipeline needs to be flushed.
 
-### Training process
+### Training flow
 
 Upon receiving a training request from FTQ, updates are performed based on the
 information recorded during prediction. The update process is divided into two
@@ -599,4 +611,4 @@ attempting to write to SRAM while still trying to query the write cache wrbypass
 for the latest counter value (this could potentially be queried in the previous
 pipeline stage rather than directly using the old ctr).
 
-![Training Process](../figure/BPU/TAGE-SC/sc_update.svg)
+![Training flow](../figure/BPU/TAGE-SC/sc_update.svg)

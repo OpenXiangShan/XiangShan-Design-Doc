@@ -12,7 +12,7 @@ The repeater consists of the following modules:
 1. Supports the transmission of PTW requests and responses between the L1 TLB
    and L2 TLB.
 2. Support filtering duplicate requests
-3. Support TLB Hint mechanism
+3. Supports TLB Hint Mechanism
 
 ## Function
 
@@ -26,19 +26,21 @@ duplicate requests. The filter can eliminate redundant requests, preventing
 duplicates in the L1 TLB. The number of entries in the filter partially
 determines the parallelism of the L2 TLB (see Section 5.1.1.2).
 
-In the Kunminghu architecture, the L2 TLB is located in the memblock module but
-is physically distant from both the ITLB and DTLB. Xiangshan's MMU includes
-three ITLB repeaters and one DTLB repeater to pipeline stages between the L1 TLB
-and L2 TLB, with handshaking via valid-ready signals. The ITLB sends PTW
-requests and virtual page numbers to itlbRepeater1, which arbitrates and
-forwards them to itlbRepeater2, then to itlbRepeater3, which transmits the PTW
-requests to the L2 TLB. The L2 TLB returns the virtual page number, resolved
-physical page number, page table permissions, page table level, and exception
-signals to itlbRepeater3 and itlbRepeater2, ultimately returning them to the
-ITLB via itlbRepeater1. The DTLB interacts with the DTLB repeater similarly. The
-dtlbRepeater and itlbRepeater1 are filter modules that merge duplicate requests
-from the L1 TLB. Since the ITLB and DTLB in Kunminghu support non-blocking
-access, these repeaters are also non-blocking.
+In the Kunminghu architecture, L2 TLB resides in the memblock module, but it is
+at a certain distance from both ITLB and DTLB. Xiangshan's MMU contains three
+itlbRepeaters and one dtlbRepeater, which act as buffers between L1 TLB and L2
+TLB. The two levels of Repeaters interact via valid-ready signals. ITLB sends
+PTW requests and virtual page numbers to itlbRepeater1, which after arbitration
+forwards them to itlbRepeater2, then to itlbRepeater3, and through itlbRepeater3
+delivers the PTW request to L2 TLB. L2 TLB takes the virtual page number
+corresponding to the PTW request, looks up the physical page number obtained
+from L2 TLB, the page table permission bits, page table level, whether an
+exception occurred, and other signals, and returns them to itlbRepeater3 and
+itlbRepeater2, eventually returning to ITLB via itlbRepeater1. The interaction
+between DTLB and dtlbRepeater is similar to that of ITLB. dtlbRepeater and
+itlbRepeater1 are Filter modules that can merge duplicate requests in L1 TLB.
+Since both ITLB and DTLB in the Kunminghu architecture are non-blocking
+accesses, these repeaters are also non-blocking Repeaters.
 
 ### Filter duplicate requests
 
@@ -61,7 +63,7 @@ duplicates at the entry level—only ensuring no duplicates within the same DTLB
 (load, store, or prefetch). However, requests from different DTLBs (e.g., load
 and store) sent to the L2 TLB may still overlap.
 
-### Support TLB Hint mechanism
+### Supports TLB Hint Mechanism
 
 ![TLB Hint schematic](./figure/image28.png)
 
