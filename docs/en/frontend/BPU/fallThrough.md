@@ -34,7 +34,7 @@ The pseudo code is roughly:
 target = aligned(start + 0x40)
 ```
 
-Next, consider cfiPosition. For the detailed definition, see the overall BPU design document. To restate it briefly, cfiPosition is the offset, in instructions, of the address predicted as a branch instruction relative to the 32-byte aligned prediction block start address:
+Next, consider cfiPosition. For the detailed definition, see the overall Bpu design document. To restate it briefly, cfiPosition is the offset, in instructions, of the address predicted as a branch instruction relative to the 32-byte aligned prediction block start address:
 
 ```text
 cfiPosition = (cfiAddr - aligned(start))[5:1]
@@ -49,13 +49,13 @@ cfiPosition = (cfiAddr - aligned(start))[5:1]
             = 31
 ```
 
-Semantically, fallThrough's cfiPosition may seem useless, because it does not actually jump and is not even a real cfi. However, ICache/IFU currently use it to calculate the fetch position (that is, the data SRAM bank to access), so it must provide a reasonable value to minimize the number of banks accessed, thereby saving power and reducing bank conflicts in 2-fetch mode [^bpu-fallthrough-icache-conflict].
+Semantically, fallThrough's cfiPosition may seem useless, because it does not actually jump and is not even a real cfi. However, ICache/Ifu currently use it to calculate the fetch position (that is, the data SRAM bank to access), so it must provide a reasonable value to minimize the number of banks accessed, thereby saving power and reducing bank conflicts in 2-fetch mode [^bpu-fallthrough-icache-conflict].
 
-[^bpu-fallthrough-icache-conflict]: In the V2 design, ICache always assumed a 34-byte read and did not need to use the BPU-predicted position, while IFU chose based on the BPU-predicted taken result: when taken, it computed the predicted block size from the BPU-predicted position; when not taken, it computed it from the target. Therefore, the V2 fallThrough prediction did not need to consider this. V3 is roughly moving the logic of “use target-start when not taken” from IFU into the BPU itself.
+[^bpu-fallthrough-icache-conflict]: In the V2 design, ICache always assumed a 34-byte read and did not need to use the Bpu-predicted position, while Ifu chose based on the Bpu-predicted taken result: when taken, it computed the predicted block size from the Bpu-predicted position; when not taken, it computed it from the target. Therefore, the V2 fallThrough prediction did not need to consider this. V3 is roughly moving the logic of “use target-start when not taken” from Ifu into the Bpu itself.
 
 ## Forbid Fetch Blocks from Crossing Pages {#sec:bpu-fallthrough-no-cross-page}
 
-In the V3 design, to save ITLB area, IFU/ICache assume that a single fetch request will not cross a page boundary (4 KB), which means the BPU must guarantee that the predicted cfiPosition and start are within the same page.
+In the V3 design, to save Itlb area, Ifu/ICache assume that a single fetch request will not cross a page boundary (4 KB), which means the Bpu must guarantee that the predicted cfiPosition and start are within the same page.
 
 Similar to half-align, we can satisfy this requirement by restricting fallThrough predictions without introducing extra complexity into ubtb/abtb.
 

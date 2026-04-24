@@ -1,4 +1,4 @@
-# XiangShan BPU Design Document {#sec:bpu-index}
+# XiangShan Bpu Design Document {#sec:bpu-index}
 
 - Version: V3
 - Status: draft
@@ -38,7 +38,7 @@
 
 ### CSR Configuration {#sec:bpu-csr}
 
-Table: BPU-related CSR list
+Table: Bpu-related CSR list
 
 +---------+-------+----------+------+----------------------------------------------------------------------+
 | Reg     | Addr  | Reset    | Attr | Description                                                          |

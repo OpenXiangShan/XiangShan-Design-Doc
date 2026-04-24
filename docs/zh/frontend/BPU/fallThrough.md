@@ -34,7 +34,7 @@ define aligned(addr):
 target = aligned(start + 0x40)
 ```
 
-另外考虑 cfiPosition，具体描述见 BPU 整体设计文档，简单重复其定义：被预测为分支指令的地址相对于取指块起始地址对齐到 32B 后的偏移量，以指令为单位，即：
+另外考虑 cfiPosition，具体描述见 Bpu 整体设计文档，简单重复其定义：被预测为分支指令的地址相对于取指块起始地址对齐到 32B 后的偏移量，以指令为单位，即：
 
 ```text
 cfiPosition = (cfiAddr - aligned(start))[5:1]
@@ -51,11 +51,11 @@ cfiPosition = (cfiAddr - aligned(start))[5:1]
 
 从语义上，fallThrough 预测的 cfiPosition 似乎没有什么用，因为它不跳转、甚至不是一个真的 cfi，但目前 ICache/Ifu 使用它计算需要取指的位置（需要访问的 data SRAM bank），因此它必须给出一个合理的值来最小化需要访问的 bank 数量，从而节省功耗、降低 2-fetch 的 bank 冲突[^bpu-fallthrough-icache-conflict]。
 
-[^bpu-fallthrough-icache-conflict]: 在 V2 的设计中，ICache 假设永远读取 34B，不需要使用 BPU 预测的 position，而 Ifu 则根据 BPU 预测的 taken 进行选择，taken 时根据 BPU 预测的 position 计算预测块大小，而不 taken 时则根据 target 计算。故 V2 的 fallThrough 预测不需要考虑这一点。V3 相当于把“不 taken 时使用 target-start 计算”这部分逻辑从 Ifu 挪到了 BPU 内部。
+[^bpu-fallthrough-icache-conflict]: 在 V2 的设计中，ICache 假设永远读取 34B，不需要使用 Bpu 预测的 position，而 Ifu 则根据 Bpu 预测的 taken 进行选择，taken 时根据 Bpu 预测的 position 计算预测块大小，而不 taken 时则根据 target 计算。故 V2 的 fallThrough 预测不需要考虑这一点。V3 相当于把“不 taken 时使用 target-start 计算”这部分逻辑从 Ifu 挪到了 Bpu 内部。
 
 ## 禁止取指块跨页 {#sec:bpu-fallthrough-no-cross-page}
 
-在 V3 设计中，为了节省 Itlb 面积，Ifu/ICache 假设单次取指请求不会跨过页边界（4KB），即需要 BPU 保证预测的 cfiPosition 和 start 在同一页内。
+在 V3 设计中，为了节省 Itlb 面积，Ifu/ICache 假设单次取指请求不会跨过页边界（4KB），即需要 Bpu 保证预测的 cfiPosition 和 start 在同一页内。
 
 类似 half-align，我们同样可以通过限制 fallThrough 预测来在不给 ubtb/abtb 引入额外的复杂度的情况下满足这一点。
 
