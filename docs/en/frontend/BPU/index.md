@@ -9,9 +9,24 @@
 
 | Abbreviation | Full name | Description |
 | --- | --------- | ------------ |
-| cfi | Control Flow Instruction | Control flow instruction, i.e. branches (e.g. `bne`) and jump instructions (e.g. `j`) |
+| cfi | Control Flow Instruction | Including branches (e.g. `bne`) and jump instructions (e.g. `j`) |
+| BTB | Branch Target Buffer | A cache structure that stores the target addresses and some metadata of branch instructions. |
 
 ## Submodule List {#sec:bpu-submodules}
+
+| Submodule | Description |
+| --- | --------- |
+| [FallThrough](fallThrough.md) | S1, always predict not-taken. Provides a prediction result when all other predictors miss or predict not-taken. |
+| [Ubtb](ubtb.md) | Micro Btb, S1, a small BTB implemented with registers, providing branch information. |
+| [Abtb](abtb.md) | Ahead Btb, S1, a medium-sized BTB implemented with ahead-pipeline techniques, providing branch information. |
+| [Utage](utage.md) | Micro Tage, S1, a small Tage, providing direction prediction. |
+| [Mbtb](mbtb.md) | Main Btb, S3, the main BTB, providing more accurate branch information. |
+| [Tage](tage.md) | TAgged GEometic History Length predictor, S3, providing more accurate direction prediction. |
+| [Sc](sc.md) | Statistical Corrector, S3, correcting Tage predictions using statistical patterns. |
+| [Ittage](ittage.md) | Indirect Target Tage, S3, indirect branch target predictor, providing indirect jump target prediction. |
+| [Ras](ras.md) | Return Address Stack, S3, return address predictor, providing return address prediction. |
+| [History Register](history.md) | Registers that store branch history information, used by Tage and other predictors to index storage structures. |
+| [Saturate Counter](saturateCounter.md) | Saturating counter utilities used by the predictors. |
 
 ## Design Specification {#sec:bpu-design-spec}
 

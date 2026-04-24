@@ -10,8 +10,23 @@
 | 缩写 | 全称 | 描述 |
 | --- | --------- | ------------ |
 | cfi | Control Flow Instruction | 控制流指令，即分支（e.g. `bne`）和跳转指令（e.g. `j`） |
+| BTB | Branch Target Buffer | 分支目标缓冲器，存储分支指令的目标地址和一些元数据的缓存结构 |
 
 ## 子模块列表 {#sec:bpu-submodules}
+
+| 子模块 | 描述 |
+| --- | --------- |
+| [FallThrough](fallThrough.md) | S1，总是预测不跳转，当所有其他预测器都未命中或预测不跳转时提供预测结果。 |
+| [Ubtb](ubtb.md) | Micro Btb，S1，寄存器实现的小 BTB，提供分支信息。 |
+| [Abtb](abtb.md) | Ahead Btb，S1，使用 ahead-pipeline 技术实现的中等大小的 BTB，提供分支信息。 |
+| [Utage](utage.md) | Micro Tage，S1，小 Tage，提供方向预测。 |
+| [Mbtb](mbtb.md) | Main Btb，S3，主 BTB，提供更准确的分支信息。 |
+| [Tage](tage.md) | TAgged GEometic History Length predictor，S3，提供更准确的方向预测 |
+| [Sc](sc.md) | Statistical Corrector，S3，使用统计模式修正 Tage 的预测。 |
+| [Ittage](ittage.md) | Indirect Target Tage，S3，间接跳转指令预测器，提供间接跳转目标预测。 |
+| [Ras](ras.md) | Return Address Stack，S3，返回地址预测器，提供返回地址预测。 |
+| [历史信息寄存器](history.md) | 存储分支历史信息的寄存器，供 Tage 等预测器索引存储结构使用。 |
+| [饱和计数器](saturateCounter.md) | 饱和计数器工具类，供各预测器使用。 |
 
 ## 设计规格 {#sec:bpu-design-spec}
 

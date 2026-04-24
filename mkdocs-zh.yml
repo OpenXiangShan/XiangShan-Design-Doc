@@ -37,6 +37,8 @@ nav:
       - Statistical Corrector (sc): frontend/BPU/sc.md
       - Indirect Target Tage (ittage): frontend/BPU/ittage.md
       - Return Address Stack (ras): frontend/BPU/ras.md
+      - 历史信息寄存器: frontend/BPU/history.md
+      - 饱和计数器: frontend/BPU/saturateCounter.md
     - 取指目标队列: 
       - frontend/FTQ/index.md
     - 取指令单元:
