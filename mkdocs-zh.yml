@@ -29,6 +29,7 @@ nav:
   - 前端:
     - 分支预测单元:
       - frontend/BPU/index.md
+      - FallThrough: frontend/BPU/fallThrough.md
       - Micro Btb (ubtb): frontend/BPU/ubtb.md
       - Ahead Btb (abtb): frontend/BPU/abtb.md
       - Micro Tage (utage): frontend/BPU/utage.md
