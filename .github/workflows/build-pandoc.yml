@@ -2,9 +2,9 @@ name: build document with pandoc
 
 on:
   push:
-    branches: [ master ]
+    branches: [ kunminghu-v3 ]
   pull_request:
-    branches: [ master ]
+    branches: [ kunminghu-v3 ]
   workflow_call:
 
 jobs:
@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: true
           fetch-tags: true
@@ -35,7 +35,7 @@ jobs:
           make pdf-one LANG=${{ matrix.lang }} TWOSIDE=1
 
       - name: Upload built PDFs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xiangshan-design-doc-${{ matrix.lang }}
           path: |
