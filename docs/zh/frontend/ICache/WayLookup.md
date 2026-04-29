@@ -1,6 +1,6 @@
 # WayLookup {#sec:icache-waylookup}
 
-wayLookup 为环形队列结构，暂存 prefetchPipe 查询 metaArray 和 ITLB 得到的元数据，以备 mainPipe 使用。同时监听 missUnit 的重填广播，对命中信息进行更新。更新逻辑与 PrefetchPipe 中相同，见 [@sec:icache-hit-update] [PrefetchPipe “命中信息的更新” 一节](PrefetchPipe.md#命中信息的更新-secicache-hit-update)。
+wayLookup 为环形队列结构，暂存 prefetchPipe 查询 metaArray 和 ITLB 得到的元数据，以备 mainPipe 使用。同时监听 missUnit 的重填广播，对命中信息进行更新。更新逻辑与 PrefetchPipe 中相同，见 [@sec:icache-hit-update] [PrefetchPipe “命中信息的更新” 一节](PrefetchPipe.md#sec:icache-hit-update)。
 
 ## 指针更新 {#sec:icache-waylookup-pointer-update}
 

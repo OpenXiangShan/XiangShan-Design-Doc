@@ -57,9 +57,9 @@
   - Parity code is used by default.
   - Error injection control registers are software-visible through MMIO.
 - DataArray supports banked storage for lower power.
-- Support serving two fetch blocks in one cycle when SRAM accesses do not conflict. See [@sec:icache-2fetch] [2-fetch](#2-fetch-secicache-2fetch).
+- Support serving two fetch blocks in one cycle when SRAM accesses do not conflict. See [@sec:icache-2fetch] [2-fetch](#sec:icache-2fetch).
 
-[^ecc]: In this document, error checking and error injection features are also referred to as ECC. See [@sec:icache-ecc] [ECC](#ecc-secicache-ecc).
+[^ecc]: In this document, error checking and error injection features are also referred to as ECC. See [@sec:icache-ecc] [ECC](#sec:icache-ecc).
 
 ## Parameters {#sec:icache-params}
 

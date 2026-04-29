@@ -2,7 +2,7 @@
 
 ICache replacer uses PLRU update algorithm.
 
-Similar to [@sec:icache-metaarray-interleave] [MetaArray interleave](Array.md#metaarray-interleave-secicache-metaarray-interleave), considering each fetch may access two consecutive cachelines, one replacer is used for odd addresses and another for even addresses. During touch and victim selection, corresponding replacer is selected by address parity.
+Similar to [@sec:icache-metaarray-interleave] [MetaArray interleave](Array.md#sec:icache-metaarray-interleave), considering each fetch may access two consecutive cachelines, one replacer is used for odd addresses and another for even addresses. During touch and victim selection, corresponding replacer is selected by address parity.
 
 ## PLRU Algorithm {#sec:icache-replacer-plru}
 

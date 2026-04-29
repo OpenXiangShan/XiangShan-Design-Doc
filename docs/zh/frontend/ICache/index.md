@@ -57,9 +57,9 @@
   - 默认采用 parity code
   - 软件可通过 MMIO 空间访问的错误注入控制寄存器
 - DataArray 支持分 bank 存储，细存储粒度实现低功耗
-- 支持在 SRAM 不冲突的情况下单周期提供两个取指块，见 [@sec:icache-2fetch] [2-fetch](#2-fetch-secicache-2fetch) 一节的说明。
+- 支持在 SRAM 不冲突的情况下单周期提供两个取指块，见 [@sec:icache-2fetch] [2-fetch](#sec:icache-2fetch) 一节的说明。
 
-[^ecc]: 本文档也将错误检查 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](#ecc-secicache-ecc) 一节的说明。
+[^ecc]: 本文档也将错误检查 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](#sec:icache-ecc) 一节的说明。
 
 ## 参数列表 {#sec:icache-params}
 
@@ -164,7 +164,7 @@ ICache 可能接受两个来源的预取请求：
 2-prefetch 请求的限制：
 
 1. 软件预取请求不支持 2-prefetch，仅 FTQ 发送的硬件预取请求支持 2-prefetch
-2. 如前 [@sec:icache-cross-page] [一节](#取指请求跨页-secicache-cross-page)所述，2-prefetch 请求内的两个取指块必须在同一页内
+2. 如前 [@sec:icache-cross-page] [一节](#sec:icache-cross-page)所述，2-prefetch 请求内的两个取指块必须在同一页内
 3. FTQ 内 `bpuPtr - pfPtr` 必须大于等于 4，即 BPU s3 override 第二个取指块的冲刷必须在 FTQ 内完成，一旦将 2-prefetch 请求发送到 prefetchPipe，不允许 BPU 对其进行冲刷（后端重定向造成的冲刷正常进行）
 4. 两个取指块不能产生 metaArray 的读端口冲突，即满足下面条件之一：
     1. 位于同一个 cacheline 内
