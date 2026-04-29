@@ -1,490 +1,313 @@
-# XiangShan ICache Design Document
+# XiangShan ICache Design Document {#sec:icache-index}
 
-- Version: V2R2
-- Status: OK
-- Date: 2025/03/07
-- commit：[4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345](https://github.com/OpenXiangShan/XiangShan/tree/4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345)
+- Version: V3
+- Status: draft
+- Date: 2026/04/22
+- commit: TODO
 
-## Glossary of Terms
+## Glossary {#sec:icache-glossary}
 
-| Abbreviation | Full name                                | Description                                                                  |
-| ------------ | ---------------------------------------- | ---------------------------------------------------------------------------- |
-| ICache/I$    | Instruction Cache                        | L1 instruction cache                                                         |
-| DCache/D$    | Data Cache                               | L1 Data Cache                                                                |
-| L2 Cache/L2$ | Level Two Cache                          | L2 cache                                                                     |
-| IFU          | Instruction Fetch Unit                   | Fetch Unit                                                                   |
-| ITLB         | Instruction Translation Lookaside Buffer | Address Translation Buffer                                                   |
-| PMP          | Physical Memory Protection               | Physical Memory Protection Module                                            |
-| PMA          | Physical Memory Attribute                | Physical Memory Attributes module (part of PMP)                              |
-| BEU          | Bus Error Unit                           | Bus error unit                                                               |
-| FDIP         | Fetch-directed Instruction Prefetch      | Instruction fetch directs instruction prefetch                               |
-| MSHR         | Miss Status Holding Register             | Missing state retention register                                             |
-| a/(g)pf      | Access / (Guest) Page Fault              | Access error / (Guest) page fault                                            |
-| v/(g)paddr   | Virtual / (Guest) Physical Address       | Virtual Address / (Guest) Physical Address                                   |
-| PBMT         | Page-Based Memory Types                  | Page-based memory types, see the privileged manual for the Svpbmt extension. |
+| Abbreviation | Full Name | Description |
+| --- | --------- | ------------ |
+| ICache/I$ | Instruction Cache | L1 instruction cache |
+| L2 Cache/L2$ | Level Two Cache | L2 cache |
+| FTQ | Fetch Target Queue | Fetch target queue, see [FTQ design doc](../FTQ/index.md) |
+| IFU | Instruction Fetch Unit | Fetch unit, see [IFU design doc](../IFU/index.md) |
+| ITLB | Instruction Translation Lookaside Buffer | Address translation buffer |
+| PMP | Physical Memory Protection | Physical memory protection module |
+| PMA | Physical Memory Attribute | Physical memory attribute module (part of PMP) |
+| BEU | Bus Error Unit | Bus error unit |
+| FDIP | Fetch-directed Instruction Prefetch | Fetch-directed instruction prefetch |
+| MSHR | Miss Status Holding Register | Miss status holding register |
+| af | Instruction Access Fault | Access fault, exception code 1 in RISC-V |
+| (g)pf | Instruction (Guest) Page Fault | Instruction (guest) page fault, exception code 12 (20) in RISC-V |
+| hwe | Hardware Error | Hardware error, exception code 19 in RISC-V |
+| vaddr | Virtual Address | Virtual address |
+| (g)paddr | (Guest) Physical Address | (Guest) physical address |
+| PBMT | Page-Based Memory Types | Page-based memory types, see the Svpbmt extension |
+| fb | Fetch Block | Fetch block |
 
-## Submodule List
+## Submodules {#sec:icache-submodules}
 
-| Submodule                         | Description                                                                        |
-| --------------------------------- | ---------------------------------------------------------------------------------- |
-| [MainPipe](MainPipe.md)           | Main Pipeline                                                                      |
-| [IPrefetchPipe](IPrefetchPipe.md) | Prefetch Pipeline                                                                  |
-| [WayLookup](WayLookup.md)         | Metadata buffer queue                                                              |
-| MetaArray                         | Metadata SRAM                                                                      |
-| DataArray                         | Data SRAM                                                                          |
-| [MissUnit](MissUnit.md)           | Missing processing unit                                                            |
-| [Replacer](Replacer.md)           | Replacement policy unit                                                            |
-| [CtrlUnit](CtrlUnit.md)           | Control unit, currently only used for error checking/error injection functionality |
+| Submodule | Description |
+| --- | --------- |
+| [PrefetchPipe](PrefetchPipe.md) | Prefetch pipeline |
+| [MainPipe](MainPipe.md) | Main pipeline |
+| [WayLookup](WayLookup.md) | Metadata buffer queue |
+| [MetaArray](Array.md) | Metadata array |
+| [DataArray](Array.md) | Data array |
+| [MissUnit](MissUnit.md) | Miss handling unit |
+| [Replacer](Replacer.md) | Replacement policy unit |
+| [CtrlUnit](CtrlUnit.md) | Control unit, currently only for ECC check/error injection control |
 
-## Design specifications
+## Design Specifications {#sec:icache-design-spec}
 
-- Cache instruction data
-- On a miss, request data from L2 via the tilelink bus
-- Software maintains L1 I/D Cache coherence (`fence.i`)
-- Supports cross-cacheline fetch/prefetch requests
-- Supports flushing (bpu redirect, backend redirect, `fence.i`)
-- Supports prefetch instruction requests
-  - Hardware prefetching uses the FDIP prefetch algorithm.
-  - Software prefetching via Zicbop extension `prefetch.i` instruction
-- Support configurable replacement algorithms
-- Supports configurable number of miss status holding registers
-- Supports checking address translation errors and physical memory protection
-  errors
-- Supports error checking & error recovery & error injection[^ecc].
-  - Parity code is used by default
-  - Error recovery by refetching from L2
-  - Error injection control registers accessible by software via MMIO space
-- DataArray supports banked storage, achieving low power consumption through
-  fine-grained storage
+- Cache instruction data.
+- Request data from L2 through TileLink on miss.
+- Software maintains L1 I/D cache coherence (`fence.i`).
+- Support cross-cacheline (pre)fetch requests.
+- Support flush (BPU redirect, backend redirect, `fence.i`).
+- Support prefetch requests.
+  - Hardware prefetch uses the FDIP algorithm.
+  - Software prefetch uses the Zicbop `prefetch.i` instruction.
+- Support configurable replacement policy.
+- Support configurable number of miss status registers.
+- Support translation/protection checks.
+- Support error checking and error injection[^ecc].
+  - Parity code is used by default.
+  - Error injection control registers are software-visible through MMIO.
+- DataArray supports banked storage for lower power.
+- Support serving two fetch blocks in one cycle when SRAM accesses do not conflict. See [@sec:icache-2fetch] [2-fetch](#sec:icache-2fetch).
 
-[^ecc]: This document also refers to error checking & error recovery & error
-injection related functions as ECC. See the explanation at the beginning of the
-[ECC](#sec:icache-ecc) section in [@sec:icache-ecc].
+[^ecc]: In this document, error checking and error injection features are also referred to as ECC. See [@sec:icache-ecc] [ECC](#sec:icache-ecc).
 
-## Parameter List
+## Parameters {#sec:icache-params}
 
-| Parameters          | Default Value | Description                                                                         | Requirements                                    |
-| ------------------- | ------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------- |
-| nSets               | 256           | Number of SRAM sets                                                                 | Power of 2                                      |
-| nWays               | 4             | Number of SRAM ways                                                                 |                                                 |
-| nFetchMshr          | 4             | Number of fetch MSHRs                                                               |                                                 |
-| nPrefetchMshr       | 10            | Number of prefetch MSHRs                                                            |                                                 |
-| nWayLookupSize      | 32            | WayLookup depth, which can also backpressure to limit the maximum prefetch distance |                                                 |
-| DataCodeUnit        | 64            | Check unit size, in bits, with 1 check bit per 64 bits.                             |                                                 |
-| ICacheDataBanks     | 8             | Number of banks per cacheline division                                              |                                                 |
-| ICacheDataSRAMWidth | 66            | Basic SRAM width of DataArray                                                       | Exceeds the sum of data and code width per bank |
+See `case class ICacheParams` in `Parameters.scala`. Selected parameters are listed below:
 
-## Functional Overview
+| Parameter | Default | Description | Requirement |
+| ------ | --- | --------- | ------ |
+| nSets | 256 | Number of SRAM sets | Power of 2 |
+| nWays | 4 | Number of SRAM ways | |
+| rowBits | 64 | Data width of each bank | Factor of `(blockBytes * 8)` |
+| blockBytes | 64 | Bytes per cacheline | Fixed 64B for RVA23 profile |
+| Replacer | "setplru" | Replacement policy | Supported by rocket-chip ReplacementPolicy, currently including "random", "setlru", "setplru" |
+| NumFetchMshr | 4 | Number of fetch MSHRs | |
+| NumPrefetchMshr | 10 | Number of prefetch MSHRs | |
+| WayLookupSize | 32 | WayLookup depth, also used to backpressure and limit max prefetch distance | |
+| MetaEcc | "parity" | ECC type for MetaArray | "parity" or "secded" |
+| DataEcc | "parity" | ECC type for DataArray | "parity" or "secded" |
+| DataEccUnit | 64 | ECC unit size in bits; one check bit per data unit | Factor of `rowBits` |
+| NumInterleavedBank | 2 | Number of interleaved banks in MetaArray | Power of 2 and >= 2 |
+| MetaWaySplit | 2 | Number of physical-way splits in MetaArray, for SRAM PPA tuning | Factor of `nWays` |
+| MetaDataSplit | 1 | Number of physical-data splits in MetaArray, for SRAM PPA tuning | |
+| DataPaddingBits | 1 | Extra padding bits per DataArray entry, for SRAM PPA tuning | |
+| EnableCtrlUnit | true | Whether to instantiate CtrlUnit; if false, ECC features are not software-controllable | |
+| ctrlUnitParameters | - | CtrlUnit parameters | See [@sec:icache-ctrlunit] [CtrlUnit doc](./CtrlUnit.md) |
 
-The FTQ stores prediction blocks generated by the BPU, with fetchPtr pointing to
-the fetch prediction block and prefetchPtr pointing to the prefetch prediction
-block. Upon reset, prefetchPtr aligns with fetchPtr. Each successful fetch
-request increments fetchPtr, while each successful prefetch request increments
-prefetchPtr. For detailed information, refer to the [FTQ Design
-Document](../FTQ/index.md).
+## Functional Overview {#sec:icache-functional-overview}
 
-![FTQ pointer illustration](../figure/ICache/ICache/ftq_pointer.png)
+> Before reading this document, it is recommended to read the FDIP and Decoupled Frontend papers in the references for prerequisite background.
 
-The ICache structure is shown in the figure below. It has two pipelines:
-MainPipe and IPrefetchPipe. MainPipe receives instruction fetch requests from
-FTQ, while IPrefetchPipe receives hardware/software prefetch requests from
-FTQ/MemBlock. For prefetch requests, IPrefetch queries the MetaArray and stores
-the metadata (which way hit, ECC check code, whether an exception occurred,
-etc.) in WayLookup. If the request misses, it is sent to MissUnit for
-prefetching. For instruction fetch requests, MainPipe first reads the hit
-information from WayLookup. If no information is available in WayLookup,
-MainPipe will block until IPrefetchPipe writes the information into WayLookup.
-This scheme separates access to MetaArray and DataArray, accessing only a single
-way of DataArray at a time, achieving lower power consumption at the cost of a
-one-cycle redirect latency.
+> This document and related code are still under active construction. Some descriptions may reflect intended design behavior and may not be fully implemented yet.
 
-![ICache Structure](../figure/ICache/ICache/icache_structure.png)
+ICache structure is shown in [@fig:icache-structure].
 
-MissUnit handles fetch requests from MainPipe and prefetch requests from
-IPrefetchPipe, managed through MSHR. All MSHRs share a set of data registers to
-reduce area.
+![ICache structure](../figure/ICache/pipeline.png){#fig:icache-structure}
 
-Replacer serves as the replacement unit, defaulting to the PLRU replacement
-policy. It receives hit updates from MainPipe and provides the waymask to be
-replaced to MissUnit.
+From a structural view, ICache mainly consists of:
 
-MetaArray is divided into odd and even banks to support dual-line accesses
-across cachelines.
+- prefetchPipe: prefetch pipeline; interacts with MetaArray and ITLB to obtain metadata and handles prefetch requests.
+- mainPipe: main pipeline; reads DataArray, handles fetch requests, performs ECC checks, and sends results to IFU.
+- wayLookup: buffer between prefetchPipe and mainPipe; stores metadata query results.
+- metaArray: stores cacheline metadata (tag, valid, maybeRvc, etc.) and check bits.
+- dataArray: stores cacheline data and check bits.
+- missUnit: maintains MSHR state, accepts miss requests, sends requests to L2 cache, and refills SRAM on response.
+- ctrlUnit: control unit; software can control ICache behavior through MMIO-mapped CSRs, currently only ECC-check related behavior.
 
-The cacheline in DataArray is divided into 8 banks by default, with each bank
-storing 64 bits of valid data plus 1 parity bit. Since 65-bit-wide SRAM performs
-poorly, 256×66-bit SRAM is used as the basic unit, totaling 32 such units. Each
-access requires 34 bytes of instruction data, necessitating access to 5 banks
-(8×5 > 34), selected based on the starting address.
+From a pipeline view, to save read ports and power, ICache uses serialized MetaArray/DataArray access and a tightly coupled prefetch+fetch design. This means all fetch blocks must go through prefetchPipe first and then enter mainPipe in the same order, which is guaranteed by FTQ design.
 
-## Functional Details
+After reset or redirect, the first fetch request is sent to both mainPipe and prefetchPipe. Since wayLookup is empty, mainPipe stalls for one cycle and waits for prefetchPipe to write metadata into wayLookup. At that point, prefetchPipe s0 is shared by prefetch and fetch flows, and prefetchPipe s1 and mainPipe s0 are in the same logical pipeline stage. During steady-state operation, mainPipe may stall because of ICache misses, full IBuffer, and so on, while prefetchPipe can keep running. wayLookup then gets filled, and mainPipe/prefetchPipe run in parallel until the next redirect, with prefetchPipe s0 and mainPipe s0 in the same logical stage.
 
-### (Pre)fetch request
+Both prefetchPipe and mainPipe decide miss/exception status based on metadata from MetaArray and ITLB. If there is no exception and a miss occurs, missUnit sends an L2 cache request. For prefetchPipe, processing can complete after issuing the prefetch miss. For mainPipe, processing completes only after refill and data delivery to IFU.
 
-The FTQ sends fetch/prefetch requests to the respective fetch/prefetch pipelines
-for processing. As mentioned earlier, IPrefetch queries the MetaArray and ITLB,
-storing metadata (such as hit way, ECC code, exception occurrence, etc.) in
-WayLookup during the IPrefetchPipe s1 stage for MainPipe s0 to read.
+## Functional Details {#sec:icache-functional-details}
 
-During power-on reset/redirection, since WayLookup is empty and FTQ's
-prefetchPtr and fetchPtr reset to the same position, the MainPipe s0 stage has
-to stall waiting for the IPrefetchPipe s1 stage to write, introducing an
-additional cycle of redirection delay. However, as BPU fills prediction blocks
-into FTQ and MainPipe/IFU stalls for various reasons (e.g., miss, IBuffer full),
-IPrefetchPipe will work ahead of MainPipe (`prefetchPtr &gt; fetchPtr`), and
-WayLookup will have sufficient metadata. At this point, the MainPipe s0 stage
-and IPrefetchPipe s0 stage will operate in parallel.
+### Prefetch Requests {#sec:icache-prefetch-req}
 
-![Relationship between ICache's two
-pipelines](../figure/ICache/ICache/icache_stages.png)
+ICache may accept prefetch requests from two sources:
 
-For detailed instruction fetch procedures, refer to the [MainPipe submodule
-documentation](MainPipe.md), [IPrefetchPipe submodule
-documentation](IPrefetchPipe.md), and [WayLookup submodule
-documentation](WayLookup.md).
+1. Hardware prefetch requests from FTQ, based on FDIP.
+2. Software prefetch requests from LoadUnit in MemBlock, which are essentially Zicbop `prefetch.i` instructions (see the RISC-V CMO specification).
 
-#### Hardware prefetch and software prefetch
+However, prefetchPipe can process only one prefetch request per cycle, so arbitration is required. ICache top-level logic buffers software prefetch requests, then chooses one request between software and FTQ hardware prefetch to send into prefetchPipe. Software prefetch has higher priority, as shown in [@fig:icache-prefetch-source].
 
-After V2R2, ICache may accept prefetch requests from two sources:
+Logically, each LoadUnit may issue a software prefetch request, so up to `LduCnt` requests (current default `LduCnt=3`) may appear in one cycle. Considering implementation cost and performance benefit, ICache only accepts and processes one per cycle; the rest are dropped, and the smallest port index wins. In addition, if prefetchPipe is blocked and ICache already buffers one software prefetch request, the buffered request may be overwritten.
 
-1. Hardware prefetch requests from Ftq, based on FDIP algorithm.
-2. The software prefetch request from LoadUint in Memblock is essentially the
-   prefetch.i instruction in the Zicbop extension. Please refer to the RISC-V
-   CMO manual.
+![ICache prefetch request receive and arbitration](../figure/ICache/prefetch_source.png){#fig:icache-prefetch-source}
 
-However, the PrefetchPipe can only process one prefetch request per cycle,
-necessitating arbitration. The ICache top level is responsible for caching
-software prefetch requests and selecting between them and hardware prefetch
-requests from Ftq to send to the PrefetchPipe, with software prefetch requests
-having higher priority than hardware prefetch requests.
+The handling flow for hardware prefetch requests is:
 
-Logically, each LoadUnit can issue a software prefetch request, so there can be
-up to the number of LoadUnits (currently the default parameter is `LduCnt=3`)
-software prefetch requests per cycle. However, considering implementation cost
-and performance benefits, the ICache can receive and process at most one
-software prefetch request per cycle, with any excess being discarded,
-prioritizing the one with the smallest port index. Additionally, if the
-PrefetchPipe is blocked and the ICache already has a cached software prefetch
-request, the original request will be overwritten.
+1. Query MetaArray and ITLB to get metadata, including wayMask (bitmask indicating which way hits), physical address, exception information, and so on.
+2. Write metadata into wayLookup for mainPipe.
+3. Decide whether to issue a prefetch request based on wayMask and exception information.
+    1. If needed, send to missUnit for miss handling.
 
-![ICache prefetch request reception and
-arbitration](../figure/ICache/ICache/prefetch_mux.drawio.png)
+Software prefetch follows almost the same flow, but since it does not affect control flow, its metadata is not sent to wayLookup (therefore not sent to mainPipe and later stages).
 
-After being sent to the PrefetchPipe, the handling of software prefetch requests
-is almost identical to hardware prefetch requests, except:
-- Software prefetch requests do not affect the control flow, meaning they **will
-  not** be sent to the MainPipe (or subsequent stages like Ifu and IBuffer).
-  They only: 1) determine if there is a miss or exception; 2) if there is a miss
-  and no exception, send to the MissUnit for prefetching and refilling the SRAM.
+For pipeline-stage details, see [@sec:icache-prefetchpipe] [PrefetchPipe section](PrefetchPipe.md).
 
-For details on the PrefetchPipe, refer to the submodule documentation.
+### Fetch Requests {#sec:icache-fetch-req}
 
-### Exception propagation/special case handling
+The handling flow for fetch requests is:
 
-The ICache is responsible for performing permission checks on instruction fetch
-requests (via ITLB and PMP) and handling responses from L2. Potential exceptions
-during this process include:
+1. Read metadata from wayLookup.
+2. Read DataArray by wayMask to get instruction data (if hit).
+3. Decide whether to issue a fetch miss request based on wayMask and exception information.
+    1. If needed, send to missUnit for miss handling.
+4. Send instruction data and metadata to IFU.
+5. Perform ECC checks on instruction data/metadata and send check results to IFU (if enabled).
 
-| Source   | Exception  | Description                                              | Process                                                                                                                                                                                                    |
-| -------- | ---------- | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ITLB     | af         | Access error occurred during virtual address translation | Disable instruction fetch, mark the fetch block as af, and send it to the backend via IFU and IBuffer for processing.                                                                                      |
-| ITLB     | gpf        | Guest page fault                                         | Disable fetching, mark the fetch block as gpf, and send it to the backend via IFU and IBuffer for processing. The valid `gpaddr` and `isForNonLeafPTE` are sent to the backend's GPAMem for potential use. |
-| ITLB     | pf         | Page fault                                               | Disable instruction fetch, mark the fetch block as pf, and send it to the backend for processing via IFU and IBuffer.                                                                                      |
-| backend  | af/pf/gpf  | Same as ITLB af/gpf/pf                                   | Same as ITLB af/gpf/pf                                                                                                                                                                                     |
-| PMP      | af         | Physical address access denied                           | Same as ITLB af                                                                                                                                                                                            |
-| MissUnit | L2 corrupt | L2 cache responds with corrupt                           | Mark the fetch block as af, send it through IFU and IBuffer to the backend for processing                                                                                                                  |
+For pipeline-stage details, see [@sec:icache-mainpipe] [MainPipe section](MainPipe.md).
 
-It should be noted that for the general instruction fetch process, there is no
-such thing as a backend exception. However, to save hardware resources,
-XiangShan passes only 41/50 bits of the pc from the frontend (Sv39\*4 /
-Sv48\*4). For instructions like `jr` and `jalr`, the jump target comes from a
-64-bit register. According to the RISC-V specification, addresses with non-zero
-or non-one high bits are illegal and must trigger an exception. This check can
-only be performed by the backend and is sent to the Ftq along with the backend
-redirect signal, then forwarded to the ICache with the fetch request. This is
-essentially an ITLB exception, hence its description and handling are the same
-as ITLB.
+### Cross-page Fetch Requests {#sec:icache-cross-page}
 
-Additionally, L2 cache responses via the tilelink bus may indicate corruption
-due to either L2 ECC errors (`d.corrupt`) or denied access resulting from
-unauthorized bus address space access (`d.denied`). The tilelink specification
-mandates that asserting `d.denied` must simultaneously assert `d.corrupt`. Both
-scenarios require marking the instruction fetch block as an access fault, so the
-ICache currently does not need to distinguish between them (i.e., there is no
-need to monitor `d.denied`, which may be automatically optimized away by Chisel
-and thus invisible in the Verilog output).
+In V3, to save ITLB ports, ICache does not allow fetch requests crossing page boundaries. That is, the up-to-two fetch blocks and up-to-two cachelines in one fetch request must be in the same page (`vaddr[49:12]` equal). ICache hardware itself does not directly check this; BPU and FTQ guarantee it. Specifically:
 
-These exceptions have priorities: backend exception > ITLB exception > PMP
-exception > MissUnit exception. This is natural:
-1. When a backend exception occurs, the vaddr sent to the frontend is incomplete
-   and invalid, making the ITLB address translation process meaningless, and the
-   detected exception invalid.
-2. When an ITLB exception occurs, the translated paddr is invalid, rendering the
-   PMP check process meaningless, and any detected exceptions are invalid.
-3. When a PMP exception occurs, the paddr has no access permission, and no
-   (pre)fetch request is sent, so no response will be received from the
-   MissUnit.
+- When BPU generates a fetch block, if `startVAddr + 64` falls into the next page (that is, `startVAddr[49:12]` differs from `(startVAddr + 64)[49:12]`), BPU truncates the fetch block at the page boundary by marking `takenCfiPosition` at the last instruction in the current page.
+- When FTQ tries to send a 2-(pre)fetch request, it checks whether the two fetch blocks are in the same page. If not, FTQ will not send a 2-(pre)fetch request.
 
-For the three types of exceptions in the backend and the three types of
-exceptions in the ITLB, the backend and ITLB internally perform prioritized
-selection to ensure that at most one is raised at any time.
+### 2-(pre)fetch {#sec:icache-2fetch}
 
-Additionally, certain mechanisms may trigger special cases, referred to as
-exceptions in older documentation/code, though they do not actually cause
-`exception` as defined in the RISC-V manual. To avoid confusion, these will
-henceforth be called special cases:
+To improve fetch bandwidth in branch-intensive scenarios, V3 ICache supports 2-(pre)fetch requests, meaning each cycle can accept one (pre)fetch request carrying up to two fetch blocks. 2-prefetch and 2-fetch are decoupled by wayLookup (for example, fb0 and fb1 can be sent to prefetchPipe as one 2-prefetch request and enqueued into wayLookup in one cycle, while mainPipe may process fb0 in one cycle and then process a 2-fetch containing fb1 and fb2 in the next cycle). Considering hardware complexity and performance trade-offs, both 2-prefetch and 2-fetch have constraints.
 
-| Source   | Special Cases | Description                                             | Process                                                                                                                     |
-| -------- | ------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| PMP      | mmio          | Physical address is in MMIO space                       | Disable fetching, mark the fetch block as mmio, and perform **non-speculative** fetching by IFU                             |
-| ITLB     | pbmt.NC       | Page attributes are non-cacheable and idempotent        | Disable instruction fetching, allowing the IFU to perform **speculative** fetching.                                         |
-| ITLB     | pbmt.IO       | Page attributes are non-cacheable and non-idempotent    | PMP MMIO                                                                                                                    |
-| MainPipe | ECC error     | Main pipeline detects ECC errors in MetaArray/DataArray | See [ECC section](#sec:icache-ecc); the old version is the same as ITLB af, while the new version performs automatic retry. |
+Constraints for 2-prefetch requests:
 
-### Low-power design of DataArray with bank partitioning {#sec:icache-dataarray-per-bank-lowpower}
+1. Software prefetch does not support 2-prefetch. Only FTQ hardware prefetch supports 2-prefetch.
+2. As described in [@sec:icache-cross-page], the two fetch blocks in one 2-prefetch request must be in the same page.
+3. In FTQ, `bpuPtr - pfPtr` must be >= 4. In other words, flushing of the second fetch block caused by BPU s3 override must complete inside FTQ. Once a 2-prefetch request is sent to prefetchPipe, BPU is not allowed to flush it (backend-redirect-triggered flush still applies).
+4. The two fetch blocks must not cause MetaArray read-port conflicts; one of the following must hold:
+    1. They are in the same cacheline.
+    2. They are in adjacent cachelines, and the later fetch block (larger setIdx) is not cross-line.
+    3. They are in interleaved cachelines, and neither fetch block is cross-line.
 
-Currently, each cacheline in the ICache is divided into 8 banks, bank0-7. A
-fetch block requires 34B of instruction data, so each access spans 5 consecutive
-banks. There are two scenarios:
+Some conflict examples are shown in [@fig:icache-2prefetch-conflict]:
 
-1. These 5 banks are located within a single cacheline (starting address in
-   bank0-3). Assuming the starting address is in bank2, the required data is
-   located in bank2-6. As shown in Figure a.
-2. Cross-cacheline (starting address located in bank4-7). Assuming the starting
-   address is in bank6, the data is located in bank6-7 of cacheline0 and bank0-2
-   of cacheline1. Somewhat similar to a ring buffer. As shown in Figure b.
+![2-prefetch conflict examples](../figure/ICache/2prefetch_conflict.png){#fig:icache-2prefetch-conflict}
 
-![Diagram of DataArray divided into
-banks](../figure/ICache/ICache/dataarray_bank.png)
+Constraints for 2-fetch requests:
 
-When obtaining a cacheline from SRAM or MSHR, the data is placed into the
-corresponding bank based on the address.
+1. TODO
 
-Since each access only requires data from 5 banks, the port from ICache to IFU
-actually needs only one 64B port. The respective banks of two cachelines are
-selected and concatenated before being returned to IFU (completed within the
-DataArray module). IFU then duplicates and concatenates this 64B data, allowing
-direct selection of the fetch block data based on the fetch block's starting
-address. The following diagram illustrates both non-crossing and crossing
-scenarios:
+### Exception Propagation and Special-case Handling {#sec:icache-exception-special}
 
-![DataArray data return
-diagram](../figure/ICache/ICache/dataarray_bank_read_singleline.png)
+ICache checks fetch-request permissions through ITLB and PMP and receives L2 responses. Possible exceptions are listed in [@tbl:icache-exception].
 
-![DataArray data return
-diagram](../figure/ICache/ICache/dataarray_bank_read_multiline.png)
+Table: ICache exception list {#tbl:icache-exception}
 
-You may also refer to [the comments in
-IFU.scala](https://github.com/OpenXiangShan/XiangShan/blob/fad7803d97ed4a987a743036cec42d1c07b48e2e/src/main/scala/xiangshan/frontend/IFU.scala#L474-L502).
+| Source | Exception | Description | Handling |
+| --- | --- | --------- | ------------ |
+| ITLB | af | Access fault during virtual-address translation | Block fetching, mark block as af, send to backend through IFU |
+| ITLB | gpf | Guest page fault | Block fetching, mark block as gpf, send to backend through IFU, and pass valid `gpaddr` plus `isForNonLeafPTE` to backend GPAMem |
+| ITLB | pf | Page fault | Block fetching, mark block as pf, send to backend through IFU |
+| backend | af/pf/gpf | Same as ITLB af/gpf/pf | Same as ITLB af/gpf/pf |
+| PMP/PMA | af | Physical address has no permission | Mark block as af, send to backend through IFU |
+| L2 | corrupt | L2 cache response `corrupt` | Mark block as hwe, send to backend through IFU |
+| L2 | denied | L2 cache response `denied` | Mark block as af, send to backend through IFU |
+| ECC | corrupt | ECC check error | Mark block as hwe, send to backend through IFU |
 
-### Flush
+Additional notes:
 
-When backend/IFU redirection, BPU redirection, or `fence.i` instruction
-execution occurs, the storage structures and pipeline stages in the ICache need
-to be flushed as appropriate. Possible flush targets/actions include:
+1. In normal fetch flow, there is no backend exception item. However, for hardware resource saving, XiangShan frontend only carries 41/50-bit PC (Sv39*4/Sv48*4), while target addresses of instructions like `jr`/`jalr` come from 64-bit registers. According to RISC-V, addresses whose high bits are not all-0 or all-1 are illegal and must raise exceptions. This check can only be done in backend, then sent to FTQ together with backend redirect signals, and then sent to ICache together with fetch requests. It is essentially an ITLB-type exception, so its description/handling is the same as ITLB exceptions.
+2. In V2R2, PMP/PMA existed as a standalone module. In V3, for timing reasons, PMP/PMA checks are moved earlier to ITLB refill. At the ICache interface, PMP/PMA results are returned together with ITLB results. Because their meanings differ, they are still listed separately in the table.
+3. In V2R2, hwe exceptions (introduced in RISC-V Privileged Spec v1.13) were not supported. Therefore, V2R2 handled the above hwe scenarios as af and did not distinguish L2 `corrupt` (for example, L2 ECC check error) from `denied` (for example, bus permission denied). V3 supports hwe.
+4. In V2R2, ECC auto-retry on error was implemented, so ECC errors did not raise exceptions (unless retry hit an L2 exception). V3 removed this feature for design simplification and timing, and now raises hwe for software handling.
 
-1. All pipeline stages of MainPipe and IPrefetchPipe
-    - During flush, simply set `s0/1/2_valid` to `false.B`.
-2. Valid in MetaArray
-    - During flushing, directly set `valid` to `false.B`.
-    - `tag` and `code` do not need to be flushed, as their validity is
-      controlled by `valid`.
-    - Data in DataArray does not require flushing as their validity is
-      controlled by `valid` in MetaArray
+These exceptions have priority: backend > ITLB > PMP > L2 = ECC. This is natural:
+
+1. With backend exception, vaddr sent to frontend is incomplete/illegal, so ITLB translation is meaningless and ITLB exception results are invalid.
+2. With ITLB exception, translated paddr is invalid, so PMP check is meaningless and PMP exception results are invalid.
+3. With PMP exception, paddr has no access permission; fetch request is invalid and no L2 request is sent, so L2/ECC checks are invalid.
+4. L2 and ECC checks are inherently mutually exclusive: L2 is on miss path, ECC is on hit path, so relative priority is irrelevant.
+
+For the three backend exception types and three ITLB exception types, backend/ITLB each selects one with internal priority so at most one is asserted at a time.
+
+In addition, some mechanisms trigger special cases. In older docs/code they were also called exceptions, but they do not raise RISC-V-defined `exception`. To avoid confusion, they are referred to as special cases hereafter, as listed in [@tbl:icache-special-case].
+
+Table: ICache special case list {#tbl:icache-special-case}
+
+| Source | Special case | Description | Handling |
+| --- | --- | --------- | ------------ |
+| PMP | mmio | Physical address is in MMIO space | Block fetching, mark block as mmio, IFU performs **non-speculative** fetch |
+| ITLB | pbmt.NC | Page attribute is non-cacheable and idempotent | Block cache fetch, IFU performs **speculative** fetch |
+| ITLB | pbmt.IO | Page attribute is non-cacheable and non-idempotent | Same as pmp mmio |
+
+### Flush {#sec:icache-flush}
+
+When backend/IFU redirect, BPU redirect, or `fence.i` happens, selected storage structures and pipeline stages in ICache must be flushed depending on reason. Possible flush targets/actions include:
+
+1. All pipeline stages in MainPipe and PrefetchPipe
+   - During flush, set `s0/1/2_valid` to `false.B`.
+2. `valid` in MetaArray
+   - During flush, set `valid` to `false.B`.
+   - `tag` and `code` do not need flushing because their validity is controlled by `valid`.
+   - Data in DataArray does not need flushing because its validity is controlled by MetaArray `valid`.
 3. WayLookup
-    - Read/write pointer reset
-    - `gpf_entry.valid` is set to `false.B`
-4. All MSHRs in the MissUnit
-    - If the MSHR has not yet issued a request to the bus, directly invalidate
-      it (`valid === false.B`) - If the MSHR has already issued a request to the
-      bus, mark it for flushing (`flush === true.B` or `fencei === true.B`), and
-      invalidate it only when the d-channel receives a grant response, without
-      returning the grant data to MainPipe/PrefetchPipe or writing it to SRAM -
-      Note that when the d-channel receives a grant response while also
-      receiving a flush (`io.flush === true.B` or `io.fencei === true.B`), the
-      MissUnit similarly does not write to SRAM, but **will** return the data to
-      MainPipe/PrefetchPipe to avoid introducing port latency into the response
-      logic. At this time, MainPipe/PrefetchPipe also simultaneously receives
-      the flush request and will discard the data.
+   - Reset read/write pointers.
+   - Set `gpf_entry.valid` to `false.B`.
+4. All MSHRs in MissUnit
+   - If an MSHR has not sent a request to bus yet, simply invalidate it (`valid === false.B`).
+   - If an MSHR has already sent a bus request, mark it pending-flush (`flush === true.B` or `fencei === true.B`), and invalidate it when the D-channel grant returns. At that time, grant data is neither replied to MainPipe/PrefetchPipe nor written into SRAM.
+   - Note that if D-channel grant and flush (`io.flush === true.B` or `io.fencei === true.B`) arrive in the same cycle, MissUnit still does not write SRAM, but **does** reply data to MainPipe/PrefetchPipe to avoid introducing port latency into response logic. MainPipe/PrefetchPipe also receive the flush in that cycle, so they will discard the data.
 
-Flush targets required for each flush reason:
+Flush targets per flush reason are listed in [@tbl:icache-flush].
 
-| Flush reason         | 1                       | 2   | 3                       | 4   |
-| -------------------- | ----------------------- | --- | ----------------------- | --- |
-| Backend/IFU Redirect | Y                       |     | Y                       | Y   |
-| BPU redirection      | Y[^redirect_tab_bpu]    |     |                         |     |
-| `fence.i`            | Y[^redirect_tab_fencei] | Y   | Y[^redirect_tab_fencei] | Y   |
+Table: ICache flush target list {#tbl:icache-flush}
 
-[^redirect_tab_bpu]: The BPU precise predictor (BPU s2/s3 provides results) may
-override the prediction of the simple predictor (BPU s0 provides results).
-Clearly, its redirect request arrives at the ICache at the latest 1-2 cycles
-after the prefetch request, so only the following is needed:
+| Flush reason | Pipeline | MetaArray | WayLookup | MissUnit |
+| ------ | --- | --- | --- | --- |
+| backend/IFU redirect | Y | | Y | Y |
+| BPU redirect | Y[^redirect_tab_bpu] | | Y[^redirect_tab_bpu] | |
+| `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
-    BPU s2 redirect：冲刷 IPrefetchPipe s0
+[^redirect_tab_bpu]: BPU precise predictor (result from BPU s3) may override simple predictor (result from BPU s0). Its redirect reaches ICache at most 2 cycles after prefetch issue, so only prefetchPipe s0/s1 and tail entries in wayLookup need to be flushed. See corresponding sections.
 
-    BPU s3 redirect：冲刷 IPrefetchPipe s0/1
+[^redirect_tab_fencei]: Logically, `fence.i` needs to flush MainPipe and PrefetchPipe (because in-flight data may become invalid). But in current implementation, assertion of `io.fencei` always accompanies backend redirect, so explicit MainPipe/PrefetchPipe flush by `fence.i` is unnecessary.
 
-    当 IPrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
+ICache does not accept fetch/prefetch requests while flushing (`io.req.ready === false.B`).
 
-    当 IprefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
+#### ITLB Flush Notes {#sec:icache-itlb-flush}
 
-[^redirect_tab_fencei]: `fence.i` logically requires flushing the MainPipe and
-IPrefetchPipe (as the data in the pipeline may be invalid at this point), but in
-practice, `io.fencei` being asserted is always accompanied by a backend
-redirect, making it unnecessary to flush the MainPipe and IPrefetchPipe in the
-current implementation.
+ITLB flush is special. Cached PTEs only need flushing on `sfence.vma`, and that path is handled by backend, so frontend/ICache normally does not manage ITLB flush. There is one exception: currently ITLB does not store `gpaddr` to save resources. When `gpf` occurs, ITLB refetches from L2TLB, and the retry state is controlled by a `gpf` cache. This requires ICache, after receiving `ITLB.resp.excp.gpf_instr`, to ensure one of the following:
 
-When the ICache is being flushed, it does not accept fetch/prefetch requests
-(`io.req.ready === false.B`).
+1. Re-issue the same `ITLB.req.vaddr` until `ITLB.resp.miss` deasserts (then `gpf` and `gpaddr` are both valid and can be normally sent to backend). ITLB will flush its `gpf` cache in this process.
+2. Assert `ITLB.flushPipe`, in which case ITLB flushes its `gpf` cache.
 
-#### Flushing the ITLB
+If ITLB `gpf` cache is not flushed, and a request with a different `ITLB.req.vaddr` arrives and causes another `gpf`, the core may hang.
 
-ITLB flushing is unique—its cached page table entries only need flushing upon
-executing the `sfence.vma` instruction. This flushing path is managed by the
-backend, so the frontend/ICache generally does not handle ITLB flushing. There
-is one exception: to save resources, the ITLB does not store `gpaddr`. Instead,
-it fetches from the L2TLB when a `gpf` occurs, with the refetch state controlled
-by a `gpf` cache. This requires the ICache to ensure one of the following
-conditions when receiving `ITLB.resp.excp.gpf_instr`:
-
-1. Resend the same `ITLB.req.vaddr` until `ITLB.resp.miss` is pulled low (at
-   which point `gpf`, `gpaddr` are all valid and can be sent to the backend for
-   normal processing). The ITLB will then flush the `gpf` cache.
-2. For `ITLB.flushPipe`, the ITLB flushes the `gpf` cache upon receiving this
-   signal.
-
-If the ITLB's `gpf` cache is not flushed before receiving a request with a
-different `ITLB.req.vaddr`, and another `gpf` occurs, it will cause the core to
-hang.
-
-Therefore, whenever flushing the s1 pipeline stage of IPrefetchPipe, regardless
-of the flush reason, it is necessary to synchronously flush the `gpf` cache of
-ITLB (i.e., assert `ITLB.flushPipe`).
+Therefore, whenever PrefetchPipe s1 is flushed, regardless of reason, ICache must also flush ITLB `gpf` cache (that is, assert `ITLB.flushPipe`).
 
 ### ECC {#sec:icache-ecc}
 
-First, it should be noted that the ICache, with default parameters, uses parity
-code, which only has 1-bit error detection capability and no error recovery
-capability. Strictly speaking, it cannot be considered ECC (Error Correction
-Code). However, on one hand, it can be configured to use secded code; on the
-other hand, we extensively use ECC in the code to name error detection and
-recovery-related functions (`ecc_error`, `ecc_inject`, etc.). Therefore, this
-document will still use the term ECC to refer to error detection, recovery, and
-injection functions to maintain consistency with the code.
+First, note that with default parameters, ICache uses parity code, which only provides 1-bit error detection and no correction. Strictly speaking, this is not ECC (Error Correction Code). However, secded is configurable, and many code symbols use ECC naming for error detection/recovery features (`ecc_error`, `ecc_inject`, etc.). Therefore this document still uses ECC to refer to error detection, error recovery, and error injection features for consistency with code.
 
-The ICache supports error detection, error recovery, and error injection, which
-are part of the RAS[^ras] capability. Refer to the RISC-V RERI[^reri] manual for
-details, controlled by the CtrlUnit.
+ICache supports error detection, error recovery, and error injection as part of RAS[^ras], and these are controlled by CtrlUnit. Refer to RISC-V RERI[^reri].
 
-[^ras]: This RAS (Reliability, Availability, and Serviceability) is not that RAS
-(Return Address Stack).
+[^ras]: This RAS (Reliability, Availability, and Serviceability) is different from RAS (Return Address Stack).
 
-[^reri]: RERI (RAS Error-record Register Interface), refer to [RISC-V RERI
-Manual](https://github.com/riscv-non-isa/riscv-ras-eri).
+[^reri]: RERI (RAS Error-record Register Interface), see the [RISC-V RERI specification](https://github.com/riscv-non-isa/riscv-ras-eri).
 
-#### Error Detection
+#### Error Detection {#sec:icache-ecc-detect}
 
-When MissUnit refills data into MetaArray and DataArray, it calculates checksums
-for both meta and data. The former is stored in Meta SRAM along with the
-metadata, while the latter is stored in a separate Data Code SRAM.
+When MissUnit refills MetaArray and DataArray, it computes check bits for metadata and data. Metadata check bits are stored together with metadata in Meta SRAM, while data check bits are stored in dedicated Data Code SRAM.
 
-When a fetch request reads from SRAM, the check code is also read synchronously.
-The meta/data are verified in the s1/s2 stages of the MainPipe, respectively.
-Software can enable/disable this feature by writing specific values to the
-corresponding CSR bits. In versions from June to December, this is a custom CSR
-`sfetchctl`, which will later be replaced by mmio-mapped CSRs. For details,
-refer to the [CtrlUnit documentation](./CtrlUnit.md).
+When a fetch request reads SRAM, check bits are read out together. MainPipe checks metadata/data in s1/s2 respectively. Software can enable/disable this feature by writing specific values to CSR fields. In versions around Jun-Dec, this control used custom CSR `sfetchctl`; later it was changed to MMIO-mapped CSR. See [CtrlUnit doc](./CtrlUnit.md).
 
-In terms of error-checking code design, the ICache uses a configurable
-error-checking code, with the default being parity code, where the code is the
-XOR reduction of the data: $code = \oplus data$. During verification, the code
-and data are XOR-reduced together: $error = (\oplus data) \oplus code$. A result
-of 1 indicates an error, while ** assumes no ** error (even-numbered errors may
-occur but cannot be detected here).
+For check-code design, the code type is parameterized. Default is parity, where check bit is reduction XOR of data: $code = \oplus data$. At check time, reduction XOR is applied on data and code: $error = (\oplus data) \oplus code$. If result is 1, an error is detected; otherwise it is **considered** no error (even-numbered bit errors may still escape detection).
 
-In versions after [#4044](https://github.com/OpenXiangShan/XiangShan/pull/4044),
-the ICache supports error injection, which requires the ICache to support
-writing incorrect check codes to MetaArray/DataArray. Therefore, a `poison` bit
-is implemented. When this bit is set high, it flips the written code, i.e.,
-$code = (\oplus data) \oplus poison$.
+After [#4044](https://github.com/OpenXiangShan/XiangShan/pull/4044), ICache supports error injection, which requires writing incorrect check bits into MetaArray/DataArray. A `poison` bit is introduced: when asserted, it flips the write code, i.e., $code = (\oplus data) \oplus poison$.
 
-To reduce undetectable cases, the data is currently divided into DataCodeUnit
-(default 64-bit) units for separate parity checks. Therefore, for each 64B cache
-line, a total of $8(data) + 1(meta) = 9$ check codes will be calculated.
+To reduce undetected cases, data is currently split into DataCodeUnit chunks (default 64 bits), and parity is computed per chunk. Therefore for each 64B cacheline, $8(data) + 1(meta) = 9$ check bits are generated.
 
-When the s1/s2 pipeline stages of MainPipe detect an error, the following
-actions are taken:
+When MainPipe detects an error in s1/s2, it performs:
 
-In versions from June to November:
+1. Error handling: raise hwe exception for software handling.
+2. Error reporting: report the error to BEU, which then raises interrupt for software.
+3. Request canceling: if MetaArray check fails, read ptag is unreliable, so hit/miss judgment is unreliable. Therefore no L2 request is sent regardless of hit/miss result; exception is directly propagated to IFU and then backend.
 
-1. Error handling: Triggers an access fault exception, handled by software.
-2. Error reporting: Reports errors to BEU, which will trigger an interrupt to
-   notify the software of the error.
-3. Cancel request: When an error is detected in MetaArray, the read ptag is
-   unreliable, making the hit determination unreliable. Thus, regardless of hit
-   status, no request is sent to L2 Cache. Instead, the exception is directly
-   forwarded to IFU and subsequently to the backend for handling.
+#### Error Injection {#sec:icache-ecc-inject}
 
-In subsequent versions (after
-[#3899](https://github.com/OpenXiangShan/XiangShan/pull/3899)), an automatic
-error recovery mechanism was implemented, so only the following processing is
-required:
+According to RISC-V RERI[^reri], to let software test ECC behavior and better validate hardware functionality, hardware should provide error injection, i.e., proactively trigger ECC errors.
 
-1. Error Handling: Refetch from L2 Cache, see [next
-   section](#sec:icache-recover-from-error).
-2. Error reporting: Same as above, reported to the BEU.
+ICache error injection is controlled by CtrlUnit and triggered by writing specific values to fields in MMIO-mapped CSRs. See [CtrlUnit doc](./CtrlUnit.md).
 
-#### Automatic Error Recovery {#sec:icache-recover-from-error}
+Currently ICache supports:
 
-Note that, unlike the DCache, the ICache is read-only, meaning its data cannot
-be dirty. This implies we can always retrieve the correct data from lower-level
-storage structures (L2/3 Cache, memory). Therefore, the ICache can automatically
-recover from errors by reissuing miss requests to the L2 Cache.
+- Injection by target paddr; injection fails when target paddr misses.
+- Injection into MetaArray or DataArray.
+- Injection fails when ECC check itself is not enabled.
 
-Implementing the refetch functionality itself only requires reusing the existing
-miss fetch path, following the request path of MainPipe -> MissUnit -> MSHR
---tilelink-> L2 Cache. When MissUnit refills data to SRAM, it naturally
-calculates and stores new check codes, so after refetching, it returns to an
-error-free state without additional processing.
-
-The pseudo-code illustrating the behavioral differences between June-November
-and subsequent code is as follows:
-
-```diff
-- exception = itlb_exception || pmp_exception || ecc_error
-+ exception = itlb_exception || pmp_exception
-
-- should_fetch = !hit && !exception
-+ should_fetch = (!hit || ecc_error) && !exception
-```
-
-Note: To avoid multi-hit (i.e., multiple ways in the same set having the same
-ptag) after refetch, the valid bits of the corresponding positions in metaArray
-must be cleared before refetching:
-
-- If the MetaArray is faulty: the ptag stored in meta may be incorrect, the hit
-  result (one-hot waymask) is unreliable, and the "corresponding position"
-  refers to all ways in that set.
-- If DataArray error: Hit result is reliable. "Corresponding position" refers to
-  the way in the set where waymask is asserted.
-
-#### Error Injection
-
-According to the RERI manual[^reri], to enable software testing of ECC
-functionality and better assess hardware correctness, error injection
-capabilities must be provided to actively trigger ECC errors.
-
-The error injection feature of ICache is controlled by CtrlUnit, triggered by
-writing specific values to the corresponding bits in mmio-mapped CSRs. For
-details, refer to the [CtrlUnit documentation](./CtrlUnit.md).
-
-Currently, the ICache supports:
-
-- Inject to a specific paddr; injection fails if the requested paddr misses
-- Inject into MetaArray or DataArray
-- Injection fails when ECC verification itself is not enabled
-
-The software injection process is illustrated as follows:
+A simplified software injection flow is:
 
 ```asm
 inject_target:
@@ -492,22 +315,22 @@ inject_target:
   ret
 
 test:
-  la t0, $BASE_ADDR     # 载入 mmio-mapped CSR 基地址
-  la t1, inject_target  # 载入注入目标地址
-  jalr ra, 0(t1)        # 跳转到注入目标以保证其加载到 ICache
-  sd t1, 8(t0)          # 向 CSR 写入注入目标地址
-  la t2, ($TARGET << 2 | 1 << 1 | 1 << 0)  # 设置注入目标、注入使能、校验使能
-  sd t1, 0(t0)          # 向 CSR 写入注入请求
+  la t0, $BASE_ADDR     # load base address of mmio-mapped CSR
+  la t1, inject_target  # load target address for injection
+  jalr ra, 0(t1)        # jump to target to ensure it is loaded into ICache
+  sd t1, 8(t0)          # write target address to CSR
+  la t2, ($TARGET << 2 | 1 << 1 | 1 << 0)  # set target/select + inject enable + check enable
+  sd t1, 0(t0)          # write injection request to CSR
 loop:
-  ld t1, 0(t0)          # 读取 CSR
-  andi t1, t1, (0b11 << (4+1)) # 读取注入状态
-  beqz t1, loop         # 如果注入未完成，继续等待
+  ld t1, 0(t0)          # read CSR
+  andi t1, t1, (0b11 << (4+1)) # read injection status
+  beqz t1, loop         # keep waiting if injection not finished
 
   addi t1, t1, -1
-  bnez t1, error        # 如果注入失败，跳转到错误处理
+  bnez t1, error        # jump to error handling if injection fails
 
-  jalr ra, 0(t1)        # 注入成功，跳转到注入目标地址以触发错误
-  j    finish           # 结束
+  jalr ra, 0(t1)        # injection succeeds; jump to target to trigger error
+  j    finish           # finish
 
 error:
   # handle error
@@ -515,19 +338,15 @@ finish:
   # finish
 ```
 
-We have written a test case, see [this
-repository](https://github.com/OpenXiangShan/nexus-am/pull/48), which tests the
-following scenarios:
+A test case has been implemented in [this repository](https://github.com/OpenXiangShan/nexus-am/pull/48), covering:
 
-1. Normal injection into MetaArray
-2. Normal injection into DataArray
-3. Inject invalid target
-4. Injected but ECC check not enabled
-5. Inject the missed address
-6. Attempt to write to a read-only CSR field.
+1. Normal MetaArray injection.
+2. Normal DataArray injection.
+3. Invalid target injection.
+4. Injection with ECC check disabled.
+5. Injection on miss target address.
+6. Attempting to write read-only CSR fields.
 
-## References
+## References {#sec:icache-references}
 
-1. Glenn Reinman, Brad Calder, and Todd Austin. "[Fetch directed instruction
-   prefetching.](https://doi.org/10.1109/MICRO.1999.809439)" 32nd Annual
-   ACM/IEEE International Symposium on Microarchitecture (MICRO). 1999.
+1. Glenn Reinman, Brad Calder, and Todd Austin. "[Fetch directed instruction prefetching.](https://doi.org/10.1109/MICRO.1999.809439)" 32nd Annual ACM/IEEE International Symposium on Microarchitecture (MICRO). 1999.

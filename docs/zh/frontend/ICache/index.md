@@ -1,42 +1,46 @@
-# XiangShan ICache 设计文档
+# XiangShan ICache 设计文档 {#sec:icache-index}
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/03/07
-- commit：[4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345](https://github.com/OpenXiangShan/XiangShan/tree/4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345)
+- 版本：V3
+- 状态：draft
+- 日期：2026/04/22
+- commit：TODO
 
-## 术语说明
+## 术语说明 {#sec:icache-glossary}
 
 | 缩写 | 全称 | 描述 |
-| --- | --- | --- |
+| --- | --------- | ------------ |
 | ICache/I$ | Instruction Cache | L1 指令缓存 |
-| DCache/D$ | Data Cache | L1 数据缓存 |
 | L2 Cache/L2$ | Level Two Cache | L2 缓存 |
-| IFU | Instruction Fetch Unit | 取指单元 |
+| FTQ | Fetch Target Queue | 取指目标队列，见 [FTQ 设计文档](../FTQ/index.md) |
+| IFU | Instruction Fetch Unit | 取指单元，见 [IFU 设计文档](../IFU/index.md) |
 | ITLB | Instruction Translation Lookaside Buffer | 地址翻译缓冲 |
 | PMP | Physical Memory Protection | 物理内存保护模块 |
 | PMA | Physical Memory Attribute | 物理内存属性模块（是 PMP 的一部分） |
 | BEU | Bus Error Unit | 总线错误单元 |
 | FDIP | Fetch-directed Instruction Prefetch | 取指导向指令预取 |
 | MSHR | Miss Status Holding Register | 缺失状态保持寄存器 |
-| a/(g)pf | Access / (Guest) Page Fault | 访问错误 / （客户机）页错误 |
-| v/(g)paddr | Virtual / (Guest) Physical Address | 虚拟地址 / （客户机）物理地址 |
+| af | Instruction Access Fault | 访问错误，RISC-V 手册规定的 1 号异常 |
+| (g)pf | Instruction (Guest) Page Fault | 指令（客户机）物理页错误，RISC-V 手册规定的 12 (20) 号异常 |
+| hwe | Hardware Error | 硬件错误，RISC-V 手册规定的 19 号异常 |
+| vaddr | Virtual Address | 虚拟地址 |
+| (g)paddr | (Guest) Physical Address | （客户机）物理地址 |
 | PBMT | Page-Based Memory Types | 基于页的内存类型，见特权手册 Svpbmt 扩展 |
+| fb | Fetch Block | 取指块 |
 
-## 子模块列表
+## 子模块列表 {#sec:icache-submodules}
 
 | 子模块 | 描述 |
-| --- | --- |
+| --- | --------- |
+| [PrefetchPipe](PrefetchPipe.md) | 预取流水线 |
 | [MainPipe](MainPipe.md) | 主流水线 |
-| [IPrefetchPipe](IPrefetchPipe.md) | 预取流水线 |
 | [WayLookup](WayLookup.md) | 元数据缓冲队列 |
-| MetaArray | 元数据 SRAM |
-| DataArray | 数据 SRAM |
+| [MetaArray](Array.md) | 元数据阵列 |
+| [DataArray](Array.md) | 数据阵列 |
 | [MissUnit](MissUnit.md) | 缺失处理单元 |
 | [Replacer](Replacer.md) | 替换策略单元 |
 | [CtrlUnit](CtrlUnit.md) | 控制单元，目前仅用于控制错误校验/错误注入功能 |
 
-## 设计规格
+## 设计规格 {#sec:icache-design-spec}
 
 - 缓存指令数据
 - 缺失时通过 tilelink 总线向 L2 请求数据
@@ -45,136 +49,184 @@
 - 支持冲刷（bpu redirect、backend redirect、`fence.i`）
 - 支持预取指请求
   - 硬件预取为 FDIP 预取算法
-  - 软件预取为 Zicbop 扩展`prefetch.i`指令
+  - 软件预取为 Zicbop 扩展 `prefetch.i` 指令
 - 支持可配置的替换算法
 - 支持可配置的缺失状态寄存器数量
 - 支持检查地址翻译错误、物理内存保护错误
-- 支持错误检查 & 错误恢复 & 错误注入[^ecc]
+- 支持错误检查 & 错误注入[^ecc]
   - 默认采用 parity code
-  - 通过从 L2 重取实现错误恢复
   - 软件可通过 MMIO 空间访问的错误注入控制寄存器
 - DataArray 支持分 bank 存储，细存储粒度实现低功耗
+- 支持在 SRAM 不冲突的情况下单周期提供两个取指块，见 [@sec:icache-2fetch] [2-fetch](#sec:icache-2fetch) 一节的说明。
 
-[^ecc]: 本文档也将错误检查 & 错误恢复 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](#sec:icache-ecc) 一节开始的说明。
+[^ecc]: 本文档也将错误检查 & 错误注入相关功能称为 ECC，见 [@sec:icache-ecc] [ECC](#sec:icache-ecc) 一节的说明。
 
-## 参数列表
+## 参数列表 {#sec:icache-params}
+
+见 `Parameters.scala` 中 `case class ICacheParams` 的定义，部分参数的描述如下表所示：
 
 | 参数 | 默认值 | 描述 | 要求 |
-| --- | --- | --- | --- |
+| ------ | --- | --------- | ------ |
 | nSets | 256 | SRAM set 数量 | 2 的幂次 |
 | nWays | 4 | SRAM way 数量 | |
-| nFetchMshr | 4 | 取指 MSHR 的数量 | |
-| nPrefetchMshr | 10 | 预取 MSHR 的数量 | |
-| nWayLookupSize | 32 | WayLookup 深度，同时可以反压限制预取最大距离 | |
-| DataCodeUnit | 64 | 校验单元大小，单位为 bit，每 64bit 对应 1bit 的校验位 | |
-| ICacheDataBanks | 8 | cacheline 划分 bank 数量 | |
-| ICacheDataSRAMWidth | 66 | DataArray 基本 SRAM 的宽度 | 大于每 bank 的 data 和 code 宽度之和 |
+| rowBits | 64 | 每个 bank 的 data 位宽 | (blockBytes * 8) 的因子 |
+| blockBytes | 64 | 每个缓存行的字节数 | RVA23 profile 要求固定 64B |
+| Replacer | "setplru" | 替换算法 | rocket-chip 的 ReplacementPolicy 支持的算法，目前包括 "random", "setlru", "setplru" |
+| NumFetchMshr | 4 | 取指 MSHR 的数量 | |
+| NumPrefetchMshr | 10 | 预取 MSHR 的数量 | |
+| WayLookupSize | 32 | WayLookup 深度，同时可以反压限制预取最大距离 | |
+| MetaEcc | "parity" | MetaArray 的 ECC 类型 | "parity" 或 "secded" |
+| DataEcc | "parity" | DataArray 的 ECC 类型 | "parity" 或 "secded" |
+| DataEccUnit | 64 | 校验单元大小，单位为 bit，每多少 bit 的数据使用 1bit 的校验位保护 | rowBits 的因子 |
+| NumInterleavedBank | 2 | MetaArray 中 interleave 的数量 | 2 的幂次且 >= 2 |
+| MetaWaySplit | 2 | MetaArray 中物理 SRAM 按 way 拆分的数量，用于 SRAM 选型优化 PPA | nWays 的因子 |
+| MetaDataSplit | 1 | MetaArray 中物理 SRAM 按数据拆分的数量，用于 SRAM 选型优化 PPA | |
+| DataPaddingBits | 1 | DataArray 中每项额外的 padding 位数，用于 SRAM 选型优化 PPA | |
+| EnableCtrlUnit | true | 是否实例化 CtrlUnit，如果为 false，则 ECC 相关功能无法被软件控制 | |
+| ctrlUnitParameters | - | CtrlUnit 的参数 | 见 [@sec:icache-ctrlunit] [CtrlUnit 文档](./CtrlUnit.md) |
 
-## 功能概述
+## 功能概述 {#sec:icache-functional-overview}
 
-FTQ 中存储着 BPU 生成的预测块，fetchPtr 指向取指预测块，prefetchPtr 指向预取预测块，当复位时 prefetchPtr 与 fetchPtr 相同，每成功发送一次取指请求时 fetchPtr++，每成功发送一次预取请求时 prefetchPtr++。详细说明见[FTQ 设计文档](../FTQ/index.md)。
+> 阅读本文档前建议先行阅读参考文献中 FDIP、Decoupled Frontend 相关论文，以便了解相关前置知识。
 
-![FTQ 指针示意](../figure/ICache/ICache/ftq_pointer.png)
+> 本文档及相关代码正在施工中，文档中部分描述可能是目前的设计预期，暂未完全实现，仅供参考！
 
-ICache 结构如下图所示。有 MainPipe 和 IPrefetchPipe 两个流水线，MainPipe 接收来自 FTQ 的取指请求，IPrefetchPipe 接收来自 FTQ/MemBlock 的硬/软件预取请求。对于预取请求，IPrefetch 对 MetaArray 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）存储到 WayLookup 中，如果该请求缺失，就发送至 MissUnit 进行预取。对于取指请求，MainPipe 首先从 WayLookup 中读取命中信息，如果 WayLookup 中没有可用信息，MainPipe 就会阻塞，直至 IPrefetchPipe 将信息写入 WayLookup 中，该方案将 MetaArray 和 DataArray 的访问分离，一次只访问 DataArray 单路，实现了较低的功耗，代价是产生了一个周期的重定向延迟。
+ICache 结构如 [@fig:icache-structure] 所示。
 
-![ICache 结构](../figure/ICache/ICache/icache_structure.png)
+![ICache 结构](../figure/ICache/pipeline.png){#fig:icache-structure}
 
-MissUnit 处理来自 MainPipe 的取指请求和来自 IPrefetchPipe 的预取请求，通过 MSHR 进行管理，所有 MSHR 公用一组数据寄存器以减少面积。
+从结构上看，ICache 主要由以下功能单元组成：
 
-Replacer 为替换器，默认采用 PLRU 替换策略，接收来自 MainPipe 的命中更新，向 MissUnit 提供待替换的 waymask。
+- prefetchPipe：预取流水线，负责与 metaArray、ITLB 交互获取元数据，并处理预取请求
+- mainPipe：主流水线，负责读取 dataArray，处理取指请求，完成 ECC 校验，并向 IFU 发送结果
+- wayLookup：作为 prefetchPipe 和 mainPipe 之间的缓冲，缓存元数据查询结果
+- metaArray：保存 cacheline 的元数据（tag、valid、maybeRvc 等）及其校验码
+- dataArray：保存 cacheline 的数据及其校验码
+- missUnit：负责 MSHR 状态维护，接收缺失请求，向 L2 Cache 发起请求，并在收到响应后重填 SRAM
+- ctrlUnit：控制单元，使软件可通过 mmio-mapped CSR 控制 ICache 行为，目前仅可控制 ECC 校验相关功能
 
-MetaArray 分为奇偶两个 bank，用于支持跨 cacheline 的双行访问。
+从流水上看，为了节省各存储结构的读端口和功耗，ICache 采用 metaArray 和 dataArray 串行读取、预取和取指紧耦合的设计，这意味着所有取指块都必须发送到 prefetchPipe，再以相同的顺序发送到 mainPipe，FTQ 的设计会保证这一点。
 
-DataArray 中的 cacheline 默认分为 8 个 bank 存储，每个 bank 中存储的有效数据为 64bit，另外对于每 64bit 还需要 1bit 的校验位，由于 65bit 宽度的 SRAM 表现不好，所以选用 256*66bit 的 SRAM 作为基本单元，一共有 32 个这样的基本单元。一次访问需要 34Byte 的指令数据，每次需要访问 5 个 bank（$8\times5>34$），根据起始地址进行选择。
+在处理器上电或发生重定向后，第一个取指请求会被同时发送到 mainPipe 和 prefetchPipe，由于 wayLookup 空，mainPipe 会阻塞一拍，等待 prefetchPipe 将元数据查询结果写入 wayLookup，可以认为 prefetchPipe s0 流水级为预取和取指流水共用，prefetchPipe s1 和 mainPipe s0 位于相同逻辑流水级。随着处理器的运行，由于 ICache miss、IBuffer 满等原因，mainPipe 会出现阻塞，而 prefetchPipe 可以持续运行，因此 wayLookup 会逐渐被填充，此后 mainPipe 和 prefetchPipe 的工作将是并行的，prefetchPipe s0 和 mainPipe s0 位于相同逻辑流水级，直到下一次重定向。
 
-## 功能详述
+prefetchPipe 和 mainPipe 都会根据 metaArray 和 ITLB 提供的元数据进行缺失和异常判断，当没有异常且缺失时会通过 missUnit 向 L2 Cache 发起请求。prefetchPipe 发起预取请求后可以直接结束当前取指块的处理，而 mainPipe 发起取指请求后需要等待重填、将数据发送到 IFU 后才能完成。
 
-### （预）取指请求
+## 功能详述 {#sec:icache-functional-details}
 
-FTQ 分别把（预）取指请求发送到（预）取指流水线进行处理。如前所述，由 IPrefetch 对 MetaArray 和 ITLB 进行查询，将元数据（在哪一路命中、ECC 校验码、是否发生异常等）在 IPrefetchPipe s1 流水级存储到 WayLookup 中，以供 MainPipe s0 流水级读取。
+### 预取请求 {#sec:icache-prefetch-req}
 
-在上电解复位/重定向时，由于 WayLookup 为空，而 FTQ 的 prefetchPtr、fetchPtr 复位到同一位置，MainPipe s0 流水级不得不阻塞等待 IPrefetchPipe s1 流水级的写入，这引入了一拍的额外重定向延迟。但随着 BPU 向 FTQ 填充预测块的进行和 MainPipe/IFU 因各种原因阻塞（e.g. miss、IBuffer 满），IPrefetchPipe 将工作在 MainPipe 前（`prefetchPtr > fetchPtr`），而 WayLookup 中也会有足够的元数据，此时 MainPipe s0 级和 IPrefetchPipe s0 级的工作将是并行的。
+ICache 可能接受两个来源的预取请求：
 
-![ICache 两条流水线的关系](../figure/ICache/ICache/icache_stages.png)
+1. 来自 FTQ 的硬件预取请求，基于 FDIP 算法。
+2. 来自 Memblock 中 LoadUint 的软件预取请求，其本质是 Zicbop 扩展中的 `prefetch.i` 指令，请参考 RISC-V CMO 手册。
 
-详细的取指过程见[MainPipe 子模块文档](MainPipe.md)、[IPrefetchPipe 子模块文档](IPrefetchPipe.md)和[WayLookup 子模块文档](WayLookup.md)。
-
-#### 硬件预取与软件预取
-
-V2R2 后，ICache 可能接受两个来源的预取请求：
-
-1. 来自 Ftq 的硬件预取请求，基于 FDIP 算法。
-2. 来自 Memblock 中 LoadUint 的软件预取请求，其本质是 Zicbop 扩展中的 prefetch.i 指令，请参考 RISC-V CMO 手册。
-
-然而，PrefetchPipe 每周期仅可以处理一个预取请求，故需要进行仲裁。ICache 顶层负责缓存软件预取请求，并与来自 Ftq 的硬件预取请求二选一送往 PrefetchPipe，软件预取请求的优先级高于硬件预取请求。
+然而，prefetchPipe 每周期仅可以处理一个预取请求，故需要进行仲裁。ICache 顶层负责缓存软件预取请求，并与来自 FTQ 的硬件预取请求二选一送往 prefetchPipe，软件预取请求的优先级高于硬件预取请求。如 [@fig:icache-prefetch-source] 所示。
 
 逻辑上来说，每个 LoadUnit 都有可能发出软件预取请求，因此每周期至多会有 LoadUnit 数量（目前默认参数为`LduCnt=3`）个软件预取请求。但出于实现成本和性能收益考量，ICache 每周期至多仅接收并处理一个，多余的会被丢弃，端口下标最小的优先。此外，若 PrefetchPipe 阻塞，而 ICache 内已经缓存了一个软件预取请求，那么原先的软件预取请求将被覆盖。
 
-![ICache 预取请求接收与仲裁](../figure/ICache/ICache/prefetch_mux.drawio.png)
+![ICache 预取请求接收与仲裁](../figure/ICache/prefetch_source.png){#fig:icache-prefetch-source}
 
-发送到 PrefetchPipe 后，软件预取请求的处理和硬件预取请求的处理几乎是一致的，除了：
-- 软件预取请求不会影响控制流，即**不会**发送到 MainPipe（和后续的 Ifu、IBuffer 等环节），仅做：1) 判断是否 miss 或异常；2) 若 miss 且无异常，发送到 MissUnit 做预取指并重填 SRAM。
+对硬件预取请求的处理流程如下：
 
-关于 PrefetchPipe 的细节请查看子模块文档。
+1. 查询 metaArray、ITLB，得到 wayMask（是否命中某一路的 bitmask）、物理地址、异常信息等元数据
+2. 将元数据写入 wayLookup 供 mainPipe 使用
+3. 根据 wayMask 和异常信息判断是否需要发起预取请求
+    1. 若需要发起预取请求，发送到 missUnit 进行缺失处理
 
-### 异常传递/特殊情况处理
+对软件预取请求的处理和硬件预取请求几乎是一致的，但软件预取请求不会影响控制流，故其元数据不会发送到 wayLookup（进而不会发送到 mainPipe 和后续环节）
 
-ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），接收 L2 的响应，过程中可能出现的异常有：
+关于 prefetchPipe 流水级的细节见 [@sec:icache-prefetchpipe] [PrefetchPipe 一节](PrefetchPipe.md)。
+
+### 取指请求 {#sec:icache-fetch-req}
+
+对取指请求的处理流程如下：
+
+1. 读取 wayLookup 获取元数据
+2. 根据 wayMask 读取 dataArray 获取指令数据（若命中）
+3. 根据 wayMask 和异常信息判断是否需要发起取指请求
+    1. 若需要发起取指请求，发送到 missUnit 进行缺失处理
+4. 将指令数据和元数据发送到 IFU
+5. 对指令数据和元数据进行 ECC 校验，将结果发送到 IFU（若使能）
+
+关于 mainPipe 流水级的细节见 [@sec:icache-mainpipe] [MainPipe 一节](MainPipe.md)。
+
+### 取指请求跨页 {#sec:icache-cross-page}
+
+在 V3 的设计中，为了节省 ITLB 端口，ICache 不允许取指请求跨页，即一个取指请求内的至多两个取指块、两个 cacheline 必须位于同一个页内（`vaddr[49:12]`相同），但 ICache 本身的硬件不对此进行检查，由 BPU 和 FTQ 保障这一点，具体来说：
+
+- BPU 在生成取指块时，如果发现取指块起始地址 `startVAddr` + 64 位于下一个页（即 `startVAddr[49:12]` 与 `(startVAddr + 64)[49:12]` 不同），就将取指块截断到页边界的位置（即将 `takenCfiPosition` 标记在本页的最后一个指令处）
+- FTQ 在尝试发送 2-(pre)fetch 请求时会检查两个取指块是否在同一页，如果不在同一页，就不会发送 2-(pre)fetch 请求。
+
+### 2-(pre)fetch {#sec:icache-2fetch}
+
+为了提高分支密集场景的取指带宽，V3 的 ICache 支持接收 2-(pre)fetch 请求，即每个周期可以接收包含至多两个取指块的（预）取指请求。2-prefetch 和 2-fetch 通过 wayLookup 进行解耦（即，可以将 fb0 和 fb1 作为一个 2-prefetch 请求送入 prefetchPipe，prefetchPipe 会将它们在一拍内入队 wayLookup，而 mainPipe 可以先用一拍处理 fb0，再用一拍处理包含 fb1 和 fb2 的 2-fetch 请求）。出于硬件复杂度和性能收益权衡考虑，无论是 2-prefetch 还是 2-fetch 都存在一些限制，具体来说：
+
+2-prefetch 请求的限制：
+
+1. 软件预取请求不支持 2-prefetch，仅 FTQ 发送的硬件预取请求支持 2-prefetch
+2. 如前 [@sec:icache-cross-page] [一节](#sec:icache-cross-page)所述，2-prefetch 请求内的两个取指块必须在同一页内
+3. FTQ 内 `bpuPtr - pfPtr` 必须大于等于 4，即 BPU s3 override 第二个取指块的冲刷必须在 FTQ 内完成，一旦将 2-prefetch 请求发送到 prefetchPipe，不允许 BPU 对其进行冲刷（后端重定向造成的冲刷正常进行）
+4. 两个取指块不能产生 metaArray 的读端口冲突，即满足下面条件之一：
+    1. 位于同一个 cacheline 内
+    2. 位于相邻的 cacheline 内，且靠后（setIdx 更大）的取指块不能跨行
+    3. 位于 interleave 的 cacheline 内，且两个取指块都不能跨行
+
+一些冲突示例如 [@fig:icache-2prefetch-conflict] 所示：
+
+![2-prefetch 冲突示例](../figure/ICache/2prefetch_conflict.png){#fig:icache-2prefetch-conflict}
+
+2-fetch 请求的限制：
+
+1. TODO
+
+### 异常传递/特殊情况处理 {#sec:icache-exception-special}
+
+ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP），接收 L2 的响应，过程中可能出现的异常如 [@tbl:icache-exception] 所示。
+
+Table: ICache 异常列表 {#tbl:icache-exception}
 
 | 来源 | 异常 | 描述 | 处理 |
-| --- | --- | --- | --- |
-| ITLB | af | 虚拟地址翻译过程出现访问错误 | 禁止取指，标记取指块为 af，经 IFU、IBuffer 发送到后端处理 |
-| ITLB | gpf | 客户机页错误 | 禁止取指，标记取指块为 gpf，经 IFU、IBuffer 发送到后端处理，将有效的 `gpaddr` 和 `isForNonLeafPTE` 发送到后端的 GPAMem 以备使用 |
-| ITLB | pf | 页错误 | 禁止取指，标记取指块为 pf，经 IFU、IBuffer 发送到后端处理 |
+| --- | --- | --------- | ------------ |
+| ITLB | af | 虚拟地址翻译过程出现访问错误 | 禁止取指，标记取指块为 af，经 IFU 发送到后端处理 |
+| ITLB | gpf | 客户机页错误 | 禁止取指，标记取指块为 gpf，经 IFU 发送到后端处理，将有效的 `gpaddr` 和 `isForNonLeafPTE` 发送到后端的 GPAMem 以备使用 |
+| ITLB | pf | 页错误 | 禁止取指，标记取指块为 pf，经 IFU 发送到后端处理 |
 | backend | af/pf/gpf | 同 ITLB af/gpf/pf | 同 ITLB af/gpf/pf |
-| PMP | af | 物理地址无权限访问 | 同 ITLB af |
-| MissUnit | L2 corrupt | L2 cache 响应 corrupt | 标记取指块为 af，经 IFU、IBuffer 发送到后端处理 |
+| PMP/PMA | af | 物理地址无权限访问 | 标记取指块为 af，经 IFU 发送到后端处理 |
+| L2 | corrupt | L2 cache 响应 corrupt | 标记取指块为 hwe，经 IFU 发送到后端处理 |
+| L2 | denied | L2 cache 响应 denied | 标记取指块为 af，经 IFU 发送到后端处理 |
+| ECC | corrupt | ECC 校验错误 | 标记取指块为 hwe，经 IFU 发送到后端处理 |
 
-需要指出，对于一般的取指流程来说，并不存在 backend 异常这一项。但 XiangShan 出于节省硬件资源的考虑，在前端传递的 pc 只有 41 / 50 bit（Sv39\*4 / Sv48\*4），而对于 `jr`、`jalr` 等指令，跳转目标来源于 64 bit 寄存器。根据 RISC-V 规范，高位非全0或全1时的地址不合法，需要引发异常，这一检查只能由后端完成，并随同后端重定向信号一起发送到 Ftq，进而随同取指请求一起发送到 ICache。其本质是一种 ITLB 异常，因此解释描述和处理方式与 ITLB 相同。
+需要指出：
 
-另外，L2 cache 通过 tilelink 总线响应 corrupt 可能是 L2 ECC 错误（`d.corrupt`），亦可能是无权限访问总线地址空间导致拒绝访问（`d.denied`）。tilelink 手册规定，当拉高 `d.denied` 时必须同时拉高 `d.corrupt`。而这两种情况都需要将取指块标记为 access fault，因此目前在 ICache 中无需区分这两种情况（即无需关注 `d.denied`，其可能被 chisel 自动优化掉而导致 verilog 中看不到）。
+1. 对于一般的取指流程来说，并不存在 backend 异常这一项。但 XiangShan 出于节省硬件资源的考虑，在前端传递的 pc 只有 41 / 50 bit（Sv39\*4 / Sv48\*4），而对于 `jr`、`jalr` 等指令，跳转目标来源于 64 bit 寄存器。根据 RISC-V 规范，高位非全0或全1时的地址不合法，需要引发异常，这一检查只能由后端完成，并随同后端重定向信号一起发送到 FTQ，进而随同取指请求一起发送到 ICache。其本质是一种 ITLB 异常，因此解释描述和处理方式与 ITLB 相同。
+2. 在 V2R2 的设计中，PMP/PMA 作为一个单独的模块存在，而 V3 出于时序考虑，PMP/PMA 检查提前到在 ITLB 重填时进行，从 ICache 的接口上看，其结果是随同 ITLB 的检查结果一起发送回 ICache 的。但由于其含义不同，因此上表中仍单独列出。
+3. 在 V2R2 的设计中，不支持 hwe 异常（RISC-V 特权手册 v1.13 新增定义），故 V2R2 在上述 hwe 场景都作为 af 处理，不区分 L2 的 corrupt（如 L2 ECC 校验出错）和 denied（如总线无权限）。V3 支持了 hwe。
+4. 在 V2R2 的设计中，实现了 ECC 出错时自动重取的功能，故 ECC 错误不引发异常（除非重取时 L2 异常）。V3 出于设计简化和时序考虑去除了这个功能，改为引发 hwe 交由软件处理。
 
-这些异常间存在优先级：backend 异常 > ITLB 异常 > PMP 异常 > MissUnit 异常。这是自然的：
+这些异常间存在优先级：backend > ITLB > PMP > L2 = ECC。这是自然的：
+
 1. 当出现 backend 异常时，发送到前端的 vaddr 不完整且不合法，故 ITLB 地址翻译过程无意义，检查出的异常无效；
 2. 当出现 ITLB 异常时，翻译得到的 paddr 无效，故 PMP 检查过程无意义，检查出的异常无效；
-3. 当出现 PMP 异常时，paddr 无权限访问，不会发送（预）取指请求，故不会从 MissUnit 得到响应。
+3. 当出现 PMP 异常时，paddr 无权限访问，取指请求无效，也不会向 L2 发送请求，故 L2/ECC 检查无效。
+4. L2 和 ECC 检查天然互斥：前者在 miss 路径上，后者在 hit 路径上，不关心相对优先级。
 
 而对于 backend 的三种异常、ITLB 的三种异常，由 backend 和 ITLB 内部进行有优先级的选择，保证同时至多只有一种拉高。
 
-此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况：
+此外，一些机制还会引发一些特殊情况，在旧版文档/代码中也称为异常，但其实际上并不引发 RISC-V 手册定义的 `exception`，为了避免混淆，此后将称为特殊情况，如 [@tbl:icache-special-case] 所示。
+
+Table: ICache 特殊情况列表 {#tbl:icache-special-case}
 
 | 来源 | 特殊情况 | 描述 | 处理 |
-| --- | --- | --- | --- |
+| --- | --- | --------- | ------------ |
 | PMP | mmio | 物理地址为 mmio 空间 | 禁止取指，标记取指块为 mmio，由 IFU 进行**非推测性**取指 |
 | ITLB | pbmt.NC | 页属性为不可缓存、幂等 | 禁止取指，由 IFU 进行**推测性**取指 |
 | ITLB | pbmt.IO | 页属性为不可缓存、非幂等 | 同 pmp mmio |
-| MainPipe | ECC error | 主流水检查发现 MetaArray/DataArray ECC 错误 | 见[ECC 一节](#sec:icache-ecc)，旧版同 ITLB af，新版做自动重取 |
 
-### DataArray 分 bank 的低功耗设计 {#sec:icache-dataarray-per-bank-lowpower}
-
-目前，ICache 中每个 cacheline 分为 8 个 bank，bank0-7。一个取指块需要 34B 指令数据，故一次访问连续的 5 个 bank。存在两种情况：
-
-1. 这 5 个 bank 位于单个 cacheline 中（起始地址位于 bank0-3）。假设起始地址位于 bank2，则所需数据位于 bank2-6。如下图 a。
-2. 跨 cacheline（起始地址位于 bank4-7）。假设起始地址位于 bank6，则数据位于 cacheline0 的 bank6-7、cacheline1 的 bank0-2。有些类似于环形缓冲区。如下图 b。
-
-![DataArray 分 bank 示意图](../figure/ICache/ICache/dataarray_bank.png)
-
-当从 SRAM 或 MSHR 中获取 cacheline 时，根据地址将数据放入对应的 bank。
-
-由于每次访问只需要 5 个 bank 的数据，因此 ICache 到 IFU 的端口实际上只需要一个 64B 的端口，将两个 cacheline 各自的 bank 选择出来并拼接在一起返回给 IFU（在 DataArray 模块内完成）；IFU 将这一个 64B 的数据复制一份拼接在一起，即可直接根据取指块起始地址选择出取指块的数据。不跨行/跨行两种情况的示意图如下：
-
-![DataArray 数据返回示意图](../figure/ICache/ICache/dataarray_bank_read_singleline.png)
-
-![DataArray 数据返回示意图](../figure/ICache/ICache/dataarray_bank_read_multiline.png)
-
-亦可参考 [IFU.scala 中的注释](https://github.com/OpenXiangShan/XiangShan/blob/fad7803d97ed4a987a743036cec42d1c07b48e2e/src/main/scala/xiangshan/frontend/IFU.scala#L474-L502)。
-
-### 冲刷
+### 冲刷 {#sec:icache-flush}
 
 在后端/IFU 重定向、BPU 重定向、`fence.i` 指令执行时，需要视情况对 ICache 内的存储结构和流水级进行冲刷。可能的冲刷目标/动作有：
 
-1. MainPipe、IPrefetchPipe 所有流水级
+1. MainPipe、PrefetchPipe 所有流水级
     - 冲刷时直接将 `s0/1/2_valid` 置为 `false.B` 即可
 2. MetaArray 中的 valid
     - 冲刷时直接将 `valid` 置为 `false.B` 即可
@@ -188,29 +240,23 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
     - 若 MSHR 已经向总线发出请求，记录待冲刷（`flush === true.B` 或 `fencei === true.B`），等到 d 通道收到 grant 响应时再置无效，同时不把 grant 的数据回复给 MainPipe/PrefetchPipe，也不写入 SRAM
     - 需要留意，当 d 通道收到 grant 响应的同时收到冲刷（`io.flush === true.B` 或 `io.fencei === true.B`）时，MissUnit 同样不写入 SRAM，但**会**将数据回复给 MainPipe/PrefetchPipe，避免将端口的延时引入响应逻辑中，此时 MainPipe/PrefetchPipe 也同步收到了冲刷请求，因此会将数据丢弃
 
-每种冲刷原因需要执行的冲刷目标：
+每种冲刷原因需要执行的冲刷目标如 [@tbl:icache-flush] 所示：
 
-| 冲刷原因 | 1 | 2 | 3 | 4 |
-| --- | --- | --- | --- | --- |
+Table: ICache 冲刷目标列表 {#tbl:icache-flush}
+
+| 冲刷原因 | Pipeline | MetaArray | WayLookup | MissUnit |
+| ------ | --- | --- | --- | --- |
 | 后端/IFU 重定向 | Y | | Y | Y |
-| BPU 重定向 | Y[^redirect_tab_bpu] | | | |
+| BPU 重定向 | Y[^redirect_tab_bpu] | | Y[^redirect_tab_bpu] | |
 | `fence.i` | Y[^redirect_tab_fencei] | Y | Y[^redirect_tab_fencei] | Y |
 
-[^redirect_tab_bpu]: BPU 精确预测器（BPU s2/s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 1- 2 拍之后就到达 ICache，因此仅需要：
+[^redirect_tab_bpu]: BPU 精确预测器（BPU s3 给出结果）可能覆盖简单预测器（BPU s0 给出结果）的预测，显然其重定向请求最晚在预取请求的 2 拍之后就到达 ICache，因此仅需要冲刷 prefetchPipe s0/1、wayLookup 队尾项，见对应节。
 
-    BPU s2 redirect：冲刷 IPrefetchPipe s0
-
-    BPU s3 redirect：冲刷 IPrefetchPipe s0/1
-
-    当 IPrefetchPipe 的对应流水级中的请求来自于软件预取时 `isSoftPrefetch === true.B`，不需要进行冲刷
-
-    当 IprefetchPipe 的对应流水级中的请求来自于硬件预取，但 `ftqIdx` 与冲刷请求不匹配时，不需要进行冲刷
-
-[^redirect_tab_fencei]: `fence.i` 在逻辑上需要冲刷 MainPipe 和 IPrefetchPipe（因为此时流水级中的数据可能无效），但实际上`io.fencei`拉高必然伴随一个后端重定向，因此目前的实现中没有冲刷 MainPipe 和 IPrefetchPipe 的必要。
+[^redirect_tab_fencei]: `fence.i` 在逻辑上需要冲刷 MainPipe 和 PrefetchPipe（因为此时流水级中的数据可能无效），但实际上`io.fencei`拉高必然伴随一个后端重定向，因此目前的实现中没有冲刷 MainPipe 和 PrefetchPipe 的必要。
 
 ICache 进行冲刷时不接收取指/预取请求（`io.req.ready === false.B`）
 
-#### 对 ITLB 的冲刷
+#### 对 ITLB 的冲刷 {#sec:icache-itlb-flush}
 
 ITLB 的冲刷比较特殊，其缓存的页表项仅需要在执行 `sfence.vma` 指令时冲刷，而这条冲刷通路由后端负责，因此前端/ICache 一般不需要管理 ITLB 的冲刷。只有一个特例：目前 ITLB 为了节省资源，不会存储 `gpaddr`，而是在 `gpf` 发生时去 L2TLB 重取，重取状态由一个 `gpf` 缓存控制，这要求 ICache 在收到 `ITLB.resp.excp.gpf_instr` 时保证下面两个条件之一：
 
@@ -219,7 +265,7 @@ ITLB 的冲刷比较特殊，其缓存的页表项仅需要在执行 `sfence.vma
 
 若 ITLB 的 `gpf` 缓存未被冲刷，就收到了不同 `ITLB.req.vaddr` 的请求，且再次发生 `gpf`，将导致核卡死。
 
-因此，每当冲刷 IPrefetchPipe 的 s1 流水级时，无论冲刷原因为何，都需要同步冲刷 ITLB 的 `gpf` 缓存（即拉高 `ITLB.flushPipe`）。
+因此，每当冲刷 PrefetchPipe 的 s1 流水级时，无论冲刷原因为何，都需要同步冲刷 ITLB 的 `gpf` 缓存（即拉高 `ITLB.flushPipe`）。
 
 ### ECC {#sec:icache-ecc}
 
@@ -231,7 +277,7 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 [^reri]: RERI（RAS Error-record Register Interface），参考 [RISC-V RERI 手册](https://github.com/riscv-non-isa/riscv-ras-eri)。
 
-#### 错误检测
+#### 错误检测 {#sec:icache-ecc-detect}
 
 在 MissUnit 向 MetaArray 和 DataArray 重填数据时，会计算 meta 和 data 的校验码，前者和 meta 一起存储在 Meta SRAM 中，后者存储在单独的 Data Code SRAM 中。
 
@@ -245,41 +291,13 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 当 MainPipe 的 s1/s2 流水级检查到错误时，会进行以下处理：
 
-在 6 月至 11 月的版本中：
-
-1. 错误处理：引起 access fault 异常，由软件处理。
+1. 错误处理：引起 hwe 异常，由软件处理。
 2. 错误报告：向 BEU 报告错误，后者会引起中断向软件报告错误。
 3. 取消请求：当 MetaArray 被检查出错误时，其读出的 ptag 不可靠，进而对 hit 与否的判断不可靠，因此无论是否 hit 都不向 L2 Cache 发送请求，而是直接将异常传递到 IFU、进而传递到后端处理。
 
-在后续版本（[#3899](https://github.com/OpenXiangShan/XiangShan/pull/3899) 后）实现了错误自动恢复机制，故只需进行以下处理：
+#### 错误注入 {#sec:icache-ecc-inject}
 
-1. 错误处理：从 L2 Cache 重新取指，见[下节](#sec:icache-recover-from-error)。
-2. 错误报告：同上向 BEU 报告错误。
-
-#### 错误自动恢复 {#sec:icache-recover-from-error}
-
-注意到，ICache 与 DCache 不同，是只读的，因此其数据必然不是 dirty 的，这意味着我们总是可以从下级存储结构（L2/3 Cache、memory）中重新获取正确的数据。因此，ICache 可以通过向 L2 Cache 重新发起 miss 请求来实现错误自动恢复。
-
-实现重取功能本身只需要复用现有的 miss 取指路径，走 MainPipe -> MissUnit -> MSHR --tilelink-> L2 Cache 的请求路径。MissUnit 向 SRAM 重填数据时会自然地计算新的校验码并存储，因此在重取后会回到无错误的状态而不需要额外的处理。
-
-6-11 月和后续代码行为差异的伪代码示意如下：
-
-```diff
-- exception = itlb_exception || pmp_exception || ecc_error
-+ exception = itlb_exception || pmp_exception
-
-- should_fetch = !hit && !exception
-+ should_fetch = (!hit || ecc_error) && !exception
-```
-
-需要留意的是：为了避免重取后出现 multi-hit（即，同一个 set 内存在多个 way 的 ptag 相同），需要在重取前将 metaArray 对应位置的 valid 清空：
-
-- 若 MetaArray 错误：meta 保存的 ptag 本身可能出错，命中结果（one-hot 的 waymask）不可靠，“对应位置”指该 set 的所有 way
-- 若 DataArray 错误：命中结果可靠，“对应位置”指该 set 中 waymask 拉高的那一 way
-
-#### 错误注入
-
-根据 RERI 手册[^reri]的说明，为了使软件能够测试 ECC 功能，进而更好地判断硬件功能是否正常，需要提供错误注入功能，即主动地触发 ECC 错误。
+根据 RISC-V RERI 手册[^reri]的说明，为了使软件能够测试 ECC 功能，进而更好地判断硬件功能是否正常，需要提供错误注入功能，即主动地触发 ECC 错误。
 
 ICache 的错误注入功能由 CtrlUnit 控制，通过向 mmio-mapped CSR 中相应位置写入特定的值来触发。详见 [CtrlUnit 文档](./CtrlUnit.md)。
 
@@ -329,6 +347,6 @@ finish:
 5. 注入未命中的地址
 6. 尝试写入只读的 CSR 域
 
-## 参考文献
+## 参考文献 {#sec:icache-references}
 
 1. Glenn Reinman, Brad Calder, and Todd Austin. "[Fetch directed instruction prefetching.](https://doi.org/10.1109/MICRO.1999.809439)" 32nd Annual ACM/IEEE International Symposium on Microarchitecture (MICRO). 1999.

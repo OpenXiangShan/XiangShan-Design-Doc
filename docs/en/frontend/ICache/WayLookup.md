@@ -1,57 +1,33 @@
-# WayLookup Submodule Documentation
+# WayLookup {#sec:icache-waylookup}
 
-WayLookup is a FIFO structure that temporarily stores metadata obtained by
-IPrefetchPipe from querying MetaArray and ITLB for MainPipe's use. It also
-monitors MSHR writes to the SRAM cacheline and updates hit information. The
-update logic is the same as in IPrefetchPipe—see the section ["Hit Information
-Updates" in the IPrefetchPipe Submodule
-Documentation](IPrefetchPipe.md#sec:IPrefetchPipe-hit-update).
+WayLookup is a ring queue structure. It temporarily stores metadata obtained by PrefetchPipe from MetaArray and ITLB for MainPipe. It also monitors MissUnit refill broadcast and updates hit information. The update logic is the same as PrefetchPipe; see [@sec:icache-hit-update] [Hit Information Update section in PrefetchPipe](PrefetchPipe.md#sec:icache-hit-update).
 
-![WayLookup Queue
-Structure](../figure/ICache/WayLookup/waylookup_structure_rw.png)
+## Pointer Update {#sec:icache-waylookup-pointer-update}
 
-![WayLookup Hit Information
-Update](../figure/ICache/WayLookup/waylookup_structure_update.png)
+When PrefetchPipe writes into WayLookup, `writePtr++`; when MainPipe reads from WayLookup, `readPtr++`. When queue is full (`writePtr.flag =/= readPtr.flag && writePtr.value === readPtr.value`), it no longer accepts new enqueue requests.
 
-Bypass is allowed (i.e., when WayLookup is empty, directly dequeue the enqueue
-request). To avoid introducing update logic latency into the DataArray access
-path, dequeuing is blocked when MSHR has new writes. MainPipe's S0 stage also
-accesses DataArray, so if MSHR has new writes, it cannot proceed further,
-meaning this measure has no additional impact.
+WayLookup supports bypass. When queue is empty (`writePtr === readPtr`), data that PrefetchPipe is about to enqueue in the current cycle is immediately dequeued to MainPipe. To simplify pointer update logic, both `writePtr` and `readPtr` update on bypass (`writePtr++` and `readPtr++`), so the queue remains empty after bypass.
 
-## GPaddr Area-Saving Mechanism
+## BPU Flush {#sec:icache-waylookup-bpu-flush}
 
-Since `gpaddr` is only relevant when a guest page fault occurs, and after each
-gpf, the frontend operates on the wrong path (with the backend guaranteeing a
-redirect (WayLookup flush) to the frontend—whether due to
-misprediction/exceptions before the gpf or the gpf itself), WayLookup only needs
-to store the gpaddr of the first valid gpf after reset/flush. For dual-line
-requests, only the `gpaddr` of the first line with a gpf needs to be stored.
+Because of frontend pipeline stage reduction in BPU/FTQ, compared with V2R2, FTQ now sends prefetch requests to ICache one cycle earlier. This means when a fetch block is overridden by BPU s3, that block may already be enqueued in WayLookup, so WayLookup also needs to handle BPU flush requests.
 
-In implementation, the gpf-related signals (currently only `gpaddr`) are
-separated from other signals (`paddr`, etc.) into two bundles. Other signals are
-instantiated nWayLookupSize times, while gpf-related signals are instantiated as
-a single register. A `gpfPtr` pointer is also used. This saves a total of
-$(\text{nWayLookupSize}*2-1)* \text{GPAddrBits} -
-\log_2{(\text{nWayLookupSize})} - 1$ bits in registers. When prefetch writes to
-WayLookup, if a gpf occurs and no existing gpf is present in WayLookup, the
-gpf/gpaddr is written to the `gpf_entry` register, and `gpfPtr` is set to the
-current `writePtr.` When MainPipe reads from WayLookup, if bypassing, it
-directly dequeues the prefetch-enqueued data; otherwise, if `readPtr ===
-gpfPtr`, it reads gpf_entry; otherwise, it reads all zeros. Note:
+Fortunately, the flushed request is always the just-enqueued tail entry (in the fastest case: BPU s1 = prefetchPipe s0, BPU s2 = prefetchPipe s1 = wayLookup.io.write, BPU s3 = wayLookup `entries[writePtr - 1]`), so only the queue tail needs to be considered.
 
-1. For dual-line requests, only one `gpaddr` needs to be stored (if the first
-   line triggers a gpf, the second line is already on the wrong path and need
-   not be stored). However, the gpf signal itself must still be stored twice, as
-   the IFU needs to determine whether it is a cross-line exception.
-2. The condition `readPtr===gpfPtr` may cause `readPtr` to loop around and match
-   `gpfPtr` again if the flush is slow, erroneously re-reading the gpf. However,
-   as mentioned earlier, this occurs on the wrong path, so re-reading the gpf is
-   inconsequential.
-3. A special case to note: For a fetch block spanning two pages, where the first
-   32B lies on the previous page without exceptions and the last 2B on the next
-   page triggers a gpf, if the first 32B happens to be 16 RVC compressed
-   instructions, the IFU will discard the last 2B and its corresponding
-   exception information. This may cause the `gpaddr` of the next fetch block to
-   be lost. When WayLookup already has an unclaimed gpf and related information,
-   it must block enqueuing (i.e., the IPrefetchPipe s1 stage). See PR#3719.
+Specifically, WayLookup records the `ftqIdx` of the tail entry. When a BPU s3 override request arrives, if `ftqIdx` matches and `writePtr > readPtr` (tail entry has not been consumed by MainPipe), flush the tail entry (`writePtr--`).
+
+## Exception Handling {#sec:icache-waylookup-exception}
+
+Signals such as `gpaddr` are useful only when the corresponding exception occurs. Also, after an exception happens, frontend is effectively on the wrong path, and backend guarantees a redirect to frontend (whether because misprediction/interrupt happened before exception handling or because exception itself causes redirect). Therefore, WayLookup only needs to store related signals for the first valid exception after reset/flush, to save storage area.
+
+In implementation, these signals (`itlbException`, `gpaddr`, etc.) are split from normal signals (`waymask`, etc.) into two bundles. Normal signals are instantiated `nWayLookupSize` times, while exception-related signals use only one register. `exceptionPtr` indicates which queue entry corresponds to this exception.
+
+When PrefetchPipe writes into WayLookup and an exception occurs, related signals are written into `exceptionEntry`, and `exceptionPtr` is set to current `writePtr`.
+
+When MainPipe reads from WayLookup:
+
+- If bypass is active, it still directly dequeues data being enqueued by PrefetchPipe.
+- Otherwise, if `readPtr === exceptionPtr`, read `exceptionEntry`.
+- Otherwise, output all-zero exception fields.
+
+In addition, for the same reason (processor is already on wrong path after exception), while `exceptionEntry` is valid, WayLookup stops accepting new enqueue requests, back-pressuring PrefetchPipe/FTQ/BPU to save power. It resumes after backend redirect brings frontend back to correct path and flushes `exceptionEntry`.

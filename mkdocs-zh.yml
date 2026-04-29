@@ -42,9 +42,10 @@ nav:
       - 预译码器: frontend/IFU/PreDecoder.md
     - 指令缓存:
       - frontend/ICache/index.md
+      - PrefetchPipe: frontend/ICache/PrefetchPipe.md
       - MainPipe: frontend/ICache/MainPipe.md
-      - IPrefetchPipe: frontend/ICache/IPrefetchPipe.md
       - WayLookup: frontend/ICache/WayLookup.md
+      - Array: frontend/ICache/Array.md
       - MissUnit: frontend/ICache/MissUnit.md
       - Replacer: frontend/ICache/Replacer.md
       - CtrlUnit: frontend/ICache/CtrlUnit.md
