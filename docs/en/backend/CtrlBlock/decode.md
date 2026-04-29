@@ -159,7 +159,7 @@ There are four scenarios for vtypeSpec updates:
    `VsetModule` module.
 
 ```scala
-  when(io.commitVType.hasVsetvl) {
+when(io.commitVType.hasVsetvl) {
     vtypeSpecNext := io.vsetvlVType
   }.elsewhen(io.walkVType.valid) {
     vtypeSpecNext := io.walkVType.bits
@@ -249,14 +249,13 @@ and other information.
      and fflag updates, and the remaining signals are used to control the i2f
      module.
       ```scala
-        class FPUCtrlSignals(implicit p: Parameters) extends XSBundle {
+      class FPUCtrlSignals(implicit p: Parameters) extends XSBundle {
           val typeTagOut = UInt(2.W) // H S D
           val wflags = Bool()
           val typ = UInt(2.W)
           val fmt = UInt(2.W)
           val rm = UInt(3.W)
         }
-
       ```
     - **uopnum** `UopInfoGen` generates the number of instruction splits. Scalar
       instructions have a split count of 1, AMO_CAS instructions may split into
@@ -302,7 +301,7 @@ vtype used by the vset instruction to the vtype information of that vset
 instruction.
   - **DecodeUnitCompIO**
   ```scala
-      class DecodeUnitCompIO(implicit p: Parameters) extends XSBundle {
+  class DecodeUnitCompIO(implicit p: Parameters) extends XSBundle {
         val redirect = Input(Bool())
         val csrCtrl = Input(new CustomCSRCtrlIO)
         val vtypeBypass = Input(new VType)
@@ -311,7 +310,6 @@ instruction.
         val out = new DecodeUnitCompOutput
         val complexNum = Output(UInt(3.W))
       }
-
   ```
 
 
