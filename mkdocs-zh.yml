@@ -29,12 +29,17 @@ nav:
   - 前端:
     - 分支预测单元:
       - frontend/BPU/index.md
-      - BPU抽象模块: frontend/BPU/Composer.md
-      - 取指目标单元: frontend/BPU/FTB.md
-      - 分支目标缓冲: frontend/BPU/uFTB.md
-      - 主预测器TAGE-SC: frontend/BPU/TAGE-SC.md
-      - 间接跳转指令预测器: frontend/BPU/ITTAGE.md
-      - 返回地址预测器: frontend/BPU/RAS.md
+      - FallThrough: frontend/BPU/fallThrough.md
+      - Micro Btb (ubtb): frontend/BPU/ubtb.md
+      - Ahead Btb (abtb): frontend/BPU/abtb.md
+      - Micro Tage (utage): frontend/BPU/utage.md
+      - Main Btb (mbtb): frontend/BPU/mbtb.md
+      - TAgged GEometic History Length predictor (tage): frontend/BPU/tage.md
+      - Statistical Corrector (sc): frontend/BPU/sc.md
+      - Indirect Target Tage (ittage): frontend/BPU/ittage.md
+      - Return Address Stack (ras): frontend/BPU/ras.md
+      - 历史信息寄存器: frontend/BPU/history.md
+      - 饱和计数器: frontend/BPU/saturateCounter.md
     - 取指目标队列: 
       - frontend/FTQ/index.md
     - 取指令单元:
