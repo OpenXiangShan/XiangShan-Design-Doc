@@ -77,15 +77,15 @@ Table: Bpu 相关 CSR 列表 {#tbl:bpu-csr}
 用于表示分支属性，具有以下两个域：
 
 - `.branchType`：分支类型
-  - `0`：非分支指令/表项无效
-  - `1`：条件分支（e.g. `bne`）
-  - `2`：直接跳转（e.g. `jal`）
-  - `3`：间接跳转（e.g. `jalr`）
+    - `0`：非分支指令/表项无效
+    - `1`：条件分支（e.g. `bne`）
+    - `2`：直接跳转（e.g. `jal`）
+    - `3`：间接跳转（e.g. `jalr`）
 - `.rasAction`：RAS 动作，另请参考 RISC-V 指令集手册 Return-address stack prediction hints
-  - `0`：无动作（非分支指令、表项无效、条件分支）
-  - `1`：pop（return，e.g. `jalr zero, offset(ra)`）
-  - `2`：push（call，e.g. `jal ra, offset`）
-  - `3`：pop and push（return and call，e.g. `jalr ra, offset(ra)`）
+    - `0`：无动作（非分支指令、表项无效、条件分支）
+    - `1`：pop（return，e.g. `jalr zero, offset(ra)`）
+    - `2`：push（call，e.g. `jal ra, offset`）
+    - `3`：pop and push（return and call，e.g. `jalr ra, offset(ra)`）
 
 #### TargetCarry {#sec:bpu-constants-targetcarry}
 

@@ -78,15 +78,15 @@ Note: RO means read-only register; RW means read-write register.
 Used to represent branch attributes. It has the following two fields:
 
 - `.branchType`: branch type
-  - `0`: non-branch instruction / invalid entry
-  - `1`: conditional branch (e.g. `bne`)
-  - `2`: direct jump (e.g. `jal`)
-  - `3`: indirect jump (e.g. `jalr`)
+    - `0`: non-branch instruction / invalid entry
+    - `1`: conditional branch (e.g. `bne`)
+    - `2`: direct jump (e.g. `jal`)
+    - `3`: indirect jump (e.g. `jalr`)
 - `.rasAction`: RAS action, see the RISC-V ISA manual for Return-address stack prediction hints
-  - `0`: no action (non-branch instruction, invalid entry, conditional branch)
-  - `1`: pop (return, e.g. `jalr zero, offset(ra)`)
-  - `2`: push (call, e.g. `jal ra, offset`)
-  - `3`: pop and push (return and call, e.g. `jalr ra, offset(ra)`)
+    - `0`: no action (non-branch instruction, invalid entry, conditional branch)
+    - `1`: pop (return, e.g. `jalr zero, offset(ra)`)
+    - `2`: push (call, e.g. `jal ra, offset`)
+    - `3`: pop and push (return and call, e.g. `jalr ra, offset(ra)`)
 
 #### TargetCarry {#sec:bpu-constants-targetcarry}
 

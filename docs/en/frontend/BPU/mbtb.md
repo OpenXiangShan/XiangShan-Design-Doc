@@ -30,18 +30,18 @@ This depends on the parameters. The diagram below shows the default parameter co
 
 ```plaintext
 MainBtb:
-	Size(set, way, align, internal): 256 * 4 * 2 * 4 = 8192
-	Address fields:
-		50| 49..32 | 31..16 | 15...8 | 7.............6 | ...........5 | 4.........0 |
-			| unused |    tag | setIdx | internalBankIdx | alignBankIdx | alignOffset |
-													| 13...................6 |
-													|         replacerSetIdx |
-										| 20....................................................1 |
-										|                                             targetLower |
-																																	| 4.......1 |
-																																	|  position |
-																															 | 5..........1 |
-																															 |  cfiPosition |
+  Size(set, way, align, internal): 256 * 4 * 2 * 4 = 8192
+  Address fields:
+    50| 49..32 | 31..16 | 15...8 | 7.............6 | ...........5 | 4.........0 |
+      | unused |    tag | setIdx | internalBankIdx | alignBankIdx | alignOffset |
+                          | 13...................6 |
+                          |         replacerSetIdx |
+                    | 20....................................................1 |
+                    |                                             targetLower |
+                                                                  | 4.......1 |
+                                                                  |  position |
+                                                               | 5..........1 |
+                                                               |  cfiPosition |
 ```
 
 Where:
@@ -59,9 +59,9 @@ Where:
 
 - `valid`: whether the entry is valid
 - `tag`: tag
-- `attribute`: branch attribute, see the [BranchAttribute](index.md#branchattribute-secbpu-constants-branchattribute) section
+- `attribute`: branch attribute, see the [@sec:bpu-constants-branchattribute] [BranchAttribute](index.md#sec:bpu-constants-branchattribute) section
 - `position`: position of the cfi instruction within the current region; see the [Half-align](#sec:bpu-mbtb-half-align) section
-- `targetCarry`: carry / borrow flag for the low bits of the jump target, see the [TargetCarry](index.md#targetcarry-secbpu-constants-targetcarry) section
+- `targetCarry`: carry / borrow flag for the low bits of the jump target, see the [@sec:bpu-constants-targetcarry] [TargetCarry](index.md#sec:bpu-constants-targetcarry) section
 - `targetLowerBits`: low bits of the jump target
 - `takenCnt`: saturating counter[^takenCnt]
 
@@ -136,7 +136,7 @@ We might be able to query two adjacent regions simultaneously without introducin
 
 Reducing the region size appropriately is a better trade-off. XiangShan's half-align sets the region size to half of the fetch block size (32B by default), so `max` becomes `aligned(start+64)`. The difference between it and `start+64` will not exceed 32, maximizing the prediction range without introducing extra candidate branches (we instead restrict each 32B range to at most 4 branches, so the number of candidate branches remains 8). This is shown in the lower part of [@fig:mbtb-half-align].
 
-Of course, we could make the region even smaller, such as 16B (quarter-align?), but that would first increase implementation complexity. Worse, “at most 8 branches within each 64B” and “at most 8/x branches within each 64/x B” are not equivalent: the former allows branches to cluster around particular positions, while the latter requires branches to be distributed more evenly, otherwise utilization drops and replacement pressure increases. Considering all factors, half-align is a good compromise.
+Of course, we could make the region even smaller, such as 16B (quarter-align?), but that would first increase implementation complexity. Worse, "at most 8 branches within each 64B" and "at most $\frac{8}{x}$ branches within each $\frac{64}{x}$ B" are not equivalent: the former allows branches to cluster around particular positions, while the latter requires branches to be distributed more evenly, otherwise utilization drops and replacement pressure increases. Considering all factors, half-align is a good compromise.
 
 ![Region design comparison](../figure/BPU/mbtb/half-align-region.png){#fig:mbtb-half-align}
 
@@ -144,7 +144,7 @@ In the implementation, the mbtb top layer partitions the address space into two 
 
 During prediction and training, requests are rotated according to the `alignBankIdx` of `start` (i.e. if the `alignBankIdx` of `start` is 0, `req(0)` goes to `alignBank(1)` and `req(1)` goes to `alignBank(1)`; if `alignBankIdx` is 1, they are swapped), and the `internalBankIdx` of `start` is used as the index inside each alignBank.
 
-> The design of the `VecRotate` class in the code is mainly for parameterization. If there are 4 alignBanks, when `alignBankIdx` is 0, the request indices entering the 4 alignBanks are 0, 1, 2, 3; when `alignBankIdx` is 1, the request indices entering the 4 alignBanks are 3, 0, 1, 2; and so on. See also [utils/VecRotate.md](../../utils/VecRotate.md) and [@sec:utils-vecrotate].
+> The design of the `VecRotate` class in the code is mainly for parameterization. If there are 4 alignBanks, when `alignBankIdx` is 0, the request indices entering the 4 alignBanks are 0, 1, 2, 3; when `alignBankIdx` is 1, the request indices entering the 4 alignBanks are 3, 0, 1, 2; and so on. See also [@sec:utils-vecrotate] [utils/VecRotate.md](../../utils/VecRotate.md).
 
 With this design, the `alignBankIdx` bit of the `pc` stored for each cfi instruction in an alignBank is constant, so it does not need to be stored. In other words, the highest bit of `cfiPosition` does not need to be stored. We have: `cfiPosition = Cat(reqIdx, position)`.
 
@@ -185,10 +185,10 @@ But if we look at the actual behavior of Plru, as shown in [@fig:mbtb-plru-confl
 1. Train 3 branches into mbtb in order.
 2. In the ideal case, Plru would point to the last free way for the 4th branch to enter.
 3. But the code here is a small loop (`cbfda` is a branch jumping to `cbfc6`, i.e. the loop tail), which means there are many prediction updates to the replacer interleaved between training updates.
-		- Note that br0, br1, and br2 are all within the current region, so they all hit during prediction
-		- Under this situation, the replacer updates way0, way1, and way2 in sequence within one cycle
-		- This causes Plru to incorrectly believe that way0 is the least recently used way instead of way3
-		- Eventually br3 replaces br0 by mistake during training, and this repeats. br0 and br3 then compete for way0, while way3 remains unused for a long time. The effective associativity drops to 3, which cannot meet the requirement and leads to a large performance regression
+    - Note that br0, br1, and br2 are all within the current region, so they all hit during prediction
+    - Under this situation, the replacer updates way0, way1, and way2 in sequence within one cycle
+    - This causes Plru to incorrectly believe that way0 is the least recently used way instead of way3
+    - Eventually br3 replaces br0 by mistake during training, and this repeats. br0 and br3 then compete for way0, while way3 remains unused for a long time. The effective associativity drops to 3, which cannot meet the requirement and leads to a large performance regression
 
 ![Plru conflict illustration](../figure/BPU/mbtb/plru-conflict.png){#fig:mbtb-plru-conflict}
 

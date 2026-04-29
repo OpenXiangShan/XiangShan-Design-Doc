@@ -52,16 +52,16 @@ MainBtb:
 - `tag`：tag
 - `replacerSetIdx`：替换器索引，和 setIdx 一样长，但最低位与 internalBankIdx 对齐，达成面积开销与替换准确度的权衡
 - `targetLower`：跳转目标地址的低位
-- `position`：cfi 指令在当前 region 中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#half-align-secbpu-mbtb-half-align) 小节
-- `cfiPosition`：cfi 指令在整个取指块中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#half-align-secbpu-mbtb-half-align) 小节
+ - `position`：cfi 指令在当前 region 中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
+ - `cfiPosition`：cfi 指令在整个取指块中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
 
 ## 表项结构 {#sec:bpu-mbtb-entry}
 
 - `valid`：表项是否有效
 - `tag`：tag
-- `attribute`：分支属性，见 [@sec:bpu-constants-branchattribute] [BranchAttribute](index.md#branchattribute-secbpu-constants-branchattribute) 小节
-- `position`：cfi 指令在当前 region 中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#half-align-secbpu-mbtb-half-align) 小节
-- `targetCarry`：跳转目标低位进位/借位标记，见 [@sec:bpu-constants-targetcarry] [TargetCarry](index.md#targetcarry-secbpu-constants-targetcarry) 小节
+- `attribute`：分支属性，见 [@sec:bpu-constants-branchattribute] [BranchAttribute](index.md#sec:bpu-constants-branchattribute) 小节
+- `position`：cfi 指令在当前 region 中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
+- `targetCarry`：跳转目标低位进位/借位标记，见 [@sec:bpu-constants-targetcarry] [TargetCarry](index.md#sec:bpu-constants-targetcarry) 小节
 - `targetLowerBits`：跳转目标低位
 - `takenCnt`：饱和计数器[^takenCnt]
 
@@ -73,7 +73,7 @@ MainBtb:
 
 ### 顶层 {#sec:bpu-mbtb-hierarchy-top}
 
-- 处理如 [@sec:bpu-mbtb-half-align] [Half-align](#half-align-secbpu-mbtb-half-align) 中描述的 VecRotate 相关逻辑
+- 处理如 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 中描述的 VecRotate 相关逻辑
 - 生成提供给每个 AlignBank 的预测/训练请求
 - 提供对齐的接口与 Bpu 交互
 - 统计性能事件
@@ -83,7 +83,7 @@ MainBtb:
 - s0：接收 Bpu 顶层的预测请求，生成两个预测请求（当前 region，即 `start`；和下一个 region，即 `start+32`）并送入两个 AlignBank
 - s1：空流水，与 AlignBank 对齐用
 - s2：接收来自 AlignBank 的预测结果，进行合并，并送回 Bpu 顶层
-- s3：向 AlignBank 发送 replacer 更新数据，见 [@sec:bpu-mbtb-replacer] [replacer](#replacer-secbpu-mbtb-replacer) 小节
+- s3：向 AlignBank 发送 replacer 更新数据，见 [@sec:bpu-mbtb-replacer] [replacer](#sec:bpu-mbtb-replacer) 小节
 
 在训练流水级上：
 
@@ -104,7 +104,7 @@ MainBtb:
 - s0：接收来自顶层的预测请求，选择需要预测的 InternalBank 并送入 InternalBank
 - s1：接受来自 InternalBank 的预测结果
 - s2：判断预测是否命中，过滤超范围（`cfiPc` < `startPc`）的结果，送回顶层
-- s3：更新 replacer，见 [@sec:bpu-mbtb-replacer] [replacer](#replacer-secbpu-mbtb-replacer) 小节
+- s3：更新 replacer，见 [@sec:bpu-mbtb-replacer] [replacer](#sec:bpu-mbtb-replacer) 小节
 
 在训练流水级上：
 
