@@ -38,7 +38,7 @@
 
 ### CSR Configuration {#sec:bpu-csr}
 
-Table: Bpu-related CSR list
+Table: Bpu-related CSR list {#tbl:bpu-csr}
 
 +---------+-------+----------+------+----------------------------------------------------------------------+
 | Reg     | Addr  | Reset    | Attr | Description                                                          |
