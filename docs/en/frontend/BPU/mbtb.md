@@ -52,15 +52,15 @@ Where:
 - `tag`: tag
 - `replacerSetIdx`: replacer index, same width as setIdx, but its least significant bit is aligned with `internalBankIdx` to balance area cost and replacement accuracy
 - `targetLower`: low bits of the jump target address
-- `position`: position of the cfi instruction within the current region; see the [Half-align](#sec:bpu-mbtb-half-align) section
-- `cfiPosition`: position of the cfi instruction within the whole fetch block; see the [Half-align](#sec:bpu-mbtb-half-align) section
+- `position`: position of the cfi instruction within the current region; see the [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) section
+- `cfiPosition`: position of the cfi instruction within the whole fetch block; see the [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) section
 
 ## Entry Structure {#sec:bpu-mbtb-entry}
 
 - `valid`: whether the entry is valid
 - `tag`: tag
 - `attribute`: branch attribute, see the [@sec:bpu-constants-branchattribute] [BranchAttribute](index.md#sec:bpu-constants-branchattribute) section
-- `position`: position of the cfi instruction within the current region; see the [Half-align](#sec:bpu-mbtb-half-align) section
+- `position`: position of the cfi instruction within the current region; see the [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) section
 - `targetCarry`: carry / borrow flag for the low bits of the jump target, see the [@sec:bpu-constants-targetcarry] [TargetCarry](index.md#sec:bpu-constants-targetcarry) section
 - `targetLowerBits`: low bits of the jump target
 - `takenCnt`: saturating counter[^takenCnt]
@@ -73,7 +73,7 @@ To decouple functionality and simplify each module, mbtb is divided into multipl
 
 ### Top Layer {#sec:bpu-mbtb-hierarchy-top}
 
-- Handles the VecRotate-related logic described in [Half-align](#sec:bpu-mbtb-half-align)
+- Handles the VecRotate-related logic described in [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align)
 - Generates prediction / training requests for each AlignBank
 - Provides aligned interfaces to interact with BPU
 - Collects performance events
@@ -83,7 +83,7 @@ On the prediction pipeline:
 - s0: receives the prediction request from the BPU top level, generates two prediction requests (the current region, i.e. `start`; and the next region, i.e. `start+32`) and sends them to two AlignBanks
 - s1: empty pipeline stage for AlignBank alignment
 - s2: receives prediction results from AlignBanks, merges them, and sends them back to the BPU top level
-- s3: sends replacer update data to AlignBanks, see the [replacer](#sec:bpu-mbtb-replacer) section
+- s3: sends replacer update data to AlignBanks, see the [@sec:bpu-mbtb-replacer] [replacer](#sec:bpu-mbtb-replacer) section
 
 On the training pipeline:
 
@@ -103,8 +103,8 @@ On the prediction pipeline:
 
 - s0: receives the prediction request from the top layer, selects the InternalBank to be predicted, and sends it to the InternalBank
 - s1: receives the prediction result from the InternalBank
-- s2: determines whether the prediction hits, filters out-of-range results (`cfiPc` < `startPc`), and sends them back to the top layer
-- s3: updates the replacer, see the [replacer](#sec:bpu-mbtb-replacer) section
+- s2: determines whether the prediction hits, filters out-of-range results, see [@sec:bpu-mbtb-range-check] [Range Check](#sec:bpu-mbtb-range-check), and sends them back to the top layer
+- s3: updates the replacer, see the [@sec:bpu-mbtb-replacer] [replacer](#sec:bpu-mbtb-replacer) section
 
 On the training pipeline:
 
@@ -151,6 +151,15 @@ With this design, the `alignBankIdx` bit of the `pc` stored for each cfi instruc
 ![rotate and cfiPosition calculation](../figure/BPU/mbtb/half-align-rotate.png){#fig:mbtb-half-align-rotate}
 
 We do not care about the order of branches output by mbtb, so there is no need to perform a reverse rotate.
+
+## Range Check {#sec:bpu-mbtb-range-check}
+
+Due to the structural characteristics of Region-BTB, mbtb does not satisfy the property that “all branches indexed by the current pc are guaranteed to be within some previously observed fallThrough block”. The indexed branches may come from a different training path and merely happen to fall within the same region, so they may be outside the valid prediction range. Therefore, mbtb needs to filter the hit results it outputs. Specifically:
+
+1. Discard branches before the current prediction block start address, i.e. branches with `cfiPc < startPc`
+2. When crossing a page boundary, discard branches from the second alignBank in the request, i.e. branches with `cfiPc >= aligned(start+64)` [^drop-cross-alignbank]
+
+[^drop-cross-alignbank]: Since the page size is 4KB and the region size is 32B, page boundaries are also region boundaries. Therefore, when a fetch block crosses a page boundary, the two regions that need to be queried must belong to two different pages, and the branch from the second alignBank is necessarily out of range. The “second” here does not refer to the physical index, but to the second alignBank entered after rotation.
 
 ## Replacer {#sec:bpu-mbtb-replacer}
 

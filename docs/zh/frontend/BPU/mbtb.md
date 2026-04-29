@@ -103,7 +103,7 @@ MainBtb:
 
 - s0：接收来自顶层的预测请求，选择需要预测的 InternalBank 并送入 InternalBank
 - s1：接受来自 InternalBank 的预测结果
-- s2：判断预测是否命中，过滤超范围（`cfiPc` < `startPc`）的结果，送回顶层
+- s2：判断预测是否命中，过滤超范围的结果，见 [@sec:bpu-mbtb-range-check] [范围检查](#sec:bpu-mbtb-range-check) 小节，送回顶层
 - s3：更新 replacer，见 [@sec:bpu-mbtb-replacer] [replacer](#sec:bpu-mbtb-replacer) 小节
 
 在训练流水级上：
@@ -151,6 +151,15 @@ mbtb 采用 Region-BTB 格式，即将整个地址空间划分成多个 region�
 ![rotate 及 cfiPosition 计算示意](../figure/BPU/mbtb/half-align-rotate.png){#fig:mbtb-half-align-rotate}
 
 我们不关心 mbtb 输出的分支顺序，因此没有必要做反向 rotate。
+
+## 范围检查 {#sec:bpu-mbtb-range-check}
+
+由于 Region-BTB 的结构特性，mbtb 并不满足“当前 pc 索引出的所有分支一定都在曾经某个 fallThrough 的块中”这一特性，其索引出的分支可能来自另一条训练路径，只是恰好落在同一个 region 内，这些分支可能不在有效的预测范围内。因此 mbtb 需要对输出的命中结果进行过滤，具体来说：
+
+1. 丢弃在当前预测块起始地址之前的分支，即 `cfiPc < startPc` 的分支
+2. 当跨页时，丢弃来自请求的第二个 alignBank 的分支，即 `cfiPc >= aligned(start+64)` 的分支 [^drop-cross-alignbank]
+
+[^drop-cross-alignbank]: 由于页大小 4KB，region 大小 32B，因此页边界一定也是 region 边界，所以当取指块跨页时，需要查询的两个 region 一定分别属于两个页，因此来自第二个 alignBank 的分支一定是超范围的。此处的“第二个”不是指物理下标，而是指 rotate 后的第二个请求进入的 alignBank。
 
 ## Replacer {#sec:bpu-mbtb-replacer}
 

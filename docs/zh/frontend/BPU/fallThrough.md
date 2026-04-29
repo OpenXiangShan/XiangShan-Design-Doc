@@ -8,7 +8,7 @@
 
 ## Half-align {#sec:bpu-fallthrough-half-align}
 
-Half-align 的细节请参考 mbtb 文档，由于 S1 预测器组直接使用起始地址作为索引（即 not-align 的），所以若不做任何限制，S1 预测器组可以预测 64B 内的任意分支，而对于那些（64B 内，但跨越了两个 32B 边界）的分支，S3 预测器组无法进行预测或校验。
+Half-align 的细节请参考 [@sec:bpu-mbtb-half-align] [mbtb 文档](mbtb.md#sec:bpu-mbtb-half-align)，由于 S1 预测器组直接使用起始地址作为索引（即 not-align 的），所以若不做任何限制，S1 预测器组可以预测 64B 内的任意分支，而对于那些（64B 内，但跨越了两个 32B 边界）的分支，S3 预测器组无法进行预测或校验。
 
 为方便描述，我们定义 aligned 函数伪代码如下，将地址对齐到 32B 边界，即清除地址的低 5 位：
 
@@ -24,9 +24,7 @@ define aligned(addr):
         |-------------------------| S3 预测器极限范围 [0x0a, aligned(0x4a)=0x40]
 ```
 
-如果分别在每个预测器内对超范围的分支进行过滤，实现复杂度会比较高。考虑到所有训练进其余预测器的分支都一定包含在曾经某次 fallThrough 预测的范围内（冷启动时分支预测器都是空的，只能做 fallThrough 预测），所以我们直接在 fallThrough 预测器内禁止跨越两个 32B 边界的范围就可以避免预测超范围 [^bpu-fallthrough-32b-limit]。
-
-[^bpu-fallthrough-32b-limit]: 理想情况是这样的，但 mbtb 的实际实现不太理想，故 mbtb 内还有特殊处理，见 mbtb 文档。
+如果分别在每个预测器内对超范围的分支进行过滤，实现复杂度会比较高。考虑到所有训练进其余预测器的分支都一定包含在曾经某次 fallThrough 预测的范围内（冷启动时分支预测器都是空的，只能做 fallThrough 预测），所以我们直接在 fallThrough 预测器内禁止跨越两个 32B 边界的范围就可以避免预测超范围。
 
 伪代码类似于：
 
@@ -57,7 +55,9 @@ cfiPosition = (cfiAddr - aligned(start))[5:1]
 
 在 V3 设计中，为了节省 Itlb 面积，Ifu/ICache 假设单次取指请求不会跨过页边界（4KB），即需要 Bpu 保证预测的 cfiPosition 和 start 在同一页内。
 
-类似 half-align，我们同样可以通过限制 fallThrough 预测来在不给 ubtb/abtb 引入额外的复杂度的情况下满足这一点。
+类似 half-align，我们同样可以通过限制 fallThrough 预测来在不给其余预测器引入额外的复杂度的情况下满足禁止跨页的要求[^bpu-fallthrough-limit]。
+
+[^bpu-fallthrough-limit]: 理想情况是这样的，但 mbtb 的实际实现不太理想，故 mbtb 内还有特殊处理，见 [@sec:bpu-mbtb-range-check] [mbtb 文档](mbtb.md#sec:bpu-mbtb-range-check)。
 
 在具体做法上也比较类似 half-align，我们首先比较 start + 64 和 start 的 pfn（物理页号，即地址第 12 位及以上的位）[^bpu-fallthrough-pfn-compare]，若不同，则将对齐到 4KB 的结果作为 target：
 

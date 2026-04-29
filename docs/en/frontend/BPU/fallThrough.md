@@ -8,7 +8,7 @@ However, in practice, the V3 S3 predictor group and Ifu/ICache impose some requi
 
 ## Half-align {#sec:bpu-fallthrough-half-align}
 
-For the details of half-align, please refer to the mbtb documentation. Since the S1 predictor group uses the start address directly as the index, i.e. it is not aligned, the S1 predictor group can predict any branch within 64 bytes if no restriction is applied. For branches that are within 64 bytes but cross two 32-byte boundaries, however, the S3 predictor group cannot predict or validate them.
+For the details of half-align, please refer to [@sec:bpu-mbtb-half-align] [the mbtb documentation](mbtb.md#sec:bpu-mbtb-half-align). Since the S1 predictor group uses the start address directly as the index, i.e. it is not aligned, the S1 predictor group can predict any branch within 64 bytes if no restriction is applied. For branches that are within 64 bytes but cross two 32-byte boundaries, however, the S3 predictor group cannot predict or validate them.
 
 For convenience, we define the aligned function as pseudo code below, which aligns an address to a 32-byte boundary by clearing the low 5 bits:
 
@@ -24,9 +24,7 @@ define aligned(addr):
         |-------------------------| S3 predictor limit range [0x0a, aligned(0x4a)=0x40]
 ```
 
-Filtering out-of-range branches separately inside each predictor would be relatively complex to implement. Considering that all branches trained into the other predictors must have been included in some previous fallThrough prediction range (during cold start, the branch predictors are empty and can only make fallThrough predictions), we can simply forbid ranges that cross two 32-byte boundaries inside the fallThrough predictor to avoid out-of-range predictions [^bpu-fallthrough-32b-limit].
-
-[^bpu-fallthrough-32b-limit]: Ideally this would be the case, but the actual mbtb implementation is not ideal, so mbtb still has special handling. See the mbtb documentation.
+Filtering out-of-range branches separately inside each predictor would be relatively complex to implement. Considering that all branches trained into the other predictors must have been included in some previous fallThrough prediction range (during cold start, the branch predictors are empty and can only make fallThrough predictions), we can simply forbid ranges that cross two 32-byte boundaries inside the fallThrough predictor to avoid out-of-range predictions.
 
 The pseudo code is roughly:
 
@@ -57,7 +55,9 @@ Semantically, fallThrough's cfiPosition may seem useless, because it does not ac
 
 In the V3 design, to save Itlb area, Ifu/ICache assume that a single fetch request will not cross a page boundary (4 KB), which means the Bpu must guarantee that the predicted cfiPosition and start are within the same page.
 
-Similar to half-align, we can satisfy this requirement by restricting fallThrough predictions without introducing extra complexity into ubtb/abtb.
+Similar to half-align, we can satisfy this requirement by restricting fallThrough predictions without introducing extra complexity into the other predictors [^bpu-fallthrough-limit].
+
+[^bpu-fallthrough-limit]: Ideally this would be the case, but the actual mbtb implementation is not ideal, so mbtb still has special handling. See [@sec:bpu-mbtb-range-check] [the mbtb documentation](mbtb.md#sec:bpu-mbtb-range-check).
 
 The concrete method is similar to half-align as well. We first compare the PFN (physical page number, i.e. bits above address bit 11) of start + 64 and start [^bpu-fallthrough-pfn-compare]. If they differ, we use the 4 KB aligned result as the target:
 
