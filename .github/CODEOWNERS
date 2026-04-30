@@ -1,6 +1,17 @@
-* @cebarobot @Tang-Haojin
+* @cebarobot @Tang-Haojin @good-circle @Yan-Muzi
 
 /docs/zh/frontend/ @rich-cake
-/docs/zh/backend/ @Tang-Haojin
+/docs/en/frontend/ @rich-cake
+/docs/shared/frontend/ @rich-cake
+
+/docs/zh/backend/ @lewislzh
+/docs/en/backend/ @lewislzh
+/docs/shared/backend/ @lewislzh
+
 /docs/zh/memblock/ @linjuanZ
+/docs/en/memblock/ @linjuanZ
+/docs/shared/memblock/ @linjuanZ
+
 /docs/zh/cache/ @linjuanZ
+/docs/en/cache/ @linjuanZ
+/docs/shared/cache/ @linjuanZ
