@@ -69,7 +69,9 @@ Where:
 
 ## Hierarchy {#sec:bpu-mbtb-hierarchy}
 
-To decouple functionality and simplify each module, mbtb is divided into multiple layers.
+To decouple functionality and simplify the implementation of each module, mbtb is divided into multiple layers, as shown in [@fig:mbtb-struct].
+
+![mbtb structure diagram](../figure/BPU/mbtb/struct.png){#fig:mbtb-struct}
 
 ### Top Layer {#sec:bpu-mbtb-hierarchy-top}
 

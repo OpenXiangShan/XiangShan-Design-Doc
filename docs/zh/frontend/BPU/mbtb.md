@@ -69,7 +69,9 @@ MainBtb:
 
 ## 层级结构 {#sec:bpu-mbtb-hierarchy}
 
-为了解耦功能、简化每个模块的实现，将 mbtb 划分成多个层级。
+为了解耦功能、简化每个模块的实现，将 mbtb 划分成多个层级，如 [@fig:mbtb-struct] 所示。
+
+![mbtb 结构示意图](../figure/BPU/mbtb/struct.png){#fig:mbtb-struct}
 
 ### 顶层 {#sec:bpu-mbtb-hierarchy-top}
 
