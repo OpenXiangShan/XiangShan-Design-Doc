@@ -19,20 +19,21 @@ class BaseChecker:
         """Get the list of checks to perform on each file"""
         return []
 
-    def check(self, path: Path) -> int:
+    def check(self, path: list[Path]) -> int:
         """Check all files in a directory or a single file"""
         self.logger.info("Checking %s in %s...", self.logger.name, path)
         err = 0
         for check in self.get_checks():
-            if path.is_file():
-                with path.open() as file:
-                    err += check(file)
-            elif path.is_dir():
-                for filepath in path.rglob("*.md"):
-                    with filepath.open() as file:
+            for p in path:
+                if p.is_file():
+                    with p.open() as file:
                         err += check(file)
-            else:
-                self.logger.critical("Path %s is not a file or directory", path)
+                elif p.is_dir():
+                    for filepath in p.rglob("*.md"):
+                        with filepath.open() as file:
+                            err += check(file)
+                else:
+                    self.logger.critical("Path %s is not a file or directory", p)
         return err
 
 
@@ -233,7 +234,8 @@ def main():
     parser.add_argument(
         "path",
         type=Path,
-        help="Path to a markdown file or a directory containing markdown files",
+        nargs="+",
+        help="Paths to markdown files or directories containing markdown files",
     )
     parser.add_argument(
         "--log-level",
