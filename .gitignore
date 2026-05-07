@@ -11,3 +11,4 @@ venv/
 *.tex
 *.html
 
+*.drawio:Zone.Identifier
