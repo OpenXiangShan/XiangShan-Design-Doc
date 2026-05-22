@@ -33,7 +33,7 @@ Table: 子模块列表
 - 硬件定时器 (time)
 - 计数器溢出标志 (time)
 - 29个硬件性能计数器 (hpmcounter3 - hpmcouonter3)
-- 29个硬件性能事件选择器 (mhpmcounter3 - mhpmcounter31)
+- 29个硬件性能事件选择器 (mhpmevent3 - mhpmevent31)
 - 支持最多定义 2^10 种性能事件
 
 ### 功能
