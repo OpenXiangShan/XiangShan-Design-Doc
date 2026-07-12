@@ -5,7 +5,43 @@
 - 日期：2025/01/20
 - commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
 
-向量功能单元包括 vsetiwi, vsetiwf, vsetfwf, vipu, vialuF, vfpu, vldu, vstu, vppu, vimac, vidiv, vfalu, vfma, vfdiv, vfcvt; 每个功能单元支持的指令如下表：
+向量功能单元包括 vsetiwi, vsetiwf, vsetfwf, vipu, vialuF, vldu, vstu, vppu, vimac, vidiv, vfalu, vfma, vfdiv, vfcvt。
+
+## 功能单元与对应的延迟
+
+各向量功能单元的延迟信息（参考 `FuConfig.scala`，`CertainLatency(n)` 表示延迟为 n+1，`UncertainLatency()` 表示延迟不固定）：
+
+| 功能单元 | 延迟（周期） | 流水线 | 说明 |
+| -------- | ------------ | ------ | ---- |
+| vsetiwi  | 1            | 是     | |
+| vsetiwf  | 1            | 是     | |
+| vsetfwf  | 1            | 是     | |
+| vipu     | 3            | 是     | |
+| vialuF   | 2            | 是     | |
+| vimac    | 3            | 是     | |
+| vppu     | 3            | 是     | |
+| vidiv    | 不固定       | 否     | 取决于SEW |
+| vfalu    | 2            | 是     | |
+| vfma     | 4            | 是     | |
+| vfdiv    | 不固定       | 否     | 取决于指令和SEW |
+| vfcvt    | 3            | 是     | |
+| vldu     | 不固定       | 是     | 取决于访存 |
+| vstu     | 不固定       | 是     | 取决于访存 |
+
+## 不定周期延迟
+
+| 功能单元 | 指令            | SEW | 延迟 |
+| -------- | --------------- | --- | -----|
+| vidiv    | vdiv{u},vrem{u} |   8 |    6 |
+| vidiv    | vdiv{u},vrem{u} |  16 |  4-7 |
+| vidiv    | vdiv{u},vrem{u} |  32 | 4-11 |
+| vidiv    | vdiv{u},vrem{u} |  64 | 4-19 |
+| vfdiv    | vf{r}div        |  16 |    7 |
+| vfdiv    | vf{r}div        |  32 |    9 |
+| vfdiv    | vf{r}div        |  64 |   14 |
+| vfdiv    | vfsqrt          |  16 |    7 |
+| vfdiv    | vfsqrt          |  32 |    9 |
+| vfdiv    | vfsqrt          |  64 |   14 |
 
 ## vsetiwi vsetiwf vsetfwf
 
