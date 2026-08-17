@@ -36,6 +36,30 @@
 
 ## Functional Details {#sec:bpu-functional-details}
 
+### Fast Training for the S1 Predictor Group {#sec:bpu-s1-fast-train}
+
+Under the overriding architecture, the S3 predictor group checks and corrects results from the S1 predictor group. This also means the S1 predictor group can be trained by backend execution units like the S3 predictor group, and can also be fast-trained by the S3 predictor group (similar to using them as a cache for the accurate S3 predictors). The former is more accurate, while the latter is more timely, and they may differ in overall IPC.
+
+For each predictor specifically:
+
+- ubtb: controlled by the `EnableFastTrain` parameter to enable fast training. Early evaluation shows some performance gain from fast training, so its default value is true.
+- abtb: due to the ahead-pipeline design, abtb needs more pipeline information for training, so backend training is not possible and only fast training is supported.
+- utage: TODO
+
+### Target Address Fix-up {#sec:bpu-target-fix}
+
+To save storage area, BTB structures do not store the full 50-bit (Sv48x4) target virtual address. Instead, only lower bits are stored (see each BTB parameter list). According to the ISA manual:
+
+- branch: target is pc + offset, where offset is a 12-bit immediate, so only the low 14 bits of the target need to be stored (offset needs a low-bit appended 0, and carry/borrow of upper bits must also be tracked)
+- jal: target is pc + offset, where offset is a 20-bit immediate, so only the low 22 bits of the target need to be stored (same as above)
+- jalr: target is from a register value. Storing only low bits may cause misprediction, but we accept this trade-off to balance hardware cost and performance gain
+
+During prediction, we directly concatenate "the high bits of fetch-block start address" with "the stored low bits of target address", which yields the correct target in most cases. However, exceptions exist at region boundaries due to carry/borrow. For example, if only low 12 bits are stored, and fetch-block start address `startPc = 0x12345ffe`, `offset = +0x20`, then the target is `0x1234601e`, but the stored 12-bit low part is `0x01e`; simple concatenation gives `0x1234501e`.
+
+To solve this, we introduce a 2-bit `targetCarry` flag to record whether carry/borrow exists, and fix up the concatenation result during prediction. This function can be enabled/disabled by the BTB parameter `EnableTargetFix`. As analyzed above for jump ranges of each instruction type, cases requiring fix-up should be theoretically rare, and in principle can be further avoided by compiler instruction layout optimization. Therefore this extra 2-bit/entry overhead may not be worthwhile. In our early evaluation, no obvious performance gain was observed, so the default value of this function is false.
+
+See also [@sec:bpu-constants-targetcarry] [TargetCarry](index.md#sec:bpu-constants-targetcarry) for the definition of `targetCarry` flag values.
+
 ### CSR Configuration {#sec:bpu-csr}
 
 Table: Bpu-related CSR list {#tbl:bpu-csr}
@@ -95,6 +119,8 @@ Used to represent the carry / borrow flag of the low bits of a jump target addre
 - `0`: fit, i.e. no carry / borrow, `target = Cat(targetUpper, targetLower)`
 - `1`: overflow, requires carry, i.e. `target = Cat(targetUpper + 1, targetLower)`
 - `2`: underflow, requires borrow, i.e. `target = Cat(targetUpper - 1, targetLower)`
+
+See also [@sec:bpu-target-fix] [Target Address Fix-up](#sec:bpu-target-fix) for usage of this flag.
 
 ## References {#sec:bpu-references}
 
