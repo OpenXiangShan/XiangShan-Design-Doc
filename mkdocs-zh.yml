@@ -158,3 +158,5 @@ nav:
         - 链路层控制器 LinkMonitor: cache/l2cache/downstream/LinkMonitor.md
       - MMIO 转接桥 MMIOBridge: cache/l2cache/MMIOBridge.md
       - 错误处理: cache/l2cache/Error.md
+  - 工具类:
+    - VecRotate: utils/VecRotate.md

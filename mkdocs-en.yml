@@ -161,3 +161,5 @@ nav:
         - Link Layer Controller (LinkMonitor): cache/l2cache/downstream/LinkMonitor.md
       - MMIO Bridge (MMIOBridge): cache/l2cache/MMIOBridge.md
       - Error Handling: cache/l2cache/Error.md
+    - Utility Classes:
+      - VecRotate: utils/VecRotate.md
