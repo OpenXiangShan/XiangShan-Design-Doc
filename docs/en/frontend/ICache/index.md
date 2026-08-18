@@ -2,8 +2,8 @@
 
 - Version: V3
 - Status: draft
-- Date: 2026/04/22
-- commit: TODO
+- Date: 2026/07/07
+- commit: [draft PR](https://github.com/OpenXiangShan/XiangShan/pull/5733)
 
 ## Glossary {#sec:icache-glossary}
 
@@ -281,19 +281,36 @@ ICache supports error detection, error recovery, and error injection as part of 
 
 When MissUnit refills MetaArray and DataArray, it computes check bits for metadata and data. Metadata check bits are stored together with metadata in Meta SRAM, while data check bits are stored in dedicated Data Code SRAM.
 
-When a fetch request reads SRAM, check bits are read out together. MainPipe checks metadata/data in s1/s2 respectively. Software can enable/disable this feature by writing specific values to CSR fields. In versions around Jun-Dec, this control used custom CSR `sfetchctl`; later it was changed to MMIO-mapped CSR. See [CtrlUnit doc](./CtrlUnit.md).
+When a fetch request reads SRAM, check bits are read out together, and metadata/data are checked in MainPipe s2. Software can enable/disable this feature by writing specific values to CSR fields. Early versions of kunminghu-v2 used a custom CSR `sfetchctl`, and later versions switched to MMIO-mapped CSR. See [CtrlUnit doc](./CtrlUnit.md).
 
 For check-code design, the code type is parameterized. Default is parity, where check bit is reduction XOR of data: $code = \oplus data$. At check time, reduction XOR is applied on data and code: $error = (\oplus data) \oplus code$. If result is 1, an error is detected; otherwise it is **considered** no error (even-numbered bit errors may still escape detection).
 
 After [#4044](https://github.com/OpenXiangShan/XiangShan/pull/4044), ICache supports error injection, which requires writing incorrect check bits into MetaArray/DataArray. A `poison` bit is introduced: when asserted, it flips the write code, i.e., $code = (\oplus data) \oplus poison$.
 
-To reduce undetected cases, data is currently split into DataCodeUnit chunks (default 64 bits), and parity is computed per chunk. Therefore for each 64B cacheline, $8(data) + 1(meta) = 9$ check bits are generated.
+To reduce undetected cases, data is currently split into DataCodeUnit units (default 64 bits), and parity is computed separately for each unit. Therefore, for each 64B cacheline, a total of $8(data) + 1(meta) = 9$ check bits are generated.
 
-When MainPipe detects an error in s1/s2, it performs:
+#### Error Handling {#sec:icache-ecc-handle}
 
-1. Error handling: raise hwe exception for software handling.
-2. Error reporting: report the error to BEU, which then raises interrupt for software.
-3. Request canceling: if MetaArray check fails, read ptag is unreliable, so hit/miss judgment is unreliable. Therefore no L2 request is sent regardless of hit/miss result; exception is directly propagated to IFU and then backend.
+When MainPipe detects an error in s2, it performs the following:
+
+1. It reports the error through the corrupt port to IFU s1, which marks the instruction and sends it to backend. Backend execution then raises an hwe exception.
+2. It reports the error to BEU through the `io.error` port, after which BEU raises an NMI interrupt.
+
+It should be specifically noted that, due to timing constraints, IFU assumes that the exception condition of a single fetch request is unique, and therefore marks the exception on the first valid instruction of the fetch request. This is reasonable for page faults and other exceptions based on page tables/PMP, because in the kunminghu-v3 design [@sec:bpu-fallthrough-no-cross-page] [BPU guarantees that a single fetch block does not cross a page boundary](../BPU/fallThrough.md#sec:bpu-fallthrough-no-cross-page), and 2-fetch occurs only when the two fetch blocks are on the same page. However, for ECC errors, the two fetch blocks may span up to four cachelines, and these cachelines may independently encounter ECC errors, so a hardware error may be incorrectly marked before the cacheline where the ECC error actually occurs.
+
+![ECC errors are marked on the first valid instruction of the fetch request](../figure/ICache/ECC-mark.png){#fig:icache-ecc-mark}
+
+For the following reasons, we consider this handling acceptable:
+
+1. The exception is marked on an earlier instruction in execution order. Although this causes some otherwise executable correct instructions to be discarded (false positives), it does not allow invalid instructions affected by ECC errors to execute (no false negatives).
+2. The ISA manual requires:
+
+    > xepc register is set to the address of the instruction that attempted to access corrupted data, while the xtval register is set either to 0 or to the virtual address of an instruction fetch, load, or store that attempted to access corrupted data
+
+    When one address access spans two adjacent cachelines, even if only the later cacheline has an ECC error, setting xepc/xtval to the start address of the whole fetch block still appears to satisfy the requirement.
+3. When software receives a hardware error raised by ICache, besides reporting the error to the monitoring system or administrator, it can only recover by executing `fence.i` to flush ICache and force hardware to refetch instructions from lower-level cache or memory. Knowing the exact error location seems to have little practical value.
+4. The address reported by ICache to BEU is accurate, and software can obtain the exact error location through the related BEU interface.
+5. The IFU logic for calculating the exact exception position lies on a critical timing path, and it is difficult to implement without violating timing requirements or affecting performance. ECC errors are extremely rare, and we do not want to sacrifice performance to handle them.
 
 #### Error Injection {#sec:icache-ecc-inject}
 
@@ -338,7 +355,7 @@ finish:
   # finish
 ```
 
-A test case has been implemented in [this repository](https://github.com/OpenXiangShan/nexus-am/pull/48), covering:
+A test case has been implemented in [this repository](https://github.com/OpenXiangShan/nexus-am/tree/master/apps/icache-ecc-test), covering:
 
 1. Normal MetaArray injection.
 2. Normal DataArray injection.

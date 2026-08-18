@@ -2,8 +2,8 @@
 
 - 版本：V3
 - 状态：draft
-- 日期：2026/04/22
-- commit：TODO
+- 日期：2026/07/07
+- commit：[draft PR](https://github.com/OpenXiangShan/XiangShan/pull/5733)
 
 ## 术语说明 {#sec:icache-glossary}
 
@@ -281,7 +281,7 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 在 MissUnit 向 MetaArray 和 DataArray 重填数据时，会计算 meta 和 data 的校验码，前者和 meta 一起存储在 Meta SRAM 中，后者存储在单独的 Data Code SRAM 中。
 
-当取指请求读取 SRAM 时，会同步读取出校验码，在 MainPipe 的 s1/s2 流水级中分别对 meta/data 进行校验。软件可以通过向 CSR 中相应位置写入特定的值来使能/关闭这一功能，在 6-12 月的版本中为自定义 CSR `sfetchctl`，后续换成 mmio-mapped CSR，详见 [CtrlUnit 文档](./CtrlUnit.md)。
+当取指请求读取 SRAM 时，会同步读取出校验码，在 MainPipe 的 s2 流水级中对 meta/data 进行校验。软件可以通过向 CSR 中相应位置写入特定的值来使能/关闭这一功能，在 kunminghu-v2 的早期版本中使用自定义 CSR `sfetchctl`，后续换成 mmio-mapped CSR，详见 [CtrlUnit 文档](./CtrlUnit.md)。
 
 在校验码设计方面，ICache 使用的校验码可由参数控制，默认使用的是 parity code，即校验码为对数据做规约异或 $code = \oplus data$。检查时只需将校验码和数据一起做规约异或 $error = (\oplus data) \oplus code$，结果为 1 则发生错误，反之**认为没有**错误（可能出现偶数个错误，但此处检查不出来）。
 
@@ -289,11 +289,28 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 为了减少检查不出的情况，目前将 data 划分成 DataCodeUnit（默认为 64bit）的单元分别进行奇偶校验，因此对每个 64B 的缓存行，总计会计算 $8(data) + 1(meta) = 9$ 个校验码。
 
-当 MainPipe 的 s1/s2 流水级检查到错误时，会进行以下处理：
+#### 错误处理 {#sec:icache-ecc-handle}
 
-1. 错误处理：引起 hwe 异常，由软件处理。
-2. 错误报告：向 BEU 报告错误，后者会引起中断向软件报告错误。
-3. 取消请求：当 MetaArray 被检查出错误时，其读出的 ptag 不可靠，进而对 hit 与否的判断不可靠，因此无论是否 hit 都不向 L2 Cache 发送请求，而是直接将异常传递到 IFU、进而传递到后端处理。
+当 MainPipe 的 s2 流水级检查到错误时，会进行以下处理：
+
+1. 通过 corrupt 端口向 IFU s1 流水级报告错误，后者将其标记在指令上发送到后端，后端执行时引起 hwe 异常。
+2. 通过 io.error 端口向 BEU 报告错误，后者会引起 NMI 中断。
+
+需要特别说明的是，由于时序限制，IFU 假定单次取指请求的异常情况唯一，因此将异常标记在取指请求的第一条有效指令上。这对于 page fault 等基于页表/PMP 的异常来说是合理的，因为在 kunminghu-v3 的设计中 [@sec:bpu-fallthrough-no-cross-page] [BPU 保证了单个取指块不会跨过页边界](../BPU/fallThrough.md#sec:bpu-fallthrough-no-cross-page)，而 2-fetch 仅在两个取指快位于同一页时才会发生。但对于 ECC 错误来说，两个取指块至多可能分布在 4 个缓存行中，它们可能会独立的发生 ECC 错误，因此 hardware error 可能被错误地标记在实际发生 ECC 错误的缓存行之前。
+
+![ECC 错误标记在取指块的第一条有效指令上](../figure/ICache/ECC-mark.png){#fig:icache-ecc-mark}
+
+出于以下考量，我们认为这种处理方式是可以接受的：
+
+1. 异常被标记在执行顺序上更早的指令上，虽然导致一部分原本可以执行的正常指令被丢弃（存在假阳性），但不会导致出现了 ECC 错误地无效指令被执行（不存在假阴性）。
+2. 指令集手册要求：
+
+    > xepc register is set to the address of the instruction that attempted to access corrupted data, while the xtval register is set either to 0 or to the virtual address of an instruction fetch, load, or store that attempted to access corrupted data
+
+    使用一个地址访问相邻的两个缓存行时，即使是仅后一个缓存行出现 ECC 错误，将 xepc/xtval 设为整个取指块的起始地址似乎也是符合要求的。
+3. 软件收到 ICache 引发的 hardware error 时，除了向监控系统/管理员报告错误以外，只能通过执行 `fence.i` 冲刷 ICache、强制硬件从下级缓存/内存重取指令来进行错误恢复。知道精确的错误位置似乎并无意义。
+4. ICache 向 BEU 报告错误的地址是准确的，软件可以通过其相关接口获取到准确的错误位置。
+5. IFU 计算准确异常位置的逻辑位于关键时序路径上，很难在满足时序要求、不影响性能的前提下实现，而 ECC 出错属于极罕见情况，我们不希望为了处理它牺牲性能。
 
 #### 错误注入 {#sec:icache-ecc-inject}
 
@@ -338,7 +355,7 @@ finish:
   # finish
 ```
 
-我们编写了一个测试用例，见[此仓库](https://github.com/OpenXiangShan/nexus-am/pull/48)，其测试了如下情况：
+我们编写了一个测试用例，见[此仓库](https://github.com/OpenXiangShan/nexus-am/tree/master/apps/icache-ecc-test)，其测试了如下情况：
 
 1. 正常注入 MetaArray
 2. 正常注入 DataArray
