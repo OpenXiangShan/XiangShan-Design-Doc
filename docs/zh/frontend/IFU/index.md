@@ -13,25 +13,22 @@
 | RVI | RISC-V Integer Instructions | RISC-V 手册规定的 32 位基本整型指令 |
 | IFU | Instruction Fetch Unit | 取指令单元 |
 | FTQ | Fetch Target Queue | 取指目标队列 |
-| PreDecode | Predecoder Module | 预译码器 |
 | PredChecker | Prediction Check Module | 分支预测结果检查器 |
 | ICache | L1 Instruction Cache | 一级指令缓存 |
 | IBuffer | Instruction Buffer | 指令缓冲 |
 | CFI | Control Flow Instruction | 控制流指令 |
-| PC | Program Counter | 程序计数器 |
 | InstrUncache | Instruction Ucache Module | 指令 uncache 取指处理单元 |
 
-## 子模块列表
+## 组成模块与相关功能
 
 | 子模块 | 描述 |
 | --- | --- |
 | [InstrBoundary](instrBoundary.md) | 指令定界模块，负责分析指令块数据中每条指令的位置 |
-| PreDecodeHelper | 预译码 Helper 函数（原 PreDecoder 子模块已拆解内联至流水逻辑中） |
 | RvcExpander | C 指令扩展，负责将 16 位指令扩展为 32 位指令 |
 | [PredChecker](predChecker.md) | 预译码检查模块，结合预译码信息，及早纠正部分指令流 |
 | [IfuUncacheUnit](ifuUncacheUnit.md) | uncache 指令取指处理单元 |
-| [IfuAlign](ifuAlign.md) | 指令对齐逻辑（内联于 S1 流水级与 Helper 函数） |
 | [IfuTrigger](ifuTrigger.md) | Trigger 触发器检查模块 |
+| [指令紧密排列与对齐](ifuAlign.md) | IFU 内联的指令压缩与 IBuffer 入队对齐逻辑 |
 
 ## 设计规格
 
@@ -55,10 +52,12 @@ IFU 相关参数在 Scala 源码中定义于 FrontendParameters.scala 和 ifu/Pa
 | 参数 | 默认值 | 描述 | 要求 |
 | --- | --- | --- | --- |
 | FetchBlockSize | 64 | 取指数据块大小（Byte） | 2 的幂次（限制为 64B） |
+| FetchBlockInstNum | 32 | 一个取指块按 2B 槽位划分时可容纳的最大指令数 | `FetchBlockSize / 2`；当前配置为 `64 / 2 = 32` |
 | FetchPorts | 2 | 预测/取指端口数量（twoFetch 拼接） | 仅支持 1 或 2 |
+| NumWriteBank | 4 | IBuffer 写入 Bank 数量 | 当前对齐逻辑按 `指令编号 % 4` 分 Bank |
 | PcCutPoint | (VAddrBits/4)-1 | 预测块 PC 比较低位截断点 | $0 < \text{PcCutPoint} < \text{VAddrBits}$ |
-| IfuAlignWidth | NumWriteBank | 指令对齐逻辑宽度 | 由 IBuffer 的 NumWriteBank 约束 |
-| IBufferEnqueueWidth | FetchBlockInstNum + NumWriteBank | IFU 向 IBuffer 入队的最大端口宽度 | 由 FetchBlockSize 和 NumWriteBank 导出 |
+| IfuAlignWidth | 4 | 指令对齐逻辑宽度 | `NumWriteBank`，当前为 4 |
+| IBufferEnqueueWidth | 36 | IFU 向 IBuffer 入队的最大端口宽度 | `FetchBlockInstNum + NumWriteBank = 32 + 4` |
 
 ## 功能概述
 
@@ -66,7 +65,7 @@ IFU（Instruction Fetch Unit）位于前端分支预测（FTQ）和一级指令�
 
 IFU 模块的存在会增加指令流路径上的恢复延迟，因此在满足时序约束情况下，要尽可能缩短 IFU 计算的耗时。IFU 区分了数据交付通路与重定向通路：交付通路由 S0 到 S2 拍，S3 级在捕获到预测错误时计算重定向目标地址。
 
-![IFU 结构图](../figure/IFU/ifu-structure.svg)
+![IFU 结构图](../figure/IFU/ifu-structure.svg){width=85%}
 
 - **S0 级**：数据由 ICache SRAM 直出，进行数据寄存并完成 `InstrBoundary` 指令定界前置计算与 Rank 前缀和准备。
 - **S1 级**：执行 `compact` 函数实现有效指令紧密对齐排序，并由内嵌的预译码 Helper 函数（`getJalOffset` / `getBrOffset` / `BranchAttribute.decode`）直接并行提取 CFI 指令跳转偏移与分支属性。
