@@ -24,7 +24,7 @@
 | 子模块 | 描述 |
 | --- | --- |
 | [InstrBoundary](instrBoundary.md) | 指令定界模块，负责分析指令块数据中每条指令的位置 |
-| RvcExpander | C 指令扩展，负责将 16 位指令扩展为 32 位指令 |
+| [RvcExpander](rvcExpander.md) | C 指令扩展，负责将 16 位压缩指令扩展为 32 位标准指令，并标记非法 C 指令 |
 | [PredChecker](predChecker.md) | 预译码检查模块，结合预译码信息，及早纠正部分指令流 |
 | [IfuUncacheUnit](ifuUncacheUnit.md) | uncache 指令取指处理单元 |
 | [IfuTrigger](ifuTrigger.md) | Trigger 触发器检查模块 |
@@ -79,7 +79,7 @@ IFU 模块的存在会增加指令流路径上的恢复延迟，因此在满足�
 为了满足宽发射后端的吞吐需求，IFU 支持单周期接收并处理两个预测块（twoFetch）：
 
 - **逻辑复用**：V3 架构限制两个预测块总长不超过 64 字节，IFU 将其拼接为一个大块，共用单套 64 字节预译码与定界通道，规避了独立双通道带来的 128 字节逻辑与面积/时序灾难。
-- **跨块半条指令（Half-Instruction）处理**：若预测块末尾截断了 32 位指令，IFU 内部保留该半字节与下一预测块拼接。在 twoFetch 模式下分别保留两个半字节，确保无论哪一个预测块发生冲刷均能按需恢复。
+- **跨块半条指令（Half-Instruction）处理**：若预测块末尾截断了 32 位指令，IFU 内部保留该半条与下一预测块拼接。在 twoFetch 模式下分别保留两个 16 位半条指令（half-RVI）记录，确保无论哪一个预测块发生冲刷均能按需恢复。
 
 ### 有效指令紧密排序（Rank 算法）
 
@@ -111,3 +111,41 @@ $$\text{Rank}(i) = \sum_{k < i} \text{valid}(k)$$
 ICache 仅处理缓存（Cacheable）取指通道，并在地址翻译/属性检查阶段识别指令属性。当检测到 Uncache 取指时，需由位于 ICache 与 IBuffer 之间的 `IfuUncacheUnit` 接管处理：
 - **普通 Uncache 取指**（如非 MMIO 的不可缓存页）：允许推测执行，但必须改走 Uncache 通道进行取指，而非缓存通道。
 - **MMIO 取指**：由于与外围设备交互具有不可逆的物理副作用，禁止推测取指，需待指令达到非推测条件后由 `IfuUncacheUnit` 发起安全的非推测取指。
+
+### 异常处理
+
+IFU 位于取指路径，汇集了取指阶段所有可能的异常来源，统一编码为 `ExceptionType`（None / Pf / Gpf / Af / Ill / Hwe）并随指令送入 IBuffer：
+
+| 异常来源 | 检测位置 | 异常类型 |
+| --- | --- | --- |
+| ICache 元数据（ITLB 页错误、PMP 访问违例） | S0 级随 `icacheMeta` 传入 | Pf / Gpf / Af |
+| ICache ECC/parity 校验 | S1 级合并（请求 fire 后一拍返回校验结果） | Hwe |
+| RVC 非法指令扩展 | S2 级 `RvcExpander` 的 `ill` 输出 | Ill |
+| uncache 通路 TileLink `corrupt` / `denied` | uncache 返回（Af = denied，Hwe = corrupt 且非 denied） | Af / Hwe |
+| uncache 通路 RVC 扩展 | uncache 返回 | Ill |
+
+- **优先级**：多来源经 `||` 运算合并，左侧优先（ICache 元数据异常优先于 RVC `ill`）。
+- **异常仅标记第一条有效指令**：ICache 异常作用于整个取指块，`exceptionMask` 只在第一条入队指令（对齐槽位 `s2_alignShiftNum`）置位；RVC `ill` 则精确标记发生非法的指令。检测到 ICache 异常时指令计数强制为 1，即仅将故障指令入队。
+- **半条指令与异常的交互**：若上一取指块尾部遗留待拼接的 32 位指令半条（half-RVI）且本次取指带异常，`exceptionCrossPage` 通知后端此时故障 PC 不是取指块起始地址，需由后端自行核对正确 PC。
+- **Guest Page Fault 特例**：GPF 需要为后端二级页表处理提供 guest 物理地址。IFU 将 `gpAddr` 与"是否用于 VS 非叶子 PTE"标志按 FTQ 索引写入后端 `gpAddrMem`。Uncache 通路不请求 iTLB、仅返回总线异常，不会产生 GPF。此外 `isBackendException`、`hasSatpFlush` 等后端标识随首条指令一并传递。
+
+### 刷新与重定向机制
+
+IFU 是流水化推测执行的前端部件，需要响应多种刷新来源，并保证刷新后"跨取指块的半条指令拼接"与 IBuffer 入队指针仍能正确衔接。重定向来源按优先级排列：
+
+1. **后端重定向（`backendRedirect`）**：来自 FTQ/后端的完整重定向（异常、中断、后端误预测），优先级最高。前端全部推测状态作废，`s0_prevEndIsHalfRvi`、`s1_prevIBufEnqPtr`、`s1_prevEndHalfRviData/Pc` 一并复位。
+2. **预译码检查重定向（`wbRedirect`）**：PredChecker 在写回级（S3）发现误预测后产生。重定向修正到误预测指令之后的位置，因此用 `prevIBufEnqPtr + instrCount` 恢复入队指针；若误预测落点本身截断在 32 位指令中间（`invalidTaken`），还需携带 half-RVI 信息供下一取指块拼接。
+3. **uncache 重定向（`uncacheRedirect`）**：uncache 取指返回后为顺序取指恢复 half-RVI 与入队指针；若返回的是跨页非 RVC 指令且需重发（`needResend`），同样携带半条指令信息等待下一个取指块拼接。
+4. **BPU 刷新（`s0_flushFromBpu`）**：预测器较晚阶段修正时由 FTQ 判定（`shouldFlushByStage3`）是否冲刷，作用于 S0 级最前端。
+
+各级冲刷信号的传播关系：
+
+$$\begin{aligned}
+flush_{S2} &= backendRedirect \lor \left(wbRedirect.valid \land \lnot wbNotFlush_{S2}\right) \\
+flush_{S1} &= backendRedirect \lor uncacheRedirect.valid \lor wbRedirect.valid \\
+flush_{S0} &= flush_{S1} \lor flushFromBpu_{S0}
+\end{aligned}$$
+
+- **避免双重冲刷（`s2_wbNotFlush`）**：当写回级重定向的目标取指块与 S2 级当前处理的取指块为同一块（`ftqIdx` 相同）时，重定向目标已处于流水线中，无需再次冲刷 S2，否则会丢弃该拍的处理结果。
+- **状态恢复是重定向正确性的关键**：各级均按上述优先级用新的 half-RVI 信息与入队指针覆盖流水线寄存器，保证重定向后的取指块能无缝拼接之前的半条指令，且入队位置不与已入队指令错位。
+- **uncache 写回**：uncache 取指返回后一拍，向 FTQ 发起 `uncacheFlushWb`（`canTrain = false`，目标为下一条顺序指令：RVC 后移 2 字节、RVI 后移 4 字节）。普通缓存路径使用 PredChecker 修正结果 `checkFlushWb`。两者经 `toFtq.wbRedirect` 送交 FTQ，其中 `wbValid` 优先于 uncache。
