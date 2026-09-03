@@ -1,169 +1,151 @@
-# 昆明湖 IFU 模块文档
+# 昆明湖 IFU 设计文档
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/01/03
-- commit：[7d889d887f665295eec9cdb987e037e008f875a6](https://github.com/OpenXiangShan/XiangShan/tree/7d889d887f665295eec9cdb987e037e008f875a6)
+- 版本：V3
+- 状态：draft
+- 日期：2026/08/25
+- commit：[f91bdbb8c69e2ad9e041a7dcd92146f5a397d61c](https://github.com/OpenXiangShan/XiangShan/tree/f91bdbb8c69e2ad9e041a7dcd92146f5a397d61c)
 
 ## 术语说明
 
-| 缩写         | 全称                                     | 描述                                       |
-| ------------ | ---------------------------------------- | ------------------------------------------ |
-| CRU          | Clock Reset Unit                         | 时钟复位单元                               |
-| RVC          | RISC-V Compressed Instructions           | RISC-V 手册"C"扩展规定的 16 位长度压缩指令 |
-| RVI          | RISC-V Integer Instructions              | RISC-V 手册规定的 32 位基本整型指令        |
-| IFU          | Instruction Fetch Unit                   | 取指令单元                                 |
-| FTQ          | Fetch Target Queue                       | 取指目标队列                               |
-| PreDecode    | Predecoder Module                        | 预译码器                                   |
-| PredChecker  | Prediction Check Module                  | 分支预测结果检查器                         |
-| ICache       | L1 Instruction Cache                     | 一级指令缓存                               |
-| IBuffer      | Instruction Buffer                       | 指令缓冲                                   |
-| CFI          | Control Flow Instruction                 | 控制流指令                                 |
-| PC           | Program Counter                          | 程序计数器                                 |
-| ITLB         | Instruction Translation Lookaside Buffer | 指令地址转译后备缓冲器                     |
-| InstrUncache | Instruction Ucache Module                | 指令 MMIO 取指处理单元                     |
+| 缩写 | 全称 | 描述 |
+| --- | --- | --- |
+| RVC | RISC-V Compressed Instructions | RISC-V 手册中 "C" 扩展规定的 16 位压缩指令 |
+| RVI | RISC-V Integer Instructions | RISC-V 手册规定的 32 位基本整型指令 |
+| IFU | Instruction Fetch Unit | 取指令单元 |
+| FTQ | Fetch Target Queue | 取指目标队列 |
+| PredChecker | Prediction Check Module | 分支预测结果检查器 |
+| ICache | L1 Instruction Cache | 一级指令缓存 |
+| IBuffer | Instruction Buffer | 指令缓冲 |
+| CFI | Control Flow Instruction | 控制流指令 |
+| InstrUncache | Instruction Ucache Module | 指令 uncache 取指处理单元 |
 
-## 子模块列表
+## 组成模块与相关功能
 
-| 子模块                      | 描述                   |
-| --------------------------- | ---------------------- |
-| [PreDecoder](PreDecoder.md) | 预译码模块             |
-| InstrUncache                | 指令 MMIO 取指处理单元 |
+| 子模块 | 描述 |
+| --- | --- |
+| [InstrBoundary](instrBoundary.md) | 指令定界模块，负责分析指令块数据中每条指令的位置 |
+| [RvcExpander](rvcExpander.md) | C 指令扩展，负责将 16 位压缩指令扩展为 32 位标准指令，并标记非法 C 指令 |
+| [PredChecker](predChecker.md) | 预译码检查模块，结合预译码信息，及早纠正部分指令流 |
+| [IfuUncacheUnit](ifuUncacheUnit.md) | uncache 指令取指处理单元 |
+| [IfuTrigger](ifuTrigger.md) | Trigger 触发器检查模块 |
+| [指令紧密排列与对齐](ifuAlign.md) | IFU 内联的指令压缩与 IBuffer 入队对齐逻辑 |
 
-## 功能描述
+## 设计规格
 
-FTQ 将预测块请求分别发送到 ICache 和 IFU 模块，IFU 等到来自 ICache 返回至多两个缓存行的指令码后，进行切分产生取指令请求范围限定的初始指令码，并送到预译码器进行预译码下一拍根据预译码信息修正有效指令范围，同时进行指令码扩展并将指令码及其他信息发送给 IBuffer 模块。当 ICache 查询地址属性发现是 MMIO 地址空间时，IFU 需要将地址发送给 MMIO 处理单元取指令，这个时候处理器进入多周期顺序执行模式，IFU 阻塞流水线直到收到来自 ROB 的提交信号时，IFU 才允许下一个取指令请求的进行，同时 IFU 需要对跨页的 MMIO 地址空间 32 位指令做特殊处理（重发机制）。
+- **设计意图（为什么需要 IFU）**：
+  从功能正确性角度看，若直接将 ICache 原始数据存入 IBuffer 并交由 Decoder 计算指令边界，处理器仍能运行。但四大工程需求促成了 IFU 模块的独立产生：
+  - **存储利用率优化**：切分预测块（2B~64B）为指令粒度存入 IBuffer，避免 IBuffer 每项为最坏情况预留 64 字节空间，大幅提升存储利用率。
+  - **异步缓冲与延迟掩盖**：利用后端在访存/依赖停顿（Stall）期间的时间在前端提前完成定界计算，通过缓冲解耦掩盖流水线开销。
+  - **分支预测早纠错（PredChecker）**：在 ICache 吐出数据层及时预译码控制流指令，发现预测错误则就地截断并向 FTQ 发起重定向，显著缩短部分误预测情况下的恢复惩罚。
+  - **Uncache 与 MMIO 取指管控**：在 ICache 与 IBuffer 之间接管非缓存通道。普通 Uncache 取指允许推测执行，具有不可逆物理副作用的 MMIO 取指则严格阻止推测执行与推测取指。
+  *（注：当硬件演进使流水线拍数代价大于上述收益时，即为 IFU 再次消亡之时。）*
+- **吞吐与架构规格**：
+  - 支持最高每周期 32 条指令的定界、对齐与预译码。
+  - 支持 twoFetch 双预测块拼接处理，允许单周期处理最高 64 字节拼接预测块。
+  - 支持将 16 位压缩指令（RVC）解压扩展为 32 位标准指令（RVI），并标记非法 C 指令。
+  - 流水线划分：主供指通路经2拍延迟将有效指令送入 IBuffer（S0 级做 SRAM 数据定界前置，S1 级做 Compact 排列与预译码，S2 级当拍送出）；S3 级专用于在发现误预测时旁路计算重定向目标地址，避免打断流水线主路径。
 
-### 接受 FTQ 取指令请求
+## 参数列表
 
-IFU 接收来自 FTQ 以预测块为单位的取指令请求，包括预测块起始地址、起始地址所在 cacheline 的下一个 cacheline 开始地址、下一个预测块的起始地址、该预测块在 FTQ 里的队列指针、该预测块有无 taken 的 CFI 指令和该 taken 的 CFI 指令在预测块里的位置以及请求控制信号（请求是否有效和 IFU 是否 ready）。每个预测块最多包含 32 字节指令码，最多为 16 条指令。
+IFU 相关参数在 Scala 源码中定义于 FrontendParameters.scala 和 ifu/Parameters.scala：
 
-### 双 cacheline 取指
+| 参数 | 默认值 | 描述 | 要求 |
+| --- | --- | --- | --- |
+| FetchBlockSize | 64 | 取指数据块大小（Byte） | 2 的幂次（限制为 64B） |
+| FetchBlockInstNum | 32 | 一个取指块按 2B 槽位划分时可容纳的最大指令数 | `FetchBlockSize / 2`；当前配置为 `64 / 2 = 32` |
+| FetchPorts | 2 | 预测/取指端口数量（twoFetch 拼接） | 仅支持 1 或 2 |
+| NumWriteBank | 4 | IBuffer 写入 Bank 数量 | 当前对齐逻辑按 `指令编号 % 4` 分 Bank |
+| PcCutPoint | (VAddrBits/4)-1 | 预测块 PC 比较低位截断点 | $0 < \text{PcCutPoint} < \text{VAddrBits}$ |
+| IfuAlignWidth | 4 | 指令对齐逻辑宽度 | `NumWriteBank`，当前为 4 |
+| IBufferEnqueueWidth | 36 | IFU 向 IBuffer 入队的最大端口宽度 | `FetchBlockInstNum + NumWriteBank = 32 + 4` |
 
-当且仅当预测块的取指地址在 cacheline 的后半段时，为了满足一个预测块最多 34 字节的需要，IFU 将从 ICache 中取回连续的两个 cacheline，分别产生例外信息（page fault 和 access fault），如后述特性 3 进行切分。
+## 功能概述
 
-在 2024/06 以后，ICache 实现了低功耗设计，会在内部进行数据的选择和拼接，因此 IFU 不需要关心两个 cacheline 的数据如何拼接和选择，只需要简单地将 ICache 返回的数据复制一份拼接在一起，即可进行切分。请参考 [ICache 文档](../ICache/index.md#sec:icache-dataarray-per-bank-lowpower)。
+IFU（Instruction Fetch Unit）位于前端分支预测（FTQ）和一级指令缓存（ICache）之后、指令缓冲（IBuffer）之前。在预测路径和 ICache 命中结果确定后，IFU 接收由 ICache 传递的与预测块对齐的 `maybeRvcMap` 信息以及两行 `cacheLine` 数据（每行 `cacheLine` 对应一个预测块；若预测块跨缓存行，ICache 会根据实际可能使用的范围将其融合为一行）。IFU 负责将这些指令数据进行抽取切分、定界、解压（C指令扩展）、对齐并完成简单的预译码，随后送入 IBuffer 供后续译码阶段使用。
 
-亦可参考 [IFU.scala 中的注释](https://github.com/OpenXiangShan/XiangShan/blob/fad7803d97ed4a987a743036cec42d1c07b48e2e/src/main/scala/xiangshan/frontend/IFU.scala#L474-L502)。
+IFU 模块的存在会增加指令流路径上的恢复延迟，因此在满足时序约束情况下，要尽可能缩短 IFU 计算的耗时。IFU 区分了数据交付通路与重定向通路：交付通路由 S0 到 S2 拍，S3 级在捕获到预测错误时计算重定向目标地址。
 
-### 指令切分产生初始指令码
+![IFU 结构图](../figure/IFU/ifu-structure.svg){width=85%}
 
-下一流水级（F1 级），计算出预测块内每 2 字节的 PC 和其他一些信息，然后进入 F2 流水级等待 ICache 返回指令码，在 F2 级需要检查 ICache 返回的指令码和本流水级是否匹配（因为 IFU 的流水级会被冲刷而 ICache 不会）。然后根据 ICache 返回的缓存行例外信息产生每条指令的例外信息（page fault 和 access fault），同时根据 FTQ 的 taken 信息计算一个跳转时指令有效范围 jump_range（即此预测块从起始地址到第一条跳转地址的指令范围）和无跳转时指令有效范围 ftr_range（即此预测块从起始地址到下一个预测块的起始地址）。为了时序相关的考虑，ICache 的两个端口分别会返回 miss 和 hit 时候两个来源的缓存行，这个四个缓存行需要产生 4 种组合（0 号端口的两个和 1 号端口的两个）同时进行预译码。F2 会并行对返回的 64 字节的数据中（其中 40 字节有效数据）根据预测块的起始地址选择出 17×2 字节的初始指令码，并送到 4 个 PreDecode 模块进行预译码。
+- **S0 级**：数据由 ICache SRAM 直出，进行数据寄存并完成 `InstrBoundary` 指令定界前置计算与 Rank 前缀和准备。
+- **S1 级**：执行 `compact` 函数实现有效指令紧密对齐排序，并由内嵌的预译码 Helper 函数（`getJalOffset` / `getBrOffset` / `BranchAttribute.decode`）直接并行提取 CFI 指令跳转偏移与分支属性。
+- **S2 级**：通过 `RvcExpander` 将 16 位 C 指令扩展为 32 位 I 指令，由 `PredChecker` 校验预测结果，缩减有效指令范围，并在当拍送入 IBuffer。
+- **S3 级**：若 S2 级捕获到分支预测错误，将重定向计算解耦在 S3 级完成，随后向 FTQ 发起重定向。
 
-### 产生预译码信息
+## 功能详述
 
-PreDecode 模块接受 F2 切分后的 17 个 2 字节初始指令码，一方面将这些初始指令码根据译码表进行预译码得到预译码信息，包括该指令是否是有效指令的开始、是否是 RVC 指令、是否是 CFI 指令、CFI 指令类型（branch/jal/jalr/call/ret）、CFI 指令的目标地址计算偏移等。输出的预译码信息中 brType 域的编码如下：
+### twoFetch 双预测块拼接机制
 
-表 1.2 CFI 指令类型编码
+为了满足宽发射后端的吞吐需求，IFU 支持单周期接收并处理两个预测块（twoFetch）：
 
-| CFI 指令类型 | 类型编码（ brType ） |
-| ------------ | -------------------- |
-| 非 CFI 指令  | 00                   |
-| branch 指令  | 01                   |
-| jal 指令     | 10                   |
-| jalr 指令    | 11                   |
+- **逻辑复用**：V3 架构限制两个预测块总长不超过 64 字节，IFU 将其拼接为一个大块，共用单套 64 字节预译码与定界通道，规避了独立双通道带来的 128 字节逻辑与面积/时序灾难。
+- **跨块半条指令（Half-Instruction）处理**：若预测块末尾截断了 32 位指令，IFU 内部保留该半条与下一预测块拼接。在 twoFetch 模式下分别保留两个 16 位半条指令（half-RVI）记录，确保无论哪一个预测块发生冲刷均能按需恢复。
 
-### 生成指令码和指令码扩展
+### 有效指令紧密排序（Rank 算法）
 
-产生预译码信息的同时将初始指令进行 4 字节组合（从起始地址开始，2 字节做地址递增，地址开始的 4 字节作为一条 32 位初始指令码）产生每条指令的指令码
+IFU 通过 `compact` 函数依赖前缀计数（Rank）完成有效指令的无空洞对齐：
 
-在产生指令码和预译码信息的下一拍（F3）将 16 条指令的指令码分别送到 16 个指令扩展器进行 32 位指令扩展（RVC 指令根据手册的规定进行扩充，RVI 保留指令码不变）。
+$$\text{Rank}(i) = \sum_{k < i} \text{valid}(k)$$
 
-### 分支预测 overriding 冲刷流水线
+当满足 $\text{valid}(i) \land \text{Rank}(i) = j$ 时，槽位 $i$ 对应第 $j$ 条有效指令。
 
-当 FTQ 内未缓存足够预测块时，IFU 可能直接使用简单分支预测器提供的预测地址进行取指，这种情况下，当精确预测器发现简单预测器错误时，需要通知 IFU 取消正在进行的取指请求。具体而言，当 BPU 的 S2 流水级发现错误时，需要冲刷 IFU 的 F0 流水级；当 BPU 的 S3 流水级发现错误时，需要冲刷 IFU 的 F0/F1 流水级（BPU 的简单预测器在 S1 给出结果，最晚在 S3 进行 overriding，因此 IFU 的 F2/F3 流水级一定是最好的预测，不需要冲刷；类似地，不存在 BPU S2 到 IFU F1 的冲刷）。
+为了降低多路选择器（MUX）的扇入并满足主频要求，利用 RISC-V 指令特有的几何规律收窄候选窗口：
+1. **边界约束**：全为 16 位 RVC 指令时，第 $idx$ 条有效指令在槽位 $idx$；全为 32 位 RVI 指令时在槽位 $2 \cdot idx$。
+2. **空洞完备性**：有效指令之间不存在连续无效槽位。
 
-IFU 在收到 BPU 发送的冲刷请求时，会将 F0Ff1 流水级上取指请求的指针与 BPU 发送的冲刷请求的指针进行比较，若冲刷的指针在取指的指针之前，说明当前取指请求在错误的执行路径上，需要进行流水线冲刷；反之，IFU 可以忽略 BPU 发送的这一冲刷请求。
+由此将多路选择器的候选扫描窗口成功限定在 $[idx, 2 \cdot idx]$（或保守取 $2 \cdot (idx+1)$），大幅裁剪了 MUX 选择树逻辑。
 
-### 分支预测错误提前检查
+### 预译码与 C 指令扩展
 
-为了减少一些比较容易识别的分支预测错误的冲刷，IFU 在 F3 流水级使用 F2 产生的预译码信息做前端的分支预测错误检查。预译码信息首先送到 PredChecker 模块，根据其中的 CFI 指令类型检查 jal 类型错误、ret 类型错误、无效指令预测错误、非 CFI 指令预测错误，同时根据指令码计算 16 个转移目标地址，和预测的目标地址进行比对，检查转移目标地址错误，PredChecker 将纠正 jal 类型错误 ret 错误的预测结果，并重新产生指令有效范围向量 fixedRange（为 1 表示该条指令在预测块内），fixedRange 在 jump_range 和 ftr_range 的基础上根据 jal 和 ret 的检查结果，把范围缩小到其实地址到没有检测出来的 jal 或者 ret 指令。下面是 PredChecker 模块对分支预测检查的错误类型：
+- **预译码**：通过 `getJalOffset`、`getBrOffset` 及 `BranchAttribute.decode` 并行提取 CFI 指令特征与跳转 Offset。
+- **C 指令扩展（RvcExpander）**：将 16 位 C 指令转换为 32 位 I 指令。对于非法 C 指令，输出 `ill` 标记并保持原始数据，以便后续流水线精确保留异常原因。
 
-- jal 类型错误：预测块的范围内有 jal 指令，但是预测器没有对这条指令预测跳转；
-- ret 类型错误：预测块的范围内有 ret 指令，但是预测器没有对这条指令预测跳转；
-- 无效指令预测错误：预测器对一条无效的指令（不在预测块范围/是一条 32 位指令中间）进行了预测；
-- 非 CFI 指令预测错误：预测器对一条有效但是不是 CFI 的指令进行了预测；
-- 转移目标地址错误：预测器给出的转移目标地址不正确。
+### 预译码检查（PredChecker）与早纠错
 
-### 前端重定向
+`PredChecker` 在 S2 流水级对比预译码得出的实际指令特征与 FTQ 拿到的预测特征：
+- 若结果一致，指令打包压入 IBuffer。
+- 若发现预测器猜错（如目标地址不符或分支类型错误），在 S3 流水级计算重定向目标 PC 并反哺 FTQ，及时冲刷后续无效推测指令，大幅降低预测惩罚。
 
-如果 F3 分支预测的检查结果显示这个预测块有特性 7 里所述的 5 种预测错误，那么 IFU 将在下一拍产生一个前端重定向，将除 F3 之外的流水级冲刷。FTQ 以及预测器的冲刷将由 IFU 写会 FTQ 后由 FTQ 完成。
+### Uncache 与 MMIO 指令取指管控
 
-### 将指令码和前端指令信息送到 IBuffer
+ICache 仅处理缓存（Cacheable）取指通道，并在地址翻译/属性检查阶段识别指令属性。当检测到 Uncache 取指时，需由位于 ICache 与 IBuffer 之间的 `IfuUncacheUnit` 接管处理：
+- **普通 Uncache 取指**（如非 MMIO 的不可缓存页）：允许推测执行，但必须改走 Uncache 通道进行取指，而非缓存通道。
+- **MMIO 取指**：由于与外围设备交互具有不可逆的物理副作用，禁止推测取指，需待指令达到非推测条件后由 `IfuUncacheUnit` 发起安全的非推测取指。
 
-F3 流水级最终得到经过扩展的 32 位指令码，以及 16 条指令中每条指令的例外信息、预译码信息、FTQ 指针、其他后端需要的信息（比如经过折叠的 PC）等。IFU 除了常规的 valid-ready 控制信号外，还会给 IBuffer 两个特殊的信号：一个是 16 位的 io_toIbuffer_bits_valid，标识预测块里有效的指令（为 1 说明是一条指令的开始，为 0 则是说明是一条指令的中间）。另一个是 16 位的 io_toIbuffer_bits_enqEnable，这个在 io_toIbuffer_bits_valid 的基础上与上了被修正过的预测块的指令范围 fixedRange。enqEnable 为 1 表示这个 2 字节指令码是一条指令的开始且在预测块表示的指令范围内。
+### 异常处理
 
-### 指令信息和误预测信息写回 FTQ
+IFU 位于取指路径，汇集了取指阶段所有可能的异常来源，统一编码为 `ExceptionType`（None / Pf / Gpf / Af / Ill / Hwe）并随指令送入 IBuffer：
 
-在 F3 的下一级 WB 级，IFU 将指令 PC、预译码信息、错误预测指令的位置、正确的跳转地址以及预测块的正确指令范围等信息写回 FTQ，同时传递该预测块的 FTQ 指针用以区分不同请求。
+| 异常来源 | 检测位置 | 异常类型 |
+| --- | --- | --- |
+| ICache 元数据（ITLB 页错误、PMP 访问违例） | S0 级随 `icacheMeta` 传入 | Pf / Gpf / Af |
+| ICache ECC/parity 校验 | S1 级合并（请求 fire 后一拍返回校验结果） | Hwe |
+| RVC 非法指令扩展 | S2 级 `RvcExpander` 的 `ill` 输出 | Ill |
+| uncache 通路 TileLink `corrupt` / `denied` | uncache 返回（Af = denied，Hwe = corrupt 且非 denied） | Af / Hwe |
+| uncache 通路 RVC 扩展 | uncache 返回 | Ill |
 
-### 跨预测块 32 位指令处理
+- **优先级**：多来源经 `||` 运算合并，左侧优先（ICache 元数据异常优先于 RVC `ill`）。
+- **异常仅标记第一条有效指令**：ICache 异常作用于整个取指块，`exceptionMask` 只在第一条入队指令（对齐槽位 `s2_alignShiftNum`）置位；RVC `ill` 则精确标记发生非法的指令。检测到 ICache 异常时指令计数强制为 1，即仅将故障指令入队。
+- **半条指令与异常的交互**：若上一取指块尾部遗留待拼接的 32 位指令半条（half-RVI）且本次取指带异常，`exceptionCrossPage` 通知后端此时故障 PC 不是取指块起始地址，需由后端自行核对正确 PC。
+- **Guest Page Fault 特例**：GPF 需要为后端二级页表处理提供 guest 物理地址。IFU 将 `gpAddr` 与"是否用于 VS 非叶子 PTE"标志按 FTQ 索引写入后端 `gpAddrMem`。Uncache 通路不请求 iTLB、仅返回总线异常，不会产生 GPF。此外 `isBackendException`、`hasSatpFlush` 等后端标识随首条指令一并传递。
 
-因为预测块的长度有限制，因此存在一条 RVI 指令前后两字节分别在两个预测块的情况。IFU 首先在第一个预测块里检查最后 2 字节是不是一条 RVI 指令的开始，如果是并且该预测块没有跳转，那么就设置一个标识寄存器 f3_lastHalf_valid，告诉接下来的预测块含有后半条指令。在 F2 预译码时，会产生两种不同的指令有效向量：
+### 刷新与重定向机制
 
-- 预测块起始地址开始即为一条指令的开始，以这种方式根据后续指令是 RVC 还是 RVI 产生指令有效向量
-- 预测块起始地址是一条 RVI 指令的中间，以起始地址+2 位一条指令的开始产生有效向量
+IFU 是流水化推测执行的前端部件，需要响应多种刷新来源，并保证刷新后"跨取指块的半条指令拼接"与 IBuffer 入队指针仍能正确衔接。重定向来源按优先级排列：
 
-在 F3，根据是否有跨预测块 RVI 标识来决定选用哪种作为最终的指令有效向量，如果 f3_lastHalf_valid 为高则选择后一种（即这个预测块第一个 2 字节不是指令的开始）。如前面特性 2 所述，当且仅当起始地址在后半 cacheline，就会向 ICache 取两个 cacheline，因此即使这条跨预测块的 RVI 指令也跨 cacheline，每个预测块都能拿到它的完整指令码。IFU 所做的处理只是把这条指令算在第一个预测块里，而把第二个预测块的起始地址位置的 2 字节通过改变指令有效向量来无效掉。
+1. **后端重定向（`backendRedirect`）**：来自 FTQ/后端的完整重定向（异常、中断、后端误预测），优先级最高。前端全部推测状态作废，`s0_prevEndIsHalfRvi`、`s1_prevIBufEnqPtr`、`s1_prevEndHalfRviData/Pc` 一并复位。
+2. **预译码检查重定向（`wbRedirect`）**：PredChecker 在写回级（S3）发现误预测后产生。重定向修正到误预测指令之后的位置，因此用 `prevIBufEnqPtr + instrCount` 恢复入队指针；若误预测落点本身截断在 32 位指令中间（`invalidTaken`），还需携带 half-RVI 信息供下一取指块拼接。
+3. **uncache 重定向（`uncacheRedirect`）**：uncache 取指返回后为顺序取指恢复 half-RVI 与入队指针；若返回的是跨页非 RVC 指令且需重发（`needResend`），同样携带半条指令信息等待下一个取指块拼接。
+4. **BPU 刷新（`s0_flushFromBpu`）**：预测器较晚阶段修正时由 FTQ 判定（`shouldFlushByStage3`）是否冲刷，作用于 S0 级最前端。
 
-### MMIO 取指令
+各级冲刷信号的传播关系：
 
-在处理器上电解复位时，由于内存初始化还未完成，因此处理器需要从 flash 存储里取指令运行，这种情况下需要 IFU 向 MMIO 总线发送宽度为 64 位的请求从 flash 地址空间取指令执行。同时 IFU 禁止对 MMIO 总线的推测执行，即 IFU 需要等到每一条指令执行完成得到准确的下一条指令地址之后才继续向总线发送请求。
+$$\begin{aligned}
+flush_{S2} &= backendRedirect \lor \left(wbRedirect.valid \land \lnot wbNotFlush_{S2}\right) \\
+flush_{S1} &= backendRedirect \lor uncacheRedirect.valid \lor wbRedirect.valid \\
+flush_{S0} &= flush_{S1} \lor flushFromBpu_{S0}
+\end{aligned}$$
 
-处理器上电解复位后，从 0x10000000 地址开始取指令，ICache 经过 ITLB 地址翻译得到物理地址，物理地址经过 PMP 查询是否属于 MMIO 空间，并将检查结果返回到 IFU F2 流水级（见 ICache 文档）。如果是 MMIO 地址空间的取指令请求，IFU 将请求阻塞在 F3 并由一个状态机控制 MMIO 取指令，由下图所示：
-
-![F3 MMIO 状态机示意图](../figure/IFU//IFU/f3_mmio_fsm.svg)
-
-1. 状态机默认在 `m_idle` 状态，若 F3 流水级是 MMIO 取指令请求，且此前没有发生异常，状态机进入 `m_waitLastCmt` 状态。
-2. （`m_waitLastCmt`）IFU 通过 mmioCommitRead 端口到 FTQ 查询，IF3 预测块之前的指令是否都已提交，如果没有提交则阻塞等待前面的指令都提交完[^ifu_spec_mmio_fetch]。
-3. （`m_sendReq`）将请求发送到 InstrUncache 模块，向 MMIO 总线发送请求。
-4. （`m_waitResp`）InstrUncache 模块返回后根据 pc 从 64 位数据中截取指令码。
-5. 若 pc 低位为`3'b110`，由于 MMIO 总线的带宽限制为 8B 且只能访问对齐的区域，本次请求的高 2B 将不是有效的数据。若返回的指令数据表明指令不是 RVC 指令，则这种情况需要对 pc+2 的位置（即对齐到下一个 8B 的位置）进行重发才能取回完整的 4B 指令码。
-   1. 重发前，需要重新对 pc+2 进行 ITLB 地址翻译和 PMP 检查（因为可能跨页）（`m_sendTLB`、`m_TLBResp`、`m_sendPMP`），若 ITLB 或 PMP 出现异常（access fault、page fault、guest page fault）、或检查发现 pc+2 的位置不在 MMIO 地址空间，则直接将异常信息发送到后端，不进行取指。
-   2. 若无异常，（`m_resendReq`、`m_waitResendResp`）类似 2/3 两步向 InstrUncache 发出请求并收到指令码。
-6. 当 IFU 寄存了完整的指令码，或出错（重发时的ITLB/PMP出错，或 Uncache 模块 tilelink 总线返回 corrupt）时，（`m_waitCommit`）即可将指令数据和异常信息发送到 IBuffer。需要注意，MMIO 取指令每次只能非推测性地向总线发起一条指令的取指请求，因此也只能向 IBuffer 发送一条指令数据。并等待指令提交。
-   1. 若这条指令是 CFI 指令，由后端发送向 FTQ 发起冲刷。
-   2. 若是顺序指令，则由 IFU 复用前端重定向通路刷新流水线，同时复用 FTQ 写回机制，把它当作一条错误预测的指令进行冲刷，重定向到该指令地址 +2 或者 +4（根据这条指令是 RVI 还是 RVC 选择）。这一机制保证了 MMIO 每次只取入一条指令。
-7. 提交后，（`m_commited`）状态机复位到 `m_idle` 并清空各类寄存器。
-
-除了上电时，debug 扩展、Svpbmt 扩展可能也会使处理器在运行的任意时刻跳到一块 MMIO 地址空间取指令，请参考 RISC-V 手册。对这些情况中 MMIO 取指的处理是相同的。
-
-[^ifu_spec_mmio_fetch]: 需要特别指出的是，Svpbmt 扩展增加了一个 `NC` 属性，其代表该内存区域是不可缓存的、但是幂等的，这意味着我们可以对 `NC` 的区域进行推测执行，也就是不需要“等待前面的指令提交”就可以向总线发送取指请求，表现为状态机跳过等待状态。实现见 [#3944](https://github.com/OpenXiangShan/XiangShan/pull/3944)。
-
-### Trigger 实现对于 PC 的硬件断点功能
-
-在 IFU 的 FrontendTrigger 模块里共 4 个 Trigger，编号为 0-3，每个 Trigger 的配置信息（断点类型、匹配地址等）保存在 `tdata` 寄存器中。
-
-当软件向 CSR 寄存器 `tselect`、`tdata1/2` 写入特定的值时，CSR 会向 IFU 发送 tUpdate 请求，更新 FrontendTrigger 内的 `tdata` 寄存器中的配置信息。目前前端的 Trigger 仅可以配置成 PC 断点（`mcontrol.select` 寄存器为 0；当 `mcontrol.select`=1 时，该 Trigger 将永远不会命中，且不会产生异常）。
-
-在取指时，IFU 的 F3 流水级会向 FrontendTrigger 模块发起查询并在同一周期得到结果。后者会对取指块内每一条指令在每一个 Trigger 上做检查，当不处于 debug 模式时，指令的 PC 和 `tdata2` 寄存器内容的关系满足 `mcontrol.match` 位所指示的关系（香山支持 `mcontrol.match` 位为 0、2、3，对应等于、大于、小于）时，该指令会被标记为 Trigger 命中，随着执行在后端产生断点异常，进入 M-Mode 或调试模式。前端的 Trigger 支持 Chain 功能。当它们对应的 `mcontrol.chain` 位被置时，只有当该 Trigger 和编号在它后面一位的 Trigger 同时命中时，处理器才会产生异常[^trigger_timing]。
-
-[^trigger_timing]: 在过去（riscv-debug-spec-draft，对应 XiangShan 2024.10.05 合入的 [PR#3693](https://github.com/OpenXiangShan/XiangShan/pull/3693) 前）的版本中，Chain 还需要满足两个 Trigger 的 `mcontrol.timing` 是相同的。而在新版（riscv-debug-spec-v1.0.0）中，`mcontrol.timing` 被移除。目前 XiangShan 的 scala 实现仍保留了这一位，但其值永远为 0 且不可写入，编译生成的 verilog 代码中没有这一位。参考：[https://github.com/riscv/riscv-debug-spec/pull/807](https://github.com/riscv/riscv-debug-spec/pull/807)。
-
-## 总体设计
-
-### 整体框图和流水级
-
-![IFU模块整体框图](../figure/IFU/IFU/structure.png)
-
-![IFU模块流水级](../figure/IFU/IFU/stages.svg)
-
-### 接口时序
-
-#### FTQ 请求接口时序示例
-
-![FTQ请求接口时序示例](../figure/IFU/IFU/port1.png)
-
-上图示意了三个 FTQ 请求的示例，req1 只请求缓存行 line0，紧接着 req2 请求 line1 和 line2，当到 req3 时，由于指令缓存 SRAM 写优先，此时指令缓存的读请求 ready 被指低，req3 请求的 valid 和地址保持直到请求被接收。
-
-#### ICache 返回接口以及到 Ibuffer 和写回 FTQ 接口时序示例
-
-![ICache返回接口以及到Ibuffer和写回FTQ接口时序示例](../figure/IFU/IFU/port2.png)
-
-上图展示了指令缓存返回数据到 IFU 发现误预测直到 FTQ 发送正确地址的时序，group0 对应的请求在 f2 阶段了两个缓存行 line0 和 line1，下一拍 IFU 做误预测检查并同时把指令给 Ibuffer，但此时后端流水线阻塞导致 Ibuffer 满，Ibuffer 接收端的 ready 置低，goup0 相关信号保持直到请求被 Ibuffer 接收。但是 IFU 到 FTQ 的写回在 tio_toIbuffer_valid 有效的下一拍就拉高，因为此时请求已经无阻塞地进入 wb 阶段，这个阶段锁存的了 PredChecker 的检查结果，报告 group0 第 4（从 0 开始）个 2 字节位置对应的指令发生了错误预测，应该重定向到 vaddrA，之后经过 4 拍（冲刷和重新走预测器流水线），FTQ 重新发送给 IFU 以 vaddrA 为起始地址的预测块。
-
-#### MMIO 请求接口时序示例
-
-![MMIO请求接口时序示例](../figure/IFU/IFU/port3.png)
-
-上图展示了一个 MMIO 请求 req1 的取指令时序，首先 ICache 返回的 tlbExcp 信息报告了这是一条 MMIO 空间的指令（其他例外信号必须为低），过两拍 IFU 向 InstrUncache 发送请求，一段时间后收到响应和 32 位指令码，同拍 IFU 将这条指令作为一个预测块发送到 Ibuffer，同时发送对 FTQ 的写回，复用误预测信号端口，重定向地址为紧接着下一条指令的地址。此时 IFU 进入等待指令执行完成。一段时间后 rob_commits 端口报告此条指令执行完成，并且没有后端重定向。则 IFU 重新发起下一条 MMIO 指令的取指令请求。
+- **避免双重冲刷（`s2_wbNotFlush`）**：当写回级重定向的目标取指块与 S2 级当前处理的取指块为同一块（`ftqIdx` 相同）时，重定向目标已处于流水线中，无需再次冲刷 S2，否则会丢弃该拍的处理结果。
+- **状态恢复是重定向正确性的关键**：各级均按上述优先级用新的 half-RVI 信息与入队指针覆盖流水线寄存器，保证重定向后的取指块能无缝拼接之前的半条指令，且入队位置不与已入队指令错位。
+- **uncache 写回**：uncache 取指返回后一拍，向 FTQ 发起 `uncacheFlushWb`（`canTrain = false`，目标为下一条顺序指令：RVC 后移 2 字节、RVI 后移 4 字节）。普通缓存路径使用 PredChecker 修正结果 `checkFlushWb`。两者经 `toFtq.wbRedirect` 送交 FTQ，其中 `wbValid` 优先于 uncache。
