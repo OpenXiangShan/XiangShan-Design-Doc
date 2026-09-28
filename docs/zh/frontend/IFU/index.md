@@ -32,14 +32,9 @@
 
 ## 设计规格
 
-- **设计意图（为什么需要 IFU）**：
-  从功能正确性角度看，若直接将 ICache 原始数据存入 IBuffer 并交由 Decoder 计算指令边界，处理器仍能运行。但四大工程需求促成了 IFU 模块的独立产生：
-  - **存储利用率优化**：切分预测块（2B~64B）为指令粒度存入 IBuffer，避免 IBuffer 每项为最坏情况预留 64 字节空间，大幅提升存储利用率。
-  - **异步缓冲与延迟掩盖**：利用后端在访存/依赖停顿（Stall）期间的时间在前端提前完成定界计算，通过缓冲解耦掩盖流水线开销。
-  - **分支预测早纠错（PredChecker）**：在 ICache 吐出数据层及时预译码控制流指令，发现预测错误则就地截断并向 FTQ 发起重定向，显著缩短部分误预测情况下的恢复惩罚。
-  - **Uncache 与 MMIO 取指管控**：在 ICache 与 IBuffer 之间接管非缓存通道。普通 Uncache 取指允许推测执行，具有不可逆物理副作用的 MMIO 取指则严格阻止推测执行与推测取指。
-  *（注：当硬件演进使流水线拍数代价大于上述收益时，即为 IFU 再次消亡之时。）*
-- **吞吐与架构规格**：
+- **设计目的**：
+  主要目标是从ICache的原始数据中提取出预测块范围内的每条有效指令数据。在该目标基础上存在一些附带好处，根据有效指令数据，我们可以提前发现少量的分支指令预测错误并及时进行纠正。受需要划分影响，目前IFU还接管了uncache的取指逻辑，按需阻塞控制uncache取指状态，避免对外设造成读副作用。
+- **框架规格**：
   - 支持最高每周期 32 条指令的定界、对齐与预译码。
   - 支持 twoFetch 双预测块拼接处理，允许单周期处理最高 64 字节拼接预测块。
   - 支持将 16 位压缩指令（RVC）解压扩展为 32 位标准指令（RVI），并标记非法 C 指令。
@@ -81,20 +76,6 @@ IFU 模块的存在会增加指令流路径上的恢复延迟，因此在满足�
 - **逻辑复用**：V3 架构限制两个预测块总长不超过 64 字节，IFU 将其拼接为一个大块，共用单套 64 字节预译码与定界通道，规避了独立双通道带来的 128 字节逻辑与面积/时序灾难。
 - **跨块半条指令（Half-Instruction）处理**：若预测块末尾截断了 32 位指令，IFU 内部保留该半条与下一预测块拼接。在 twoFetch 模式下分别保留两个 16 位半条指令（half-RVI）记录，确保无论哪一个预测块发生冲刷均能按需恢复。
 
-### 有效指令紧密排序（Rank 算法）
-
-IFU 通过 `compact` 函数依赖前缀计数（Rank）完成有效指令的无空洞对齐：
-
-$$\text{Rank}(i) = \sum_{k < i} \text{valid}(k)$$
-
-当满足 $\text{valid}(i) \land \text{Rank}(i) = j$ 时，槽位 $i$ 对应第 $j$ 条有效指令。
-
-为了降低多路选择器（MUX）的扇入并满足主频要求，利用 RISC-V 指令特有的几何规律收窄候选窗口：
-1. **边界约束**：全为 16 位 RVC 指令时，第 $idx$ 条有效指令在槽位 $idx$；全为 32 位 RVI 指令时在槽位 $2 \cdot idx$。
-2. **空洞完备性**：有效指令之间不存在连续无效槽位。
-
-由此将多路选择器的候选扫描窗口成功限定在 $[idx, 2 \cdot idx]$（或保守取 $2 \cdot (idx+1)$），大幅裁剪了 MUX 选择树逻辑。
-
 ### 预译码与 C 指令扩展
 
 - **预译码**：通过 `getJalOffset`、`getBrOffset` 及 `BranchAttribute.decode` 并行提取 CFI 指令特征与跳转 Offset。
@@ -124,28 +105,8 @@ IFU 位于取指路径，汇集了取指阶段所有可能的异常来源，统�
 | uncache 通路 TileLink `corrupt` / `denied` | uncache 返回（Af = denied，Hwe = corrupt 且非 denied） | Af / Hwe |
 | uncache 通路 RVC 扩展 | uncache 返回 | Ill |
 
-- **优先级**：多来源经 `||` 运算合并，左侧优先（ICache 元数据异常优先于 RVC `ill`）。
-- **异常仅标记第一条有效指令**：ICache 异常作用于整个取指块，`exceptionMask` 只在第一条入队指令（对齐槽位 `s2_alignShiftNum`）置位；RVC `ill` 则精确标记发生非法的指令。检测到 ICache 异常时指令计数强制为 1，即仅将故障指令入队。
-- **半条指令与异常的交互**：若上一取指块尾部遗留待拼接的 32 位指令半条（half-RVI）且本次取指带异常，`exceptionCrossPage` 通知后端此时故障 PC 不是取指块起始地址，需由后端自行核对正确 PC。
-- **Guest Page Fault 特例**：GPF 需要为后端二级页表处理提供 guest 物理地址。IFU 将 `gpAddr` 与"是否用于 VS 非叶子 PTE"标志按 FTQ 索引写入后端 `gpAddrMem`。Uncache 通路不请求 iTLB、仅返回总线异常，不会产生 GPF。此外 `isBackendException`、`hasSatpFlush` 等后端标识随首条指令一并传递。
+ICache 异常作用于整个取指块，`exceptionMask` 只在第一条入队指令（对齐槽位 `s2_alignShiftNum`）置位；RVC `ill` 则精确标记发生非法的指令。
 
 ### 刷新与重定向机制
 
-IFU 是流水化推测执行的前端部件，需要响应多种刷新来源，并保证刷新后"跨取指块的半条指令拼接"与 IBuffer 入队指针仍能正确衔接。重定向来源按优先级排列：
-
-1. **后端重定向（`backendRedirect`）**：来自 FTQ/后端的完整重定向（异常、中断、后端误预测），优先级最高。前端全部推测状态作废，`s0_prevEndIsHalfRvi`、`s1_prevIBufEnqPtr`、`s1_prevEndHalfRviData/Pc` 一并复位。
-2. **预译码检查重定向（`wbRedirect`）**：PredChecker 在写回级（S3）发现误预测后产生。重定向修正到误预测指令之后的位置，因此用 `prevIBufEnqPtr + instrCount` 恢复入队指针；若误预测落点本身截断在 32 位指令中间（`invalidTaken`），还需携带 half-RVI 信息供下一取指块拼接。
-3. **uncache 重定向（`uncacheRedirect`）**：uncache 取指返回后为顺序取指恢复 half-RVI 与入队指针；若返回的是跨页非 RVC 指令且需重发（`needResend`），同样携带半条指令信息等待下一个取指块拼接。
-4. **BPU 刷新（`s0_flushFromBpu`）**：预测器较晚阶段修正时由 FTQ 判定（`shouldFlushByStage3`）是否冲刷，作用于 S0 级最前端。
-
-各级冲刷信号的传播关系：
-
-$$\begin{aligned}
-flush_{S2} &= backendRedirect \lor \left(wbRedirect.valid \land \lnot wbNotFlush_{S2}\right) \\
-flush_{S1} &= backendRedirect \lor uncacheRedirect.valid \lor wbRedirect.valid \\
-flush_{S0} &= flush_{S1} \lor flushFromBpu_{S0}
-\end{aligned}$$
-
-- **避免双重冲刷（`s2_wbNotFlush`）**：当写回级重定向的目标取指块与 S2 级当前处理的取指块为同一块（`ftqIdx` 相同）时，重定向目标已处于流水线中，无需再次冲刷 S2，否则会丢弃该拍的处理结果。
-- **状态恢复是重定向正确性的关键**：各级均按上述优先级用新的 half-RVI 信息与入队指针覆盖流水线寄存器，保证重定向后的取指块能无缝拼接之前的半条指令，且入队位置不与已入队指令错位。
-- **uncache 写回**：uncache 取指返回后一拍，向 FTQ 发起 `uncacheFlushWb`（`canTrain = false`，目标为下一条顺序指令：RVC 后移 2 字节、RVI 后移 4 字节）。普通缓存路径使用 PredChecker 修正结果 `checkFlushWb`。两者经 `toFtq.wbRedirect` 送交 FTQ，其中 `wbValid` 优先于 uncache。
+重定向分为IFU自身产生的重定向和接收自外界的重定向。IFU自身产生的重定向，需要刷新自身暂留的无效数据，并对FTQ发送重定向信号。有三点需要注意，一是在向FTQ发送重定向期间要避免无效数据再次进入IFU。二是IFU重定向期间需要将half-RVI信息正确送到各流水线寄存器。三是避免在IBuffer反压期间的错误冲刷，导致有效信息未进入IBuffer就被刷掉。外界重定向按需刷新IFU的流水即可。
