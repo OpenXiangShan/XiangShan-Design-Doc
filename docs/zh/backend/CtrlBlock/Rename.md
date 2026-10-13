@@ -1,9 +1,9 @@
 # Rename 重命名
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码信息为指令分配 robIdx 和物理寄存器，通过操作数查询对应的物理寄存器。同时，该模块还会根据指令译码信息、指令提交信息和来自 RenameTable 的寄存器释放信息维护 freeList 的状态，以及根据指令译码信息和指令提交信息向 RenameTable 发送写请求，以更新推测执行时的寄存器映射状态。此外，该模块还会处理来自 ROB 的重定向请求，根据重定向信息重新更新 freeList 的状态。在完成重命名后，Rename 将重命名后的指令信息发送至 Dispatch 模块。
 
@@ -41,6 +41,24 @@ Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码�
 ## 分配浮点或向量物理寄存器 {#sec:alloc-fp-vec-prf}
 
 在接收到来自 Decode 模块的有效向量浮点指令译码信息后，Rename 模块会根据 io\_in\_[0-5]\_bits\_fpWen 和 io\_in\_[0-5]\_bits\_vecWen 信号来判断是否需要分配新的向量浮点物理寄存器。若 fpWen 或 vecWen 信号为高电平，则需要分配新的浮点或向量物理寄存器。如果需要分配新的浮点或向量物理寄存器，则向 fpFreeList 或 vecFreeList 发送分配请求，并在当拍获得分配结果，否则，不发送分配请求。
+
+## 分配 mx 物理寄存器
+
+XSAI 增加 Reg_Mx 类型，对 mtilem、mtilen、mtilek 三个规模状态重命名。默认 MxLogicRegs=3、MxPhyRegs=32，每个物理项为 64 位。mx 保存矩阵规模，不保存 CUTE 的 tile/accumulator 数据；mcfg 类型表由 DecodeStage 的 MCfgGen 单独维护。
+
+mx 使用不支持 move 消除的 RenameTable 和 StdFreeList。msettile 指令置 mxWen 时分配新物理目的，更新对应逻辑项的推测映射；MMA、MLS 和规模 CSR 读使用映射后的 psrc。DecodeStage 为每条指令提供三个 mx RAT 读口，对应 lsrc(2..4)。
+
+Table: mx 规模状态使用
+
+| 指令 | 读取 | 写入 |
+| ---- | ---- | ---- |
+| msettilem/n/k | 整数寄存器或立即数 | 一个 mx 项 |
+| csrr mtilem/n/k | 一个 mx 项 | 整数寄存器 |
+| mmacc | mtilem、mtilen、mtilek | 无 mx 目的 |
+| 普通矩阵访存 | A：M/K；B：K/N；C：M/N | 无 mx 目的 |
+| whole-register 访存、mzero | 无 mx 源 | 无 mx 目的 |
+
+mx 空闲表参与统一分配条件。正常提交时释放被覆盖的旧物理项；重定向时，RAT、空闲表和快照沿用既有 walk/重新重命名机制恢复。
 
 ## 设置源操作数的物理寄存器（psrc）
 
@@ -85,6 +103,10 @@ Rename 模块还负责决定是否生成重命名快照。重命名快照旨在�
 重命名快照的生成存在诸多限制。首先，Rename 模块内部维护了一个快照计数器 snapshotCtr，只有当这个计数器为 0 时才可以生成快照；其次，如果当前已经存在其他快照，那么本周期重命名的第一条微指令被分配的 robIdx 必须和最近一次生成的快照的 robIdx 相差 6，也就是 ROB 提交宽度以上；最后，本周期重命名的第一条微指令必须是其所属指令的第一条微指令，即 io\_in\_0\_bits\_firstUop 必须为高电平。只有满足了以上三个条件，并且被重命名的六条微指令中存在分支跳转指令时，才会生成快照。此时，那些为分支跳转指令的通道的 io\_out\_\*\_bits\_snapshot 信号会被拉高，Rename 也会将快照生成信号告诉其内部的子模块。
 
 快照计数器 snapshotCtr 是一个控制快照生成间隔的计数器。由于距离过近的快照没有意义且会对快照资源造成浪费，因此实现了这样一个计数器。snapshotCtr 初始值设为 4 倍的 RAB 提交宽度，即 4×8=32。如果当前不存在有效的重命名快照，snapshotCtr 会被置为 0；否则，每重命名 n 条微指令，snapshotCtr 会自减 n，直到 0 为止。当 snapshotCtr 为 0 后，如果某时刻产生了重命名快照，那么 snapshotCtr 会被重置为最大值减去当周期重命名的微指令数，即 32-PopCount(io\_out\_\*\_valid && io\_out\_\*\_ready)。
+
+## 矩阵状态标记
+
+Rename 为写 mx 的指令、MMA、矩阵算术和矩阵 load 生成 dirtyMs，矩阵 store 不置该标记。压缩项按包含指令的标记取或，提交后由 ROB 输出 dirty_ms。该信号的产生与 CSR 中 MS 的实际更新分开；当前 mstatus 自动置 Dirty 的消费逻辑未启用，详见 [CSR](../CSR.md#sec:matrix-context)。
 
 ## 整体框图
 

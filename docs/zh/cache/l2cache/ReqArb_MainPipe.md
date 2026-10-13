@@ -36,20 +36,24 @@
 
 ```s2``` 位于请求仲裁器 ReqArbiter 与主流水线 MainPipe 内。
 
-由于 CoupledL2 的 SRAM 在频率上有限制，所以采用了多周期路径 MCP2（Multi-Cycle Path 2），意味着 SRAM 的单次读写请求都需要至少持续两个周期。故在 ```s2```，ReqArbiter 会将所有的背靠背请求阻塞一拍，以使得请求在 MainPipe 上的保持时间以及请求间隔符合 MCP2 的要求。
+CoupledL2 可配置多周期路径 MCP2（Multi-Cycle Path 2）。开启时，DataStorage 的单次访问需要持续两个周期，RequestArb 会在请求之间插入间隔以满足该要求。XSAI 的 `DefaultMatrixConfig` 将 `enableMCP2` 设为 false，不插入这一固定间隔；地址冲突、通道资源不足等阻塞条件仍然有效。
 
-ReqArbiter 于 ```s2``` 决定是否读取 ReleaseBuffer 或 RefillBuffer。并于 ```s2``` 向 ReleaseBuffer 或 RefillBuffer 发送读请求。
+RequestArb 在 ```s2``` 决定读取 ReleaseBuffer、RefillBuffer 或 PutBuffer，并发出相应读请求，寄存的整行结果在 ```s3``` 供 MainPipe 使用。
 
 于以下情况之一，ReqArbiter 会于 ```s2``` 向 RefillBuffer 发送读请求：
 
 1. 该任务是由替换任务引起的下游缓存行写回、踢出任务（此时写回的数据已不再被需要，替换读取到的数据在此时被写入 DataStorage）
-2. 该任务是上游 TileLink A 通道请求，但不使用上游 Probe 回复的数据（若使用上游 Probe 回复的数据，则应当读取 ReleaseBuffer）
+2. 该任务是 MSHR 产生的上游响应任务，需要读取回填数据，且不使用上游 Probe 回复的数据（若使用上游 Probe 回复的数据，则应当读取 ReleaseBuffer）
+
+矩阵 Put 对应的 AccessAck 回填任务也会读取 RefillBuffer。虽然 AccessAck 不向上游返回数据，这一读取仍用于把 Put 的新数据写入 DataStorage。
 
 于以下情况之一，ReqArbiter 会于 ```s2``` 向 ReleaseBuffer 发送读请求：
 
 1. 该任务是 MSHR 任务，且下游请求需要读取上游 Probe 回复的数据
 2. 该任务是 MSHR 任务，且上游 TileLink A 通道请求需要使用上游 Probe 回复的数据
 3. 该任务不是 MSHR 任务，且下游 Snoop 与下游写回请求任务发生了嵌套
+
+普通 A 通道 PutFullData 任务在 ```s2``` 根据 `bufIdx` 读取 PutBuffer。该读取释放 PutBuffer 项；随后是否写入 DataStorage 由 ```s3``` 的目录结果决定。
 
 ReqArbiter 于 ```s2``` 时将任务送入 MainPipe。
 
@@ -75,12 +79,13 @@ MainPipe 会于 ```s2``` 生成对于 ```s1``` 的阻塞信号并送回 ReqArbit
 MainPipe 在 ```s3``` 阶段满足以下条件之一时会分配 MSHR：
 
 1. 任务来自于上游 TileLink A 通道
-    - Acquire*、Hint、Get 请求未命中缓存行
-    - Acquire* toT 命中 BRANCH 状态的缓存行
+    - Acquire*、Hint、Get、PutFullData 请求未命中缓存行
+    - 需要写权限的 Acquire* 或 PutFullData 命中 BRANCH 状态的缓存行
     - CBO* 类 CMO 请求
     - 别名（Alias）替换请求
     - 任意需要向上游发送 Probe 请求的任务
         - Get 请求命中 TRUNK 状态的缓存行且其存在于上游 L1
+        - PutFullData 命中的缓存行存在于上游 L1
         - CBOClean 请求命中 TRUNK 状态的缓存行且其存在于上游 L1
         - CBOFlush 请求命中的缓存行存在于上游 L1
         - CBOInval 请求命中的缓存行存在于上游 L1
@@ -110,9 +115,28 @@ MainPipe 在 ```s3``` 阶段满足以下条件之一时会分配 MSHR：
 
 MainPipe 在 ```s3``` 会按照任务的要求向 Directory 发送写请求。
 
+对于可直接完成的 PutFullData，更新后的缓存行标记为 dirty，权限为 TIP，clients 为 0。Get 命中且无需分配 MSHR 时只读数据，不更新目录。需要 MSHR 的 Put 在权限获取、Probe 和替换处理完成后，由返回主流水线的任务更新目录；不能在尚未撤销上层副本时先把目录改为无 client。
+
 ### DataStorage 读写
 
-MainPipe 在 ```s3``` 会按照人物的要求向 DataStorage 发送读或写请求。
+MainPipe 在 ```s3``` 会按照任务的要求向 DataStorage 发送读或写请求。
+
+#### 矩阵 Put 数据源选择
+
+矩阵 Put 的新数据在 ```s2``` 从 PutBuffer 读出。只有目录命中、状态满足 `isT` 且 clients 为 0 时，才能在 ```s3``` 直接将其写入 DataStorage。其他情况需要分配 MSHR，并将整行数据写入以该 MSHR 编号寻址的 RefillBuffer。
+
+Table: PutFullData 的主流水线处理
+
+| 目录结果 | 一致性动作 | 新数据存放与写入 |
+| --- | --- | --- |
+| 命中可写状态，无上层 client | 直接完成 | PutBuffer → DataStorage |
+| 命中 BRANCH，无上层 client | MakeUnique 获取写权限 | PutBuffer → RefillBuffer，获得权限后写 DataStorage |
+| 命中且有上层 client | Probe toN；若为 BRANCH，还需 MakeUnique | PutBuffer → RefillBuffer，必要的一致性响应完成后写 DataStorage |
+| 缺失 | MakeUnique 获取写权限，并查询替换路 | PutBuffer → RefillBuffer，按替换流程写 DataStorage |
+
+对于等待 MSHR 的 Put，后续写入的数据必须来自 RefillBuffer 中的新数据，不能选择 ProbeAckData 携带的旧数据。MSHR 返回任务将 `useProbeData` 置为 false。若所选替换路已有有效数据，则先从 DataStorage 读出旧行存入 ReleaseBuffer，后续释放任务再将 RefillBuffer 中的新数据写入 DataStorage。
+
+因此 PutBuffer 的释放、DataStorage 的写入和上游 AccessAck 是不同阶段的动作。缓冲项可先移交和释放，写操作仍由 MSHR 跟踪，直至其必要任务完成。
 
 ### 请求与消息分发
 
@@ -124,6 +148,8 @@ MainPipe 在 ```s3``` 会按照任务的要求向以下通道方向之一发送�
 - 下游 TXDAT 通道
 
 具体的分发方向由任务本身决定，详见 [@sec:mshr] [MSHR](MSHR.md)。
+
+上游响应统一发往 GrantBuffer。矩阵 Get 的响应为 AccessAckData，携带 `matrixTask`、`ameIndex` 和 `ameChannel`，在 GrantBuffer 中分流到独立矩阵数据接口；矩阵 Put 返回无数据的 AccessAck，仍通过普通 D 通道发送。
 
 ### Snoop 请求处理
 
@@ -190,7 +216,7 @@ MainPipe 在 ```s3``` 会按照任务的要求向以下通道方向之一发送�
 1. 任务不需要将 DataStorage 中的数据搬移到 ReleaseBuffer 并符合以下条件之一：
     - 任务向上下游通道（上游 TileLink D、下游 TXREQ、下游 TXRSP、下游 TXDAT）的请求在 ```s3``` 顺利离开 MainPipe
     - 任务需要分配 MSHR
-2. 任务向上游 TileLink D 通道的请求（AccessAckData、HintAck、GrantData、Grant）被重试
+2. MSHR 回填任务因替换路查询失败而被重试，包括 AccessAckData、AccessAck、HintAck、GrantData 和 Grant
 
 
 ## S4 流水级

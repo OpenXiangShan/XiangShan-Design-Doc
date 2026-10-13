@@ -1,9 +1,9 @@
 # WbFuBusyTable
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 功能
 
@@ -16,6 +16,12 @@ WbFuBusyTable 模块的主要功能是管理和同步不同执行单元的忙碌
 3. 根据写回物理寄存器类型判断执行单元是否连接到指定写回端口。
 4. 将各执行单元的忙状态合并到写回端口的忙碌表中。
 5. 将写回端口的忙碌表分发到各调度器的发射队列中。
+
+### 矩阵写回端口
+
+XSAI 增加 MxWB 的延迟映射、写回端口忙表和冲突标志。IQ 的 mx busy 预留由 mxWen 门控，OG0/OG1 失败回应可撤销预留；结果分发回对应 IQ，防止确定延迟的规模写在同一物理写端口发生冲突。
+
+MfScheduler 增加读响应接口，与 Int、Fp、Vf、Mem 调度器一起接收全局忙表结果。当前全局 busy/deqResp 写入汇总表达式仍由 Int/Fp/Vf/Mem 四类输入构成，Mf 输入并未加入该拼接；因此不能把新增 Mf IO 等同于所有全局写回预留来源已经完整接入。该实现边界与单独的 MxRF 写回仲裁应区分。
 
 ### 功能单元忙碌表 FuBusyTable
 

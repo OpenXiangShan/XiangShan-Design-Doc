@@ -2,20 +2,21 @@
 
 ## 子模块列表
 
-| 子模块 | 描述 |
-| --- | --- |
-| [VirtualLoadQueue](VirtualLoadQueue.md)   | TODO |
-| [LoadQueueRAR](LoadQueueRAR.md)           | TODO |
-| [LoadQueueRAW](LoadQueueRAW.md)           | TODO |
-| [LoadQueueReplay](LoadQueueReplay.md)     | DONE |
-| [LoadQueueUncache](LoadQueueUncache.md)   | TODO |
-| [LoadExceptionBuffer](LqExceptionBuffer.md) | TODO |
-| [StoreQueue](StoreQueue.md)               | DONE |
+| 子模块                                      | 描述                                   |
+| ------------------------------------------- | -------------------------------------- |
+| [VirtualLoadQueue](VirtualLoadQueue.md)     | TODO                                   |
+| [LoadQueueRAR](LoadQueueRAR.md)             | TODO                                   |
+| [LoadQueueRAW](LoadQueueRAW.md)             | TODO                                   |
+| [LoadQueueReplay](LoadQueueReplay.md)       | DONE                                   |
+| [LoadQueueUncache](LoadQueueUncache.md)     | TODO                                   |
+| [LoadExceptionBuffer](LqExceptionBuffer.md) | TODO                                   |
+| [StoreQueue](StoreQueue.md)                 | DONE                                   |
+| [MlsQueue](MLSQ.md)                         | XSAI 矩阵访存的地址准备与 TLB 缺失重发 |
 
 
 ## 功能描述
 
-LSQ包括了LoadQueue和StoreQueue两个部分，并做了一层wrapper，便于端口的连接。Lsqwrapper的作用主要只是连线。
+LSQ 包括 LoadQueue 和 StoreQueue，并通过 LsqWrapper 连接各流水线。XSAI 在此基础上增加独立的 MlsQueue，使用 `mlsqIdx` 管理矩阵访存指令；其准备完成状态与矩阵数据搬运完成不同，详见 [矩阵访存队列 MLSQ](MLSQ.md)。
 
   * LoadQueue
 

@@ -1,9 +1,9 @@
 # IssueQueue
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 设计规格
 
@@ -42,6 +42,14 @@
 第一部分，是 IQ 出口自身的写回冲突。发射队列每个出队端口对应一个 EXU，每个 EXU 里可能有一组 Fu，这一组 Fu 的执行延迟不尽相同，而每个 EXU 只有一个写回端口（指写回 rob 的写回端口，与寄存器堆的写口不同，一或多个 EXU 写回口共用一个寄存器堆写口）。比如 Alu 与 Mul 的 Fu 组合，会产生 0 lat 和 2 lat 的写回冲突问题，如果一条 0 lat 指令在 2 lat 指令发出两拍后发射，就会同时执行完成，产生 Fu 写回冲突。为了避免这类情况的发生，发射队列内部实例化了 fuBusyTable 模块进行 Fu 冲突的判断。fuBusyTable 以出队端口为基本单位，记录各自的出队端口每周期出队的指令及各自的反馈信号，以此修改记录值，后续指令的选择发射也需要参考此模块的记录值情况，以此避免 Fu 写回冲突。
 第二部分，是寄存器堆的写回冲突。由于寄存器堆的写口有限，多个 EXU 的写回端口可能共用一个寄存器堆的写口，因此发射队列之间可能发生写口共用，此时同样可能产生写口冲突的问题。类似地，发射队列中实例化了 intWbBusyTable 和 vfWbBusyTable，每当指令发射时，便产生相应的写逻辑，送至外部的 WbFuBusyTable 模块中将写口相同的取或处理，得到最终的 WbFuBusyTable；指令发射选择时，则根据写口从外部读取 WbFuBusyTable 送入 IQ 内部作为选择参考。
 
+### 矩阵发射队列
+
+MfScheduler 例化 IssueQueueMfImp，复用普通 IQ 的入队项、年龄选择和唤醒队列。指令 payload 增加 mxWen、mcfgReadView 和 mmaMcfgReadRaw；出队时把配置原始值传给执行单元，保留译码时的类型快照。
+
+mx 目的使用独立的写回忙表读写接口。出队选择将 mx 写端口冲突掩码与现有 Int/FP/V/V0/Vl 掩码共同考虑，发射失败时仍按 OG0/OG1 回应撤销相应预留。MxWenCopy 参与复制唤醒信息，与 pdestCopy 配对使用。
+
+矩阵访存 IQ 位于 MemScheduler，携带 mlsqIdx，并接收矩阵访存执行反馈及队列提交/取消状态。MLSU 的地址检查成功不表示矩阵数据搬运完成；实际 CUTE 请求仍经 ROB 后的 AMU 控制缓冲发送。
+
 ## 整体框图
 
 ![示意图](./figure/IssueQueue_top.svg)
@@ -72,4 +80,3 @@
 ### 整体框图
 
 ![示意图](./figure/IssueQueue_age_top.svg)
-

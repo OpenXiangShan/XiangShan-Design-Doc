@@ -1,9 +1,9 @@
 # ExuBlock
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 输入输出
 
@@ -27,10 +27,12 @@ ExuBlock 主要负责将外部模块传入的信号按照配置需求连接到�
 
 ## 设计规格
 
-在 Backend 中一共有 3 个ExuBlock：intExuBlock，fpExuBlock 和 vfExuBlock，分别是整数、浮点、向量的执行模块。每个 ExuBlock 中包含若干个 ExeUnit 单元。
+启用矩阵扩展时，Backend 包含 intExuBlock、fpExuBlock、vfExuBlock 和 mfExuBlock 四个执行块。矩阵访存执行资源仍位于 MemBlock。每个 ExuBlock 按 IssueBlock 配置包含若干 ExeUnit。
 
-intExuBlock 中包含了 8 个ExeUnit，IO 包括了 flush, in, out, csrio, csrin, csrToDecode, fenceio, frm, vtype, vlIsZero 和 vlIsVlmax，不包括 vxrm。
+DefaultMatrixConfig 的 intExuBlock 中包含了 10 个 ExeUnit，IO 包括了 flush, in, out, csrio, csrin, csrToDecode, fenceio, frm, vtype, vlIsZero 和 vlIsVlmax，不包括 vxrm。
 
 fpExuBlock 中包含了 5 个ExeUnit，IO 包括了 flush, in, out 和 frm，不包括 csrio, csrin, csrToDecode, fenceio, vxrm, vtype, vlIsZero 和 vlIsVlmax。
 
 vfExuBlock 中包含了 5 个ExeUnit，IO 包括了 flush, in, out, frm, vxrm, vtype, vlIsZero 和 vlIsVlmax，不包括 csrio, csrin, csrToDecode 和 fenceio。
+
+MfExuBlock 包含 MSET1、MEX0、MEX1 三个执行资源，分别用于规模读取、MMA 控制生成和 mzero 控制生成。其 mxrm、mfrm、msaten 输入按 needSrcMcsr 配置转发给需要矩阵 CSR 控制的 FU。输出包含普通 ROB 写回控制和可选的 amuCtrl。

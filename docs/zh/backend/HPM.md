@@ -1,9 +1,9 @@
 # HPM
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2026/02/02
-- commit：[0f639b5a](https://github.com/OpenXiangShan/XiangShan/commit/0f639b5a43c370bc57c7b58a83c7039febd102f3)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 基本信息
 
@@ -32,8 +32,8 @@ Table: 子模块列表
 - 硬件线程已提交的指令数 (minstret)
 - 硬件定时器 (time)
 - 计数器溢出标志 (time)
-- 29个硬件性能计数器 (hpmcounter3 - hpmcouonter3)
-- 29个硬件性能事件选择器 (mhpmcounter3 - mhpmcounter31)
+- 29个硬件性能计数器 (hpmcounter3 - hpmcounter31)
+- 29个硬件性能事件选择器 (mhpmevent3 - mhpmevent31)
 - 支持最多定义 2^10 种性能事件
 
 ### 功能
@@ -58,11 +58,56 @@ HPM 的基本功能如下：
 
 最后，CSR 收集来自四个顶层模块的性能事件计数器的增量结果，分别输入到CSR寄存器 mhpmcounter3-31 中，进行累计计数。
 
-特别的，CoupledL2 的性能事件会直接输入到 CSR 模块中，根据 mhpmevent 寄存器读出的事件选择信息，经过 CSR 中例化的 HPerfMonitor 模块处理，输入到CSR寄存器 mhpmcounter26-31 中累计计数。
+特别的，CoupledL2 的性能事件会直接输入到 CSR 模块中，根据 mhpmevent 寄存器读出的事件选择信息，经过 CSR 中例化的 HPerfMonitor 模块处理，输入到CSR寄存器 mhpmcounter27-31 中累计计数。
 
 具体 HPM 总体设计框图见[@fig:HPM]：
 
 ![ HPM 总体设计](./figure/hpm.svg){#fig:HPM}
+
+### XSAI 矩阵性能事件
+
+开启 HasMatrixExtension 且 MatAcc=CUTE 时，CUTE 的 CutePerfToCoreIO 向控制核输出 9 个 backendEvents 和 12 个 memEvents，每项宽 6 位。XSCore 将后端事件接入 Backend，将访存事件接入 MemBlock；两者继续通过各自的 HPerfMonitor 组合计数，不另外占用一组 CSR 计数器。
+
+Table: CUTE 后端事件的接口顺序
+
+| backendEvents 下标 | 事件名称 | 计数条件 |
+| ----------------- | -------- | -------- |
+| 0 | amu_active_cycle | TaskController 持有工作：输入待处理或在途窗口非空 |
+| 1 | amu_retire | CUTE 在途窗口头任务完成并退休 |
+| 2 | amu_comp_done | 计算结果写入 C 完成 |
+| 3 | amu_release_done | release 任务满足依赖并发出 |
+| 4 | amu_mte_active | 计算功能资源 busy |
+| 5 | amu_mma_nonfp | 非浮点计算结果写入 C 完成 |
+| 6 | amu_mma_fp16 | FP16×FP16→FP32 结果写入 C 完成 |
+| 7 | amu_mma_bf16 | BF16×BF16→FP32 结果写入 C 完成 |
+| 8 | amu_mma_tf32 | TF32×TF32→FP32 结果写入 C 完成 |
+
+Table: CUTE 访存事件的接口顺序
+
+| memEvents 下标 | 事件名称 | 计数条件 |
+| -------------- | -------- | -------- |
+| 0 | amu_load_a_done | 物理 AML 任务完成，包括普通 A、A/B 转置和 ZeroTr |
+| 1 | amu_load_b_done | 物理 BML 任务完成，即普通 B 加载 |
+| 2 | amu_load_c_done | 物理 CML load 任务完成，包括 C 加载和 ZeroAcc |
+| 3 | amu_store_done | C 存储完成 |
+| 4 | amu_aml_active | A 装载功能资源 busy |
+| 5 | amu_bml_active | B 装载功能资源 busy |
+| 6 | amu_cml_load_active | C 装载功能资源 busy |
+| 7 | amu_cml_store_active | C 存储功能资源 busy |
+| 8 | amu_mem_rd_req | LocalMMU 向末级缓存接口至少发出一个读请求的周期 |
+| 9 | amu_mem_wr_req | LocalMMU 向末级缓存接口至少发出一个写请求的周期 |
+| 10 | amu_mem_rd_32B_req | 握手读请求掩码的有效字节数除以 32，跨 bank 求和 |
+| 11 | amu_mem_wr_32B_req | 握手写请求掩码的有效字节数除以 32，跨 bank 求和 |
+
+表中下标是 CUTE 接口内部顺序，不是 mhpmevent 的事件索引。A/C 的装载完成事件还包括通过对应 load-like 通路执行的 mzero 完成，因此不一定伴随内存读取。即使某个计算类型未在 MatrixIsaParams 中启用，对应接口位置仍保留；事件名称的存在不表示默认配置允许该类型。
+
+Backend 将事件分成基线前缀和矩阵扩展后缀。前缀顺序为 noEvent、CtrlBlock 基线事件、DataPath、IntScheduler 的前 5 项、FpScheduler、VfScheduler、MemScheduler 的前 10 项；后缀依次为 CtrlBlock 扩展事件、IntScheduler 剩余项、MfScheduler、MemScheduler 剩余项、上述 9 个 CUTE 事件。这样保留原有前缀的构造位置，矩阵规模 free list、MSET/MRELEASE、Mf IQ 和 MLS IQ 的事件追加在后。
+
+MemBlock 则将 12 个 CUTE 访存事件追加在原有访存单元、DTLB、PTW 和 ldDeqCount/stDeqCount 事件之后。最终绝对索引取决于实际硬件配置和这些事件列表的展开长度；配置的 printEventCoding 开启时，硬件生成日志打印每组事件的名称与索引，软件应使用对应生成结果。
+
+`amu_retire` 是 CUTE 任务窗口退休，`rob_commitInstr` 是控制核指令提交，两者时间点和计数对象不同。矩阵操作已经从 ROB 提交后仍可能停留在 CUTE 中，不能只用 ROB 提交事件判断矩阵吞吐或完成延迟。
+
+实现见 [Backend.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/Backend.scala) 和 [MemBlock.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/MemBlock.scala)。
 
 ### HPerfMonitor 计数器组织模块
 
@@ -296,7 +341,9 @@ Table: 机器模式性能事件选择器说明
 * 访存：mhpmevent19-26
 * 缓存：mhpmevent27-31
 
-Table: 昆明湖前端性能事件索引表
+以下四张索引表保留 kunminghu-v2 文档基线，便于理解原有事件组织。它们不是当前 XSAI DefaultMatrixConfig 的完整事件编码表；XSAI 新增矩阵资源并调整部分发射队列名称，绝对索引及事件名应以本次配置的生成日志为准。矩阵事件及其追加顺序见上文。
+
+Table: kunminghu-v2 基线前端性能事件索引表
 
 | 索引 | 事件                    |
 | ---- | ----------------------- |
@@ -359,7 +406,7 @@ Table: 昆明湖前端性能事件索引表
 | 56   | itlb_access             |
 | 57   | itlb_miss               |
 
-Table: 昆明湖后端性能事件索引表
+Table: kunminghu-v2 基线后端性能事件索引表
 
 | 索引 | 事件                                                         |
 | ---- | ------------------------------------------------------------ |
@@ -459,7 +506,7 @@ Table: 昆明湖后端性能事件索引表
 | 93   | IssueQueueStdMoud_full                                       |
 | 94   | IssueQueueStdMoud_full                                       |
 
-Table: 昆明湖访存性能事件索引表
+Table: kunminghu-v2 基线访存性能事件索引表
 
 | 索引 | 事件                      |
 | ---- | ------------------------- |
@@ -609,7 +656,7 @@ Table: 昆明湖访存性能事件索引表
 | 143  | ldDeqCount                |
 | 144  | stDeqCount                |
 
-Table: 昆明湖缓存性能事件索引表
+Table: kunminghu-v2 基线缓存性能事件索引表
 
 | 索引 | 事件                            |
 | ---- | ------------------------------- |
@@ -684,6 +731,10 @@ Table: 昆明湖缓存性能事件索引表
 | 68   | Slice3_l2_cache_inv             |
 
 ### Topdown PMU
+
+当前 XSAI DataPath 将 Mf 发射纳入 uopsIssued 统计；EXEC_STALL_CYCLE 的条件为发射 uop 数小于 FewUops=4，访存停顿条件延迟两拍后结合 LQ/SQ 状态与 cache miss 信息。DataPath 向 HPM 输出 EXEC_STALL_CYCLE、MEMSTALL_STORE、MEMSTALL_L1MISS、MEMSTALL_L2MISS、MEMSTALL_L3MISS；内部虽然计算 memStallAnyLoad，但该项不在当前 DataPath 的 HPM 输出列表中。
+
+下列公式与事件说明保留原有 Topdown 分析方法，使用时必须先确认所需事件在当前配置中的实际来源与条件，尤其不能把公式中的 MEMSTALL_ANYLOAD 自动视为当前 DataPath 已导出的同名事件。CUTE 内部停顿还需结合上述矩阵专用事件分析。
 
 Topdown 性能分析是一种自顶向下的分析方法，用来快速分析CPU的性能瓶颈，其核心思想是从高层次的性能分类逐步向下分解，逐层细化问题，最终精准定位根本原因。我们实现了三层 Topdown 性能事件，如下所示：
 

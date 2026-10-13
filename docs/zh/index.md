@@ -21,6 +21,16 @@
 
 ## 版本信息 {.unnumbered .unlisted}
 
-| 日期 | 版本 | 说明       |
-| ---- | ---- | ---------- |
-|      |      | 第一次发布 |
+本分支介绍在昆明湖 V2 控制核基础上集成 CUTE 的 XSAI 实现。XSAI 专有部分按以下固定源码基线编写；配置、接口和实现范围与通用昆明湖 V2R2 说明有差异时，以相应章节的 XSAI 说明为准。
+
+| 仓库 | 分支或集成来源 | 源码提交 |
+| --- | --- | --- |
+| [XSAI](https://github.com/OpenXiangShan/XSAI) | `master` | `e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f` |
+| [CUTE](https://github.com/OpenXiangShan/CUTE) | XSAI 记录的版本，与本次核查的 `master` 一致 | `d27b93d61c359478f4202f8f42cbfe82c830912a` |
+| [XSAICache](https://github.com/OpenXiangShan/XSAICache) | XSAI 记录的版本，与本次核查的 `master` 一致 | `1186ab336ad130767f6e86fd6afc7cd1d24d1098` |
+
+本文默认矩阵配置为 `DefaultMatrixConfig`。独立 CUTE 预设、可选加载器及矩阵预取实验配置在相关章节中分别说明，不作为默认配置的能力。
+
+| 日期       | 版本            | 说明                                         |
+| ---------- | --------------- | -------------------------------------------- |
+| 2026-10-13 | kunminghu-v2r2a | XSAI 控制核、矩阵访存、HBL2 与 CUTE 设计说明 |

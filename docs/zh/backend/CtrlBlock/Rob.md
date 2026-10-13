@@ -1,9 +1,9 @@
 # Rob
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -28,6 +28,8 @@ Table: 子模块列表
 | NewRobDeqPtrWrapper | 维护 rob 的出队指针                                       |
 | Rab                 | 维护 commit 或 walk 时各个 rat 的状态，和 rename 模块交互 |
 | VTypeBuffer         | 维护 Vtype 的类似 Rab 的结构，和 decode 模块交互          |
+| MCfgBuffer          | 整理矩阵类型配置的提交和 walk 更新                        |
+| AmuCtrlBuffer       | 保存提交后发送到 CUTE 的控制请求                          |
 | ExceptionGen        | 异常产生模块                                              |
 | SnapshotGenerator   | 快照产生模块                                              |
 
@@ -47,7 +49,7 @@ Table: 子模块列表
 
 Rob 模块包括：RobEnqPtrWrapper 负责入队指针，NewRobDeqPtrWrapper 负责出队指针，Rab 负责维护 commit 或 walk 时各个 rat 的状态，VTypeBuffer 负责维护 Vtype 的状态，ExceptionGen 负责产生异常，SnapshotGenerator 负责产生快照。
 
-Rob 模块主体是一个循环队列，项数为 160，指针包含 1 比特 flag 和 8 比特 value，当 value 的值从最大值加 1 的时候，flag 会反转，以此来区分指令的顺序。当队列空的时候，enqptr === deqptr，flag 和 value 均相等，当队列满时，enqptr.value === deqptr.value，enqptr.flag =/= deqptr.flag，value 相等 flag 不等。每个RobEntry包含的信号见下表。
+Rob 模块主体是一个容量由 RobSize 指定的循环队列，DefaultMatrixConfig 继承的默认容量为 256，指针包含 1 比特 flag 和 log2Ceil(RobSize) 比特 value，当 value 的值从最大值加 1 的时候，flag 会反转，以此来区分指令的顺序。当队列空的时候，enqptr === deqptr，flag 和 value 均相等，当队列满时，enqptr.value === deqptr.value，enqptr.flag =/= deqptr.flag，value 相等 flag 不等。每个RobEntry包含的信号见下表。
 
 Table: RobEntry 信号列表
 
@@ -68,11 +70,11 @@ Table: RobEntry 信号列表
 | stdWritebacked   | store 指令是否写回                                     |
 | uopNum           | 需要写回的 uop 个数                                    |
 
-Rob采用分8个Bank读的设计，根据 robidx 的低 3 比特分 bank，例如 robBanks0 包含的 robidx（十进制）: 0 8 16 24 32 ...，robBanks1 包含的 robidx（十进制）: 1 9 17 25 33 ...，每 8 个 entry 为一个 Line，0-7，8-15，16-23 ...，每个 Bank 有 20 个 Entry，一共有 20 个 Line。分 Bank 示意图如下。
+Rob采用分8个Bank读的设计，根据 robidx 的低 3 比特分 bank，例如 robBanks0 包含的 robidx（十进制）: 0 8 16 24 32 ...，robBanks1 包含的 robidx（十进制）: 1 9 17 25 33 ...，每 8 个 entry 为一个 Line，0-7，8-15，16-23 ...。DefaultMatrixConfig 的 RobSize=256，因此每个 Bank 有 32 个 Entry，一共有 32 个 Line；下图沿用 bank 组织方式示意，容量按配置展开。
 
 ![rob_entries](./figure/rob_entries.png)
 
-使用独热的 Line 指针（20 bit）来读取 RobEntry 数据，从 8 个 Bank 中读出当前 Line 和下一 Line 的数据（共 16 个 Entry），经过当拍的写回信息更新后，从两个 Line 中选一个 Line 写到 8 个 robDeqGroup 寄存器中（如果第一个 Line 的指令当拍全部提交就选第二个 Line），指令提交时从 8 个 robDeqGroup 中读数据进行提交。hasCommitted（8 bit）表示当前行每一条指令是否已经提交，作为其它指令是否可以提交的条件之一，allCommitted 表示当前行全部提交，是切换行指针的控制信号，allCommitted 为 1 时，选读出的第二行数据，也就是后 8 个数据更新后写入到 robDeqGroup。
+使用独热的 Line 指针（RobSize/8 bit，默认 32 bit）来读取 RobEntry 数据，从 8 个 Bank 中读出当前 Line 和下一 Line 的数据（共 16 个 Entry），经过当拍的写回信息更新后，从两个 Line 中选一个 Line 写到 8 个 robDeqGroup 寄存器中（如果第一个 Line 的指令当拍全部提交就选第二个 Line），指令提交时从 8 个 robDeqGroup 中读数据进行提交。hasCommitted（8 bit）表示当前行每一条指令是否已经提交，作为其它指令是否可以提交的条件之一，allCommitted 表示当前行全部提交，是切换行指针的控制信号，allCommitted 为 1 时，选读出的第二行数据，也就是后 8 个数据更新后写入到 robDeqGroup。
 
 ![rob_enq](./figure/rob_enq.svg)
 
@@ -116,6 +118,24 @@ Rob 异常处理，由于产生异常指令之后的所有指令都不会执行�
 Rob 中断处理，中断和异常处方式相似。中断来自 CSR 模块，对于需要发出 flushPipe 和 replayInst 的指令，目前也进入 exceptionGen 中处理。Rob 处理它们的方式都是先发一个 flushOut 给 ctrlBlock，ctrlBlock 会回一个 redirect 来刷流水线。区别是分支跳转失败和访存违例产生的 redirect 获取 target 比较快，直接从 pcMem 读到一个 pc 再结合 ftqOffset 计算出 target 发给前端；对于中断和异常，需要先把信息发给 CSR, CSR 返回对应的 target 再发给前端。中断目前只会在 deqPtr 是非 load、store、fence、csr 、vset 的指令时才会响应。
 
 当 wfi_enable 信号拉高时（来自 CSR 寄存器，*wait-for-interrupt enable*），当 wfi 指令入队 Rob 的时候会将 hasWFI 置为1，hasWFI 会把 blockCommit 置为 1，阻塞 rob 的提交从而起到暂停流水线等待中断的作用。当 csr 收到中断时，会将 io_csr_wfiEvent 拉高，hasWFI 置为 0（或者超时 1M cycle 没等到中断也会置 0），然后 Rob 可以正常提交指令。
+
+### 矩阵提交与控制请求
+
+ROB 项增加 dirtyMs、needAmuCtrl、isMsetcfg、mcfgReadView 和配置非法标记。矩阵功能单元与 MLSU 的异常写回进入 ExceptionGen，参数或地址检查异常在正常提交前处理。
+
+Msetcfg 写回时保存新的 raw 配置和 illegalInstr 结果。MCfgBuffer 从合法的 commit/walk 项生成配置更新，进入 walk 时通知 MCfgGen 从体系结构表恢复。配置恢复期间暂停 Decode。Msetcfg 与 CSR、Fence、Vset、AMO 一样参与 interrupt_safe 限制。
+
+MMA、MLS、mzero、mrelease 的 amuCtrl 写回到 [AmuCtrlBuffer](./AMUCtrlBuffer.md)。该缓冲与 ROB 同步分配、提交和重定向；只有已写回且已正常提交的项才能发出请求。CUTE 背压可以在 ROB 退休之后继续保存请求，并通过缓冲容量反馈到 ROB 入队条件。
+
+ROB 提交仅表示控制核的检查和排序完成。CUTE 的实际访存与计算完成需要完成同步；每拍至多一个控制请求通过 XSCore 仲裁器，不能由 ROB 的 CommitWidth 推导矩阵请求吞吐。
+
+dirtyMs 在有效提交 lane 上取或，寄存后作为 dirty_ms 送 CSR。MLS 的 mcommit 和 pendingmls 反馈到访存队列，区别于 CUTE 完成返回。
+
+### 差分状态与提交停顿观察
+
+当前 RAB 根据 newCommitSize 输出 diffCommits，用于更新差分 RAT，并包含 mx 映射。矩阵相关观测另有 MCFG 状态、AMU 请求事件、同步事件和 CUTE store 事件，不能只用普通指令提交事件比较矩阵结果。
+
+ROB 的提交停顿计数排除 MMIO 和允许的 WFI 等待场景。当前 mcorepwr 不提供控制提交停顿检查的控制位。Palladium 环境另有独立 CommitStuckFinish 黑盒，在达到调试超时后打印信息并结束仿真；其他环境该黑盒的 fired 输出固定为 0。这是仿真观察机制，不是矩阵运算完成或架构异常。
 
 ## 总体设计
 

@@ -1,32 +1,33 @@
 # VecFunctionUnit
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
-向量功能单元包括 vsetiwi, vsetiwf, vsetfwf, vipu, vialuF, vldu, vstu, vppu, vimac, vidiv, vfalu, vfma, vfdiv, vfcvt。
+向量功能单元包括 vsetiwi, vsetiwf, vsetfwf, vipu, vialuF, vldu, vstu, vppu, vimac, vidiv, vfalu, vfma, vfdiv, vfcvt, vfexp2。
 
 ## 功能单元与对应的延迟
 
-各向量功能单元的延迟信息（参考 `FuConfig.scala`，`CertainLatency(n)` 表示延迟为 n+1，`UncertainLatency()` 表示延迟不固定）：
+下表列出 `FuConfig.scala` 中的延迟配置值。CertainLatency(n) 是功能单元调度所用的固定延迟参数；这里不叠加操作数生成、写回仲裁等外围通路的时延。UncertainLatency 表示不能按单一固定周期预约结果。
 
-| 功能单元 | 延迟（周期） | 流水线 | 说明 |
-| -------- | ------------ | ------ | ---- |
-| vsetiwi  | 1            | 是     | |
-| vsetiwf  | 1            | 是     | |
-| vsetfwf  | 1            | 是     | |
-| vipu     | 3            | 是     | |
-| vialuF   | 2            | 是     | |
-| vimac    | 3            | 是     | |
-| vppu     | 3            | 是     | |
-| vidiv    | 不固定       | 否     | 取决于SEW |
-| vfalu    | 2            | 是     | |
-| vfma     | 4            | 是     | |
-| vfdiv    | 不固定       | 否     | 取决于指令和SEW |
-| vfcvt    | 3            | 是     | |
-| vldu     | 不固定       | 是     | 取决于访存 |
-| vstu     | 不固定       | 是     | 取决于访存 |
+| 功能单元 | FU 延迟配置 | 流水线 | 说明                     |
+| -------- | ----------- | ------ | ------------------------ |
+| vsetiwi  | 0           | 是     |                          |
+| vsetiwf  | 0           | 是     |                          |
+| vsetfwf  | 0           | 是     |                          |
+| vipu     | 2           | 是     |                          |
+| vialuF   | 1           | 是     |                          |
+| vimac    | 2           | 是     |                          |
+| vppu     | 2           | 是     |                          |
+| vidiv    | 不固定      | 否     | 取决于 SEW               |
+| vfalu    | 1           | 是     |                          |
+| vfma     | 3           | 是     | 包含 BF16 加宽乘加       |
+| vfdiv    | 不固定      | 否     | 取决于指令和 SEW         |
+| vfcvt    | 2           | 是     | 包含 BF16 加宽、缩窄转换 |
+| vfexp2   | 6           | 是     | 默认 HasVfexp2=true      |
+| vldu     | 不固定      | 是     | 取决于访存               |
+| vstu     | 不固定      | 是     | 取决于访存               |
 
 ## 不定周期延迟
 
@@ -405,6 +406,19 @@ table: vfma fu 支持的指令
 | vfma     | vfwmsac.vf  | V    | vector |
 | vfma     | vfwnmsac.vf | V    | vector |
 
+### BF16 向量运算 {#sec:bf16-vector}
+
+Table: BF16 指令与功能单元
+
+| 功能单元 | 指令 | 运算格式 |
+| -------- | ---- | -------- |
+| vfma | vfwmaccbf16.vv | 两个 BF16 向量源乘积累加到 FP32 目的 |
+| vfma | vfwmaccbf16.vf | BF16 向量源与标量源乘积累加到 FP32 目的 |
+| vfcvt | vfwcvtbf16.f.f.v | BF16 加宽为 FP32 |
+| vfcvt | vfncvtbf16.f.f.w | FP32 缩窄为 BF16 |
+
+上述指令要求 SEW=16，并沿用加宽/缩窄指令的寄存器组、掩码、VL 与 vstart 检查。VFMA 将 BF16 操作数精确展开为 FP32 后复用 FP32 FMA，按 vuopIdx 选择当前加宽片段；VFCvt 单独识别 BF16 指令，覆盖结果元素位宽与舍入模式选择，避免将 BF16 缩窄误判为 round-to-odd 转换。结果通过原有 MGU 合并，算法见 [VFPU](../VFPU.md#sec:bf16-fma)。
+
 ## vfdiv
 
 table: vfdiv fu 支持的指令
@@ -444,3 +458,16 @@ table: vfcvt fu 支持的指令
 | vfcvt    | vfncvt.f.x.w      | V    | vector |
 | vfcvt    | vfncvt.f.f.w      | V    | vector |
 | vfcvt    | vfncvt.rod.f.f.w  | V    | vector |
+
+## vfexp2
+
+Table: vfexp2 支持的指令
+
+| 功能单元 | 指令 | 支持格式 | 描述 |
+| -------- | ---- | -------- | ---- |
+| vfexp2 | vfexp2.v | FP16、FP32 | 按元素近似计算 2 的 x 次方 |
+| vfexp2 | vfexp2bf16.v | BF16 | 按元素近似计算 2 的 x 次方 |
+
+默认 HasVfexp2=true，VFEX1 包含 Vfexp2Cfg；关闭该参数时，VecDecoder 不再提供这两个指令的有效译码。vfexp2.v 只允许 SEW=16/32，BF16 形式只允许 SEW=16。
+
+VFExp2 wrapper 将 128 位向量分成两个 64 位 YunSuan VfExp2 子通路，支持每个 uop 最多 8 个 16 位元素或 4 个 FP32 元素。它传递 frm 舍入模式，在掩码与 VL 有效的元素中汇总 fflags，并通过 MGU 按 oldVd、vstart、VL、mask、vta/vma 合并结果。底层采用分段二次多项式近似，具体流水线见 [VFPU](../VFPU.md#sec:vector-exp2)。

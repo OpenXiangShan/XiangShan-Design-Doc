@@ -1,9 +1,9 @@
 # CSR
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -74,6 +74,62 @@ CSR 负责和 IMSIC 通过自定义数据线交互，读写配置在 IMSIC 中�
 CSR 负责配置和更新 TLB 的相关信号，以确保 TLB 能够正确地进行虚拟地址到物理地址的转换。包括检测 ASID 和 VMID 的变化，satp/vsatp/hgatp 等寄存器值的传递，mstatus/vsstatus 中的 mxr/sum，menvcfg/henvcfg 中的 pmm 等权限和控制位的传递，虚拟内存模式的选择以及物理内存保护扩展的配置。通过这些配置，TLB 能够在不同的虚拟内存模式下正确地执行地址转换。
 
 CSR 负责根据当前的特权模式和寄存器的状态，设置和传递与指令 decode 相关的非法指令和虚拟指令的标志。这些标志用于指示某些指令在特定的特权模式下是否是非法的或虚拟的。通过这些标志，硬件可以在指令解码阶段正确地处理这些指令。
+
+## 矩阵 CSR
+
+XSAI 增加矩阵控制、矩阵规模和同步资源容量相关的 CSR。矩阵类型配置使用独立的 mcfg0–mcfg7 表，通过 msetcfg/mgetcfg 访问，不属于下表的 CSR 地址空间。
+
+Table: 矩阵 CSR 列表
+
+| CSR | 地址 | 功能 |
+| --- | ---- | ---- |
+| mcsr | 0x802 | 矩阵控制与状态 |
+| mxrm | 0x806 | 定点舍入模式，mcsr 别名 |
+| msat | 0x807 | 饱和标志，mcsr 别名 |
+| mfflags | 0x808 | 浮点异常标志，mcsr 别名 |
+| mfrm | 0x809 | 浮点舍入模式，mcsr 别名 |
+| msaten | 0x80a | 饱和使能，mcsr 别名 |
+| tlenb | 0xcc1 | tile register 容量，TLEN/8 字节 |
+| trlenb | 0xcc2 | tile register 行宽，TRLEN/8 字节 |
+| alenb | 0xcc3 | accumulator register 容量，ALEN/8 字节 |
+| mtilem | 0xcc4 | 当前 M 维规模，只读 |
+| mtilen | 0xcc5 | 当前 N 维规模，只读 |
+| mtilek | 0xcc6 | 当前 K 维规模，只读 |
+| msync | 0xcc7 | 同步计数器数量 |
+
+地址以 XSAI 指定的 rocket-chip `bb5d63cbddcc` 中 CSRs 定义为准。DefaultMatrixConfig 的 TLEN=65536 位、TRLEN=512 位、ROWNUM=128、MELEN=32，ARLEN=4096 位、ALEN=524288 位，因此 tlenb=8192、trlenb=64、alenb=65536；默认 msync=32。
+
+### mcsr
+
+Table: mcsr 的定义
+
+| 字段 | 位域 | 复位值 | 描述 |
+| ---- | ---- | ------ | ---- |
+| MXRM | [1:0] | 0 | 定点舍入模式 |
+| MSAT | 2 | 0 | 定点饱和标志 |
+| MFFLAGS | [7:3] | 0 | 浮点异常标志 |
+| MFRM | [10:8] | 0 | 浮点舍入模式 |
+| MSATEN | 11 | 0 | 饱和使能 |
+
+别名 CSR 的读写映射到 mcsr 对应字段。MMA 功能单元读取 MXRM、MFRM 和 MSATEN，打包到提交后发送的 AMU 请求中。当前 CUTE 不消费请求中的 rm、sat 字段，详见 [计算数据通路](../cute/Compute.md)；可编程舍入和饱和控制尚未作用于实际计算。CUTE 运算结果到 MSAT、MFFLAGS 的自动回传更新也未接通，因此这些字段的存在不表示矩阵运算会自动累计饱和或浮点异常状态。
+
+### 矩阵规模与只读转译
+
+mtilem/n/k 由 msettile 指令写 mx 重命名域。读这些 CSR 时，DecodeUnit 转为读取对应 mx 物理项并写整数寄存器；读 tlenb、trlenb、alenb、msync 转为 ALU 常量读。这些特殊读路径允许乱序执行。
+
+CSR 模块中的 mtile 字段是只读定义。实际规模值在 mx 寄存器堆中，Backend 通过体系结构 mx 映射提供差分观察值；不能把向 CSR/DiffTest 回传的调试信息视为另一次普通 CSR 写操作。
+
+### 矩阵上下文状态 {#sec:matrix-context}
+
+mstatus、sstatus、vsstatus 增加 MS[26:25]，复位为 Off。SD 聚合条件增加 MS==Dirty。`minit` 通过 CSR 功能单元将 mstatus.MS 写为 Initial；当前实现没有同时清空 mcfg 表、CUTE 数据寄存器或同步计数器的操作。
+
+访问 mcsr 及其五个别名时，CSRPermitModule 检查有效 MS 状态；虚拟化模式同时考虑 mstatus 和 vsstatus。MS 在 Off 与非 Off 之间切换时，CSR 模块要求 flushPipe。
+
+当前实现有两项限制：普通矩阵指令以及上述规模/容量读转译的 Decode MS=Off 检查未启用；mstatus 根据 dirty_ms 或矩阵 CSR 写自动置 Dirty 的代码也未启用。vsstatus 在虚拟化模式下的自动置 Dirty 路径仍保留。ROB 会产生 dirty_ms，但不能据此推断完整的矩阵上下文管理已实现。
+
+### 其他特权状态实现
+
+当前 CSRConfig 将 mstatus.MDT 复位为 0，mnstatus.NMIE 复位为 1。EnvCfg.PMM、EnvCfg.CBIE、hstatus.HUPMM 和 mseccfg.PMM 的写函数为 wNoEffect，写入保持旧值，复位值分别为 Disable 或 Inval；这些字段不应描述为已开放的软件可配置功能。当前实现也不提供单独的 reset_mtvec 顶层输入。
 
 ## 自定义 CSR
 
@@ -200,7 +256,7 @@ Table: mflushpwr 的定义
 
 其中，xRetPermitMod 会生成执行 mnret/mret/sret/dret 指令时可能产生的异常：EX_II 和 EX_VI。
 
-mLevelPermitMod 中只会产生 EX_II，在其中会进行几种类型的权限检查：写只读 CSR；在 fs/vs 未开启时访问浮点/向量 CSR；以及一系列由 M 模式 CSR（如 mstateen0 和 menvcfg） 控制的对其他低特权级 CSR 的访问。
+mLevelPermitMod 中只会产生 EX_II，在其中会进行几种类型的权限检查：写只读 CSR；在 fs/vs/ms 未开启时访问浮点/向量/矩阵控制 CSR；以及一系列由 M 模式 CSR（如 mstateen0 和 menvcfg） 控制的对其他低特权级 CSR 的访问。
 
 sLevelPermitMod 中同样只会产生 EX_II，在其中会进行一系列由 HS 模式 CSR（如 sstateen0 和 scounteren） 控制的对其他低特权级 CSR 的访问。
 
@@ -228,7 +284,7 @@ indirectCSRPermitMod 中同样会产生 EX_II 和 EX_VI 两种异常，在其中
 
 我们还支持 CSR 只读指令的乱序。我们注意到，对于绝大多数 CSR，CSRR 指令不需要等待前面的指令。对于所有 CSR，CSRR 指令也不需要阻塞后面的指令。需要注意的是，isCsrr 不仅仅包含 CSRR 指令的情况，还包含其他不需要写入 CSR 的 CSR指令。
 
-当前对于以下 CSR 执行的 CSRR 指令要求等待前面的指令，顺序执行：fflags, fcsr, vxsat, vcsr, vstart, mstatus, sstatus, hstatus, vsstatus, mnstatus, dcsr。因为这些 CSR 可能会被用户级指令在不需要 fence 的情况下就发生修改，如果乱序执行可能会导致错误的结果，所以对这些 CSR 执行 CSRR 指令要求顺序执行。
+当前对于以下 CSR 执行的 CSRR 指令要求等待前面的指令，顺序执行：fflags, fcsr, vxsat, vcsr, vstart, mstatus, sstatus, hstatus, vsstatus, mnstatus, dcsr，以及 mcsr、mxrm、msat、mfflags、mfrm、msaten。因为这些 CSR 可能会被用户级指令在不需要 fence 的情况下就发生修改，如果乱序执行可能会导致错误的结果，所以对这些 CSR 执行 CSRR 指令要求顺序执行。
 
 另外，由于在读取任何 PMC CSR 之前必须执行 fence 指令，因此没有必要让对 PMC CSR 的指令顺序执行。
 

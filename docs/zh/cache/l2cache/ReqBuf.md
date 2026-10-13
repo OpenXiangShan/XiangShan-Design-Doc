@@ -2,17 +2,22 @@
 
 ## 功能描述
 - Request Buffer用来缓冲那些暂时需要阻塞的 A 通道请求，同时让满足释放条件/不需要阻塞的 A 通道请求先进入主流水线。
+- 矩阵 Get 与 PutFullData 和普通 A 通道请求使用相同的冲突检查。Put 项只保存 TaskBundle 及其 `bufIdx`，整行写数据保留在 PutBuffer，直至任务进入主流水线。
 - Request Buffer可以防止需要阻塞的 A 请求堵住流水线入口，从而避免对后续请求的影响，提高了缓存的处理效率。
 - 如果有新到达的 Acquire 与 MSHR 中正在处理的预取请求地址相同，则可以进行请求融合，将 Acquire 的信息直接传到对应 MSHR 中，让 MSHR 处理完成后同时回复 L1 Acquire，从而加快了 Acquire 的处理流程，并减少了对 ReqBuf 和 MSHR 的占用。
 
 ### 特性1： 请求融合
 当 RequestBuffer 接收到的 Acquire 请求和某一项 MSHR 中的预取请求有相同地址时，RequestBuffer 会将合并请求（aMergeTask）发送到相应的 MSHR entry，该项 MSHR 会被标注mergeA并更新MSHR的相关域。
 
+可融合的需求请求仅包括 AcquireBlock / AcquirePerm。矩阵 Get 虽然会参与同地址晚到预取的统计，但不会生成 `mergeA`，仍需按照通常的请求冲突条件等待后续处理。
+
 ### 特性2：请求接收条件
 RequestBuffer 入口的请求在哪些情况下允许被接收：
 - RequestBuffer 没有满
 - RequestBuffer 满了，但是 Acquire 请求可以和前面的预取请求融合
 - RequestBuffer 满了，但是该请求是预取请求，并且已经前面已经有一条 Acquire/Prefetch 请求正在被 MSHR 处理
+
+预取请求还受到 MSHR 占用门控：当流水线与 MSHR 的有效任务数达到 `mshrsAll - 3` 的阈值时，新 Hint 暂停进入。已经存在同地址请求的重复预取可以被接收并丢弃，不需要另行占用缓冲项。该门控不用于阻塞矩阵 Get / PutFullData 需求请求。
 
 ### 特性3：ReqestBuffer的分配
 哪些请求会分配 RequestBuffer：

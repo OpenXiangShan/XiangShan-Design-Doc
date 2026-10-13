@@ -55,9 +55,11 @@ nav:
     - 控制模块 CtrlBlock: 
       - backend/CtrlBlock/index.md
       - 译码: backend/CtrlBlock/decode.md
+      - 矩阵类型配置 MCfgGen: backend/CtrlBlock/MCfgGen.md
       - 重命名: backend/CtrlBlock/Rename.md
       - 分派: backend/CtrlBlock/Dispatch.md
       - 重排序缓存: backend/CtrlBlock/Rob.md
+      - 矩阵控制缓冲 AmuCtrlBuffer: backend/CtrlBlock/AMUCtrlBuffer.md
     - 数据通路 DataPath:
       - DataPath: backend/DataPath/DataPath.md
       - Og2ForVector: backend/DataPath/Og2ForVector.md
@@ -76,6 +78,7 @@ nav:
       - 浮点功能单元: backend/FunctionUnit/FpFunctionUnit.md
       - 向量功能单元: backend/FunctionUnit/VecFunctionUnit.md
       - 访存功能单元: backend/FunctionUnit/MemFunctionUnit.md
+      - 矩阵控制功能单元: backend/FunctionUnit/MatrixFunctionUnit.md
     - 向量浮点功能单元 VFPU: backend/VFPU.md
     - 控制状态寄存器 CSR: backend/CSR.md
     - 硬件性能计数单元 HPM: backend/HPM.md
@@ -86,6 +89,7 @@ nav:
       - Load 指令执行单元 LoadUnit: memblock/LSU/LoadUnit.md
       - Store 地址执行单元 StoreUnit: memblock/LSU/StoreUnit.md
       - Store 数据执行单元 StdExeUnit: memblock/LSU/StdExeUnit.md
+      - 矩阵访存指令执行单元 MLSU: memblock/LSU/MLSU.md
       - 原子指令执行单元 AtomicsUnit: memblock/LSU/AtomicsUnit.md
       - 向量访存: 
         - memblock/LSU/VLSU/index.md
@@ -104,6 +108,7 @@ nav:
         - Uncache Load 处理单元 LoadQueueUncach: memblock/LSU/LSQ/LoadQueueUncache.md
         - Load 异常缓冲 LqExceptionBuffer: memblock/LSU/LSQ/LqExceptionBuffer.md
         - Store 队列 StoreQueue: memblock/LSU/LSQ/StoreQueue.md
+        - 矩阵访存队列 MLSQ: memblock/LSU/LSQ/MLSQ.md
       - Uncache 处理单元 Uncache: memblock/LSU/Uncache.md
       - Store 提交缓冲 SBuffer: memblock/LSU/SBuffer.md
       - Load 非对齐访存单元 LoadMisalignBuffer: memblock/LSU/LoadMisalignBuffer.md
@@ -132,6 +137,8 @@ nav:
   - 缓存子系统:
     - 二级缓存:
       - 二级缓存 CoupledL2: cache/l2cache/CoupledL2.md
+      - 矩阵访存扩展 HBL2: cache/l2cache/HBL2.md
+      - 矩阵写数据缓冲 PutBuffer: cache/l2cache/PutBuffer.md
       - A 通道请求缓冲 RequestBuffer: cache/l2cache/ReqBuf.md
       - 请求仲裁器与主流水线: cache/l2cache/ReqArb_MainPipe.md
       - 目录 Directory: cache/l2cache/Directory.md
@@ -152,3 +159,11 @@ nav:
         - 链路层控制器 LinkMonitor: cache/l2cache/downstream/LinkMonitor.md
       - MMIO 转接桥 MMIOBridge: cache/l2cache/MMIOBridge.md
       - 错误处理: cache/l2cache/Error.md
+  - 矩阵计算单元 CUTE:
+    - cute/index.md
+    - 任务控制 TaskController: cute/TaskController.md
+    - 矩阵寄存器 MatrixReg: cute/MatrixReg.md
+    - 矩阵加载与存储: cute/MemoryLoader.md
+    - 计算数据通路: cute/Compute.md
+    - 访存接口与系统集成: cute/Integration.md
+    - 性能事件与调试: cute/Performance.md

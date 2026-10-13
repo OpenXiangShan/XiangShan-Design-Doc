@@ -1,9 +1,9 @@
 # Dispatch
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -57,6 +57,22 @@ Dispatch 模块会接收各个模块的控制信号来阻塞指令的分派，�
 
 Dispatch 模块会将一些异常情况的指令屏蔽掉（将发送给 IQ 的 valid 置低），不分派给 IQ ，比如该指令译码出现异常，或者该指令被挂了 singleStep 。
 
+
+### mx 源状态与矩阵派发
+
+Dispatch 增加 mx BusyTable。分配 mx 物理目的时置忙，收到对应 MxWB 或有效的调度器唤醒后清忙。源类型为 SrcType.mx 时，以 psrc 查询这张表；整数地址和 stride 仍查询整数 BusyTable。跨调度器唤醒集合加入 MfScheduler，取消路径继续使用 OG0 取消和标量 load dependency。
+
+MMA、mzero、规模状态读取派发到 MfScheduler；规模写和 mrelease 使用整数调度资源；矩阵访存使用 memScheduler 的 MLSU IQ。派发由 FU 配置决定，不能将所有矩阵相关指令送入同一个 IQ。
+
+Table: LSQ 分配掩码
+
+| needAlloc | 队列 |
+| --------- | ---- |
+| 001 | LQ |
+| 010 | SQ |
+| 100 | MLSQ |
+
+MLSQ 的可接收信号、提交数量、取消数量和出队指针参加访存资源管理。`msetcfg`、`minit`、`macquire`、`mfence` 分别沿用其译码生成的 waitForward/blockBackward 属性，后继是否可进入 ROB 由现有顺序派发逻辑控制。
 
 ## 总体设计
 

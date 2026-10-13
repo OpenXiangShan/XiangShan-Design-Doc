@@ -4,7 +4,7 @@
 
 ## 生命周期
 
-每一项 MSHR 都有自己的生命周期。MSHR 项由 MainPipe 分配，并在 MSHR 完成所有的任务，清空所有状态机状态项后结束生命周期。每一项 MSHR 都可能因为等待总线事务而在较长的一段时间内保持有效，但必须在有限的时间内结束生命周期，否则意味着出现了活锁或死锁。
+每一项 MSHR 都有自己的生命周期。MSHR 项由 MainPipe 分配，并在 MSHR 完成所有的任务、将状态机项置为已完成后结束生命周期。每一项 MSHR 都可能因为等待总线事务而在较长的一段时间内保持有效，但必须在有限的时间内结束生命周期，否则意味着出现了活锁或死锁。
 
 ### MSHR ID
 
@@ -22,6 +22,8 @@ MainPipe 请求分配 MSHR 项时，由 MSHRCtl 模块内部的 MSHRSelector 选
 - 请求与正在执行的写回（L2 向下的 TileLink Release 或 CHI Copy-Back Write）的嵌套情况
 
 这些信息都会在被分配的 MSHR 项内寄存。
+
+矩阵请求同时保留 `matrixTask`、`ameIndex` 和 `ameChannel`，供最终响应选择返回通路。对于 PutFullData，MainPipe 在分配 MSHR 的同一阶段将 PutBuffer 中的新数据转入该 MSHR 对应的 RefillBuffer；MSHR 内保存控制信息，不保存整行写数据。
 
 ### 释放
 
@@ -48,12 +50,12 @@ Schedule 状态项以 ```s_``` 为首命名，其概览如下：
 | 名称 | 描述 |
 | --- | ------ |
 | ```s_acquire``` | 首次需要向下游发送 权限提升请求 或 CMO 请求，或者需要向下发送被重试的写回或踢出请求 |
-| ```s_rprobe``` | 由于替换、写回，需要向上游发送 Probe 请求 |
+| ```s_rprobe``` | 由于替换、Get 获取最新数据或 Put 撤销上层副本等原因，需要向上游发送 Probe 请求 |
 | ```s_pprobe``` | 由于下游的 Snoop 请求，需要向上游发送 Probe 请求 |
 | ```s_release``` | 需要向下游发送的写回或踢出请求 |
 | ```s_probeack``` | 由于下游的 Snoop 请求，需要向下游发送 Snoop 回复 |
-| ```s_refill``` | 需要向上游发送 Grant 回复 |
-| ```s_retry``` | 由于没有空闲的路用于替换，向上游发送的 Grant 回复需要重试 |
+| ```s_refill``` | 需要通过 MainPipe 完成回填并安排 Grant、AccessAck、AccessAckData 或 HintAck 等上游响应 |
+| ```s_retry``` | 由于没有空闲的路用于替换，回填及上游响应任务需要重试 |
 | ```s_cmoresp``` | 需要向上游发送 CBOAck 回复 |
 | ```s_cmometaw``` | 由 CMO 引起的向 MainPipe 发送的目录更新请求 |
 | ```s_rcompack``` | 由于向下游发送了读请求，需要发送对应的 CompAck 回复 |
@@ -122,7 +124,7 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 1. 来自替换任务
     - 已经完成替换路的选择
     - 已经收到向上游的 Probe 的所有回复
-    - 替换读请求已经收到来自下游的全部数据
+    - 请求已经收到来自下游的必要数据或权限回复；整行 Put 等待的是 MakeUnique 的 Comp 回复
 2. 来自 CMO 请求
     - 已经收到向上游的 Probe 的所有回复
 
@@ -130,7 +132,7 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 
 | 任务来源 | 上游 A 通道请求类型 | 是否有脏数据 | 下游 TXREQ 请求类型 |
 | --------- | ------ | ------ | --------- |
-| 替换任务 | Acquire* | 是 | WriteBackFull |
+| 替换任务 | Acquire* / Get / Hint / PutFullData | 是 | WriteBackFull |
 |         |          | 否 | WriteEvictOrEvict |
 | CMO 请求 | CBOClean | - | WriteCleanFull |
 |          | CBOFlush | 是 | WriteBackFull |
@@ -141,7 +143,7 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 
 | 任务来源 | 上游 A 通道请求类型 | 是否有脏数据 | 数据来源 | 是否写入 DataStorage |
 | ----- | -------- | --------- | ----- | ----- |
-| 替换任务 | Acquire* | - | RefillBuffer | 是 |
+| 替换任务 | Acquire* / Get / Hint / PutFullData | - | RefillBuffer | 是 |
 | CMO 请求 | CBO* | 来自向上游的 Probe | ReleaseBuffer | 是 |
 |          |      | 其它 | - | 否 |
 
@@ -174,17 +176,18 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 
 下游 Snoop 回复任务会要求 MainPipe 更新缓存行状态，详见 [@sec:mshr-snoop-details] [Snoop 处理](#sec:mshr-snoop-details)。
 
-#### 替换路查询与上游 Grant/CBOAck 回复任务（```mp_grant```）
+#### 替换路查询与上游响应任务（```mp_grant```）
 
-替换路查询与上游 Grant/CBOAck 回复任务（```mp_grant```）由状态机项 ```s_refill``` 或 ```s_cmoresp``` 触发，且 ```s_refill``` 与 ```s_cmoresp``` 不会被同时置为未完成。该任务的作用为以下几项之一：
+替换路查询与上游响应任务（```mp_grant```）由状态机项 ```s_refill``` 或 ```s_cmoresp``` 触发，且 ```s_refill``` 与 ```s_cmoresp``` 不会被同时置为未完成。该任务的作用为以下几项之一：
 
 1. 在 MainPipe 向 Directory 发起替换路查询请求
 2. 在 MainPipe 通过 TileLink D 通道向上游回复 Grant/GrantData
 3. 在 MainPipe 通过 TileLink D 通道向上游回复 CBOAck 
+4. 完成 Get 的 AccessAckData、PutFullData 的 AccessAck 或预取的 HintAck，并将响应送入 GrantBuffer；矩阵 Get 的数据由 GrantBuffer 从独立矩阵接口返回
 
-在状态机项 ```s_release``` 的状态未完成，且当前 MSHR 的状态符合一定的条件时，MSHR 就会尝试向 MainPipe 发送替换路查询或上游 Grant 回复任务；在状态机项 ```s_cmoresp``` 的状态未完成，且当前 MSHR 的状态符合一定的条件时，MSHR 就会尝试向 MainPipe 发送 CBOAck 回复任务。
+在状态机项 ```s_refill``` 的状态未完成，且当前 MSHR 的状态符合一定的条件时，MSHR 就会尝试向 MainPipe 发送替换路查询或上游响应任务；在状态机项 ```s_cmoresp``` 的状态未完成，且当前 MSHR 的状态符合一定的条件时，MSHR 就会尝试向 MainPipe 发送 CBOAck 回复任务。
 
-在 ```s_refill``` 被置为未完成时，其 MSHR 状态需要满足以下条件，才可以向 MainPipe 发送替换路查询与上游 Grant 回复任务：
+在 ```s_refill``` 被置为未完成时，其 MSHR 状态需要满足以下条件，才可以向 MainPipe 发送替换路查询与上游响应任务：
 
 - 已经收到向上游的 Probe 的所有回复
 - 已经收到来自下游的首个 Comp、CompData 或 RespSepData 回复
@@ -204,22 +207,23 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 
 在 MSHR 需要等待替换路结果，并且 Directory 给予了重试回复后，MSHR 就会从 ```mp_grant``` 发送替换路重试任务。
 
-替换路查询与上游 Grant 任务会要求 MainPipe 对 Directory 中的缓存行状态进行更新，若为上游 CBOAck 任务则不会要求，其更新规则如下：
+替换路查询与上游响应任务会要求 MainPipe 对 Directory 中的缓存行状态进行更新，若为上游 CBOAck 任务则不会要求，其更新规则如下：
 
-| 任务来源 | 请求类型 | 初始状态 | 更新状态 |
-| ------ | -------- | ---- | ---- |
-| ```s_refill```    | Get                  | TIP     | TIP    |
-|                   |                      | TRUNK   | TIP    |
-|                   |                      | BRANCH  | BRANCH |
-|                   |                      | INVALID | TIP```*```   |
-|                   |                      |         | BRANCH |
-|                   | Acquire* toT         | -       | TRUNK  |
-|                   | Acqurie* toB         | -       | TRUNK```*``` |
-|                   |                      | -       | BRANCH |
-|                   | Hint PrefetchWrite   | -       | TIP    |
-|                   | Hint PrefetchRead    | -       | TIP```*```   |
-|                   |                      | -       | BRANCH |
-| ```s_cmoresp```   | -                    | -       | -      |
+| 任务来源        | 请求类型           | 初始状态 | 更新状态     |
+| --------------- | ------------------ | -------- | ------------ |
+| ```s_refill```  | Get                | TIP      | TIP          |
+|                 |                    | TRUNK    | TIP          |
+|                 |                    | BRANCH   | BRANCH       |
+|                 |                    | INVALID  | TIP```*```   |
+|                 |                    |          | BRANCH       |
+|                 | PutFullData        | -        | TIP          |
+|                 | Acquire* toT       | -        | TRUNK        |
+|                 | Acqurie* toB       | -        | TRUNK```*``` |
+|                 |                    | -        | BRANCH       |
+|                 | Hint PrefetchWrite | -        | TIP          |
+|                 | Hint PrefetchRead  | -        | TIP```*```   |
+|                 |                    | -        | BRANCH       |
+| ```s_cmoresp``` | -                  | -        | -            |
 
 其中 Get 更新为 TIP、Acquire* toB 更新为 TRUNK、Hint PrefetchRead 更新为 TIP 会发生于以下情况：
 
@@ -227,12 +231,25 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 - 正在对缓存行进行的操作不是 Alias 替换，且在 L2 本地为 TIP 或 TRUNK 权限
 - 缓存行不存在于 L2 内，且向下游发送的读取请求返回了写权限
 
-替换路查询与上游 Grant 任务在 Directory 未命中时会要求 MainPipe 将 Directory 中被选中替换的缓存行的对应 Tag 值，若为上游 CBOAck 任务则不会要求。
+替换路查询与上游响应任务在 Directory 未命中时会要求 MainPipe 将所选路的 Tag 更新为请求的 Tag，若为上游 CBOAck 任务则不会要求。
 
-替换路查询与上游 Grant/CBOAck 任务会在满足以下其中一个条件时要求 MainPipe 将 MSHR 持有的关联数据写入 DataStorage：
+替换路查询与上游响应任务会在满足以下其中一个条件时要求 MainPipe 将 MSHR 持有的关联数据写入 DataStorage：
 
 - 收到来自下游的 CompData 或 DataSepResp 数据回复
 - 在完成 Get 或 Alias 替换流程时向上游发送的 Probe 收到了脏数据
+- 原始请求为 PutFullData，需要写入保存在 RefillBuffer 中的新数据
+
+若替换路有效，MainPipe 先读出旧行并存入 ReleaseBuffer，再由后续释放任务将新行写入 DataStorage。收到 denied 时，响应仍携带错误信息，但不进行该次回填的 DataStorage、Tag 和元数据写入。
+
+#### 矩阵 Put 的权限与数据
+
+PutFullData 未命中、命中 BRANCH 或命中且存在上层 client 时，分配 MSHR。缺失或 BRANCH 命中需要向下发送 MakeUnique，以获得覆盖整行所需的写权限；存在上层副本时还需要向上发送 Probe toN。命中可写状态、仅需要撤销上层副本的情况不必重复获取下游写权限。
+
+MakeUnique 是不返回旧行数据的权限事务。MSHR 收到其 Comp 回复后，将 `w_grantfirst`、`w_grantlast` 和 `w_grant` 置为完成；必要的 Probe 回复全部到达后，才可发出 `mp_grant` 回填任务。Put 缺失也会查询替换路，并在需要时按原有流程释放旧缓存行。
+
+Put 回填任务的响应类型为 AccessAck，param 为 0。任务将 `useProbeData` 置为 false，始终选择 RefillBuffer 中的 Put 新数据，避免上层 ProbeAckData 携带的旧内容覆盖本次写入。更新后的行状态为 TIP、dirty 为 1、clients 为 0，表示新数据由 L2 持有，且上层副本已被撤销。
+
+AccessAck 通过普通 D 通道返回，矩阵索引由 AmeIndex 字段携带；其发送不代表省略了权限获取、Probe 或必要的替换任务。MSHR 仍按所有 Schedule / Wait 项均完成的条件释放。
 
 #### 下游 CopyBackWrData 任务（```mp_cbwrdata```）
 
@@ -274,29 +291,30 @@ CMO 缓存状态更新任务（```mp_cmometaw```）由状态机项 ```s_cmometaw
 
 在 ```s_pprobe``` 或 ```s_rprobe``` 中的任意一个状态机项被置为未完成时，MSHR 就可以向上游 TileLink B 通道发送请求。在各情况下的请求类型见下表：
 
-| 任务来源 | 上游请求类型 | 下游请求类型 | 缓存行状态 | 发送请求类型 |
-| --- | --- | ------ | --- | --- |
-| ```s_pprobe``` | -                    | SnpOnce               | -         | Probe toT     |
-|                | -                    | SnpClean              | -         | Probe toB     |
-|                | -                    | SnpShared             | -         | Probe toB     |
-|                | -                    | SnpNotSharedDirty     | -         | Probe toB     |
-|                | -                    | SnpUnique             | -         | Probe toN     |
-|                | -                    | SnpCleanShared        | -         | Probe toT     |
-|                | -                    | SnpCleanInvalid       | -         | Probe toN     |
-|                | -                    | SnpMakeInvalid        | -         | Probe toN     |
-|                | -                    | SnpMakeInvalidStash   | -         | Probe toN     |
-|                | -                    | SnpUniqueStash        | -         | Probe toN     |
-|                | -                    | SnpStashUnique        | -         | Probe toT     |
-|                | -                    | SnpStashShared        | -         | Probe toT     |
-|                | -                    | SnpOnceFwd            | -         | Probe toT     |
-|                | -                    | SnpCleanFwd           | -         | Probe toB     |
-|                | -                    | SnpNotSharedDirtyFwd  | -         | Probe toB     |
-|                | -                    | SnpSharedFwd          | -         | Probe toB     |
-|                | -                    | SnpUniqueFwd          | -         | Probe toN     |
-|                | -                    | SnpQuery              | -         | Probe toT     |
-| ```s_rprobe``` | Get                  | -                     | TRUNK     | Probe toB     |
-|                | Acquire*             | -                     | -         | Probe toN     |
-|                | CBOClean             | -                     | TRUNK     | Probe toB     |
+| 任务来源       | 上游请求类型 | 下游请求类型         | 缓存行状态 | 发送请求类型 |
+| -------------- | ------------ | -------------------- | ---------- | ------------ |
+| ```s_pprobe``` | -            | SnpOnce              | -          | Probe toT    |
+|                | -            | SnpClean             | -          | Probe toB    |
+|                | -            | SnpShared            | -          | Probe toB    |
+|                | -            | SnpNotSharedDirty    | -          | Probe toB    |
+|                | -            | SnpUnique            | -          | Probe toN    |
+|                | -            | SnpCleanShared       | -          | Probe toT    |
+|                | -            | SnpCleanInvalid      | -          | Probe toN    |
+|                | -            | SnpMakeInvalid       | -          | Probe toN    |
+|                | -            | SnpMakeInvalidStash  | -          | Probe toN    |
+|                | -            | SnpUniqueStash       | -          | Probe toN    |
+|                | -            | SnpStashUnique       | -          | Probe toT    |
+|                | -            | SnpStashShared       | -          | Probe toT    |
+|                | -            | SnpOnceFwd           | -          | Probe toT    |
+|                | -            | SnpCleanFwd          | -          | Probe toB    |
+|                | -            | SnpNotSharedDirtyFwd | -          | Probe toB    |
+|                | -            | SnpSharedFwd         | -          | Probe toB    |
+|                | -            | SnpUniqueFwd         | -          | Probe toN    |
+|                | -            | SnpQuery             | -          | Probe toT    |
+| ```s_rprobe``` | Get          | -                    | TRUNK      | Probe toB    |
+|                | Acquire*     | -                    | -          | Probe toN    |
+|                | PutFullData  | -                    | -          | Probe toN    |
+|                | CBOClean     | -                    | TRUNK      | Probe toB    |
 
 ### 下游 TXREQ 通道
 
@@ -316,32 +334,34 @@ CMO 缓存状态更新任务（```mp_cmometaw```）由状态机项 ```s_cmometaw
 
 向下游 TXREQ 通道在各个情况下发送的请求类型如下表：
 
-| 任务来源 | 未完成状态 | 上游请求类型 | 未完成请求类型 | 发送请求类型 |
-| ---- | ---- | ------ | ------ | ------ |
-| ```s_acquire```   | -                     | Get                   | -                     | ReadNotSharedDirty    |
-|                   |                       | AcquirePerm toT       | -                     | MakeUnique            |
-|                   |                       | AcquireBlock toT      | -                     | ReadUnique            |
-|                   |                       | AcquireBlock toB      | -                     | ReadNotSharedDirty    |
-|                   |                       | Hint PrefetchWrite    | -                     | ReadUnique            |
-|                   |                       | Hint PrefetchRead     | -                     | ReadNotSharedDirty    |
-|                   |                       | CBOClean              | -                     | CleanShared           |
-|                   |                       | CBOFlush              | -                     | CleanInvalid          |
-|                   |                       | CBOInval              | -                     | MakeInvalid           |
-| ```s_reissue```   | ```w_grant```         | Get                   | ReadNotSharedDirty    | ReadNotSharedDirty    |
-|                   |                       | AcquirePerm toT       | MakeUnique            | MakeUnique            |
-|                   |                       | AcquireBlock toT      | ReadUnique            | ReadUnique            |
-|                   |                       | AcquireBlock toB      | ReadNotSharedDirty    | ReadNotSharedDirty    |
-|                   |                       | Hint PrefetchWrite    | ReadUnique            | ReadUnique            |
-|                   |                       | Hint PrefetchRead     | ReadNotSharedDirty    | ReadNotSharedDirty    |
-|                   |                       | CBOClean              | CleanShared           | CleanShared           |
-|                   |                       | CBOFlush              | CleanInvalid          | CleanInvalid          |
-|                   |                       | CBOInval              | MakeInvalid           | MakeInvalid           |
-| ```s_reissue```   | ```w_releaseack```    | Acquire*              | WriteBackFull         | WriteBackFull         |
-|                   |                       |                       | WriteEvictOrEvict     | WriteEvictOrEvict     |
-|                   |                       | CBOClean              | WriteCleanFull        | WriteCleanFull        |
-|                   |                       | CBOFlush              | WriteBackFull         | WriteBackFull         |
-|                   |                       |                       | Evict                 | Evict                 |
-|                   |                       | CBOInval              | Evict                 | Evict                 |
+| 任务来源        | 未完成状态         | 上游请求类型       | 未完成请求类型     | 发送请求类型       |
+| --------------- | ------------------ | ------------------ | ------------------ | ------------------ |
+| ```s_acquire``` | -                  | Get                | -                  | ReadNotSharedDirty |
+|                 |                    | AcquirePerm toT    | -                  | MakeUnique         |
+|                 |                    | PutFullData        | -                  | MakeUnique         |
+|                 |                    | AcquireBlock toT   | -                  | ReadUnique         |
+|                 |                    | AcquireBlock toB   | -                  | ReadNotSharedDirty |
+|                 |                    | Hint PrefetchWrite | -                  | ReadUnique         |
+|                 |                    | Hint PrefetchRead  | -                  | ReadNotSharedDirty |
+|                 |                    | CBOClean           | -                  | CleanShared        |
+|                 |                    | CBOFlush           | -                  | CleanInvalid       |
+|                 |                    | CBOInval           | -                  | MakeInvalid        |
+| ```s_reissue``` | ```w_grant```      | Get                | ReadNotSharedDirty | ReadNotSharedDirty |
+|                 |                    | AcquirePerm toT    | MakeUnique         | MakeUnique         |
+|                 |                    | PutFullData        | MakeUnique         | MakeUnique         |
+|                 |                    | AcquireBlock toT   | ReadUnique         | ReadUnique         |
+|                 |                    | AcquireBlock toB   | ReadNotSharedDirty | ReadNotSharedDirty |
+|                 |                    | Hint PrefetchWrite | ReadUnique         | ReadUnique         |
+|                 |                    | Hint PrefetchRead  | ReadNotSharedDirty | ReadNotSharedDirty |
+|                 |                    | CBOClean           | CleanShared        | CleanShared        |
+|                 |                    | CBOFlush           | CleanInvalid       | CleanInvalid       |
+|                 |                    | CBOInval           | MakeInvalid        | MakeInvalid        |
+| ```s_reissue``` | ```w_releaseack``` | Acquire*           | WriteBackFull      | WriteBackFull      |
+|                 |                    |                    | WriteEvictOrEvict  | WriteEvictOrEvict  |
+|                 |                    | CBOClean           | WriteCleanFull     | WriteCleanFull     |
+|                 |                    | CBOFlush           | WriteBackFull      | WriteBackFull      |
+|                 |                    |                    | Evict              | Evict              |
+|                 |                    | CBOInval           | Evict              | Evict              |
 
 ### 下游 TXRSP 通道
 

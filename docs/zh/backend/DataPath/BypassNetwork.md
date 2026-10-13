@@ -1,10 +1,10 @@
 # BypassNetwork
 
-### - 版本：V2R2
+### - 版本：V2R2A
 
 - 状态：OK
-- 日期：2025/02/27
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -25,7 +25,7 @@ Table: 子模块列表
 
 ## 功能
 
-BypassNetWork 位于 DataPath，Exu 流水级之间，主要用于为功能单元提供源操作数。目前27个功能单元，总计71个源操作数
+BypassNetWork 位于 DataPath，Exu 流水级之间，主要用于为功能单元提供源操作数。执行单元及源操作数数量随配置生成，启用矩阵扩展时包含 Mf 资源和 mx 源
 
 首先对于可以前递/旁路/两级旁路的源操作数：
 
@@ -51,7 +51,7 @@ Table: 现有唤醒配置2
 | FEX2   | FEX0, FEX1, FEX2, FEX3, FEX4 |
 | FEX4   | FEX0, FEX1, FEX2, FEX3, FEX4 |
 
-    其中作用于向量浮点以及访存单元之间的二级旁路，目前暂时取消。
+上述表格列出原有标量资源的连接。启用矩阵扩展后，整数唤醒目标还包含 MSET0、MRELEASE、MLSU0；完整连接由 Parameters 中的 wakeup 配置生成。当前二级旁路的来源和目的仍限于满足向量寄存器读写条件的资源，不因 Mf 接入而自动扩展到所有矩阵源。
 
 其次对于源操作数是立即数部分，根据来自 datapath 的立即数信息，由 ImmExtracto r组装生成64bit立即数。
 
@@ -62,6 +62,14 @@ Table: 现有唤醒配置2
 具体设计见[@fig:BypassNetwork]：
 
 ![BypassNetwork](./figure/BypassNetwork.svg){#fig:BypassNetwork}
+
+### 矩阵规模旁路
+
+Mf 数据通路输入、Mf 执行结果和 Mf 执行输入加入共享旁路网络。forward 使用当前执行结果，bypass 使用有效执行结果的寄存值，按每个源的 ExuSource 独热选择和 dataSource 标记选出数据。mx 与普通寄存器源一起参与该机制，不设置另一套矩阵数据旁路。
+
+Msettile 的结果是 64 位规模值，可以被后续矩阵指令消费；Mma、Marith 的 amuCtrl 是写回控制信息，送 ROB 侧缓冲，不是通过旁路交给另一条矩阵指令的计算结果。
+
+立即数路径增加 IMM_MSET、IMM_MSETVAL 和 IMM_CSRCONST。矩阵寄存器 selector 的 IMM_MATRIXREG 随控制字段传递，由矩阵 FU 解释。旧表中的执行单元数量和唤醒索引不能作为所有 XSAI 配置的固定编码。
 
 ## 模块设计
 

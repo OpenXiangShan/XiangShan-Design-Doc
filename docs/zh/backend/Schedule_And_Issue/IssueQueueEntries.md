@@ -1,9 +1,9 @@
 # IssueQueueEntries
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -50,6 +50,14 @@ Entries 负责汇总各个 resp，将对应的 resp 传给 entry。非访存 IQ 
 
 ### 唤醒与取消
 Entries 不处理唤醒逻辑，只将唤醒和取消信号传入所有 entry。由于时序原因，Entries 也负责处理当拍的取消逻辑。取消的来源延迟较长，如果正常经过唤醒、取消，再给 IQ 进行出队选择，时序就太差了。因此我们将只经过当拍唤醒的结果给 IQ 进行出队选择，然后由 Entries 单独计算当拍取消，最后再对各个出口选出要出队的 uop 进行取消判断。
+
+### mx 源状态
+
+XSAI 的源状态增加 SrcType.mx，用于 mtilem/n/k。发射项根据物理源号和 mxWen 匹配整数侧规模写的写回或唤醒，更新 ready 与数据来源。MfScheduler 的五源指令中，后面三个源可能是 mx，不能套用向量指令“第 4 个源一定是 v0、第 5 个源一定是 vl”的规则。
+
+入队延迟唤醒也按寄存器源类型处理 mx。EnqEntry、OthersEntry 和普通复杂项沿用相同的转移、清除和重定向机制。取消信号使用 LdWakeupCnt 对应的标量 load 通道，MLSU 的重放由矩阵访存反馈处理。
+
+mcfgReadView、mmaMcfgReadRaw 是随项保存的控制元数据；矩阵数据寄存器号随立即数字段传递。它们不在此处建立 CUTE 数据寄存器的物理重命名关系。
 
 ## 整体框图
 
@@ -125,4 +133,3 @@ forward --> bypass --> reg --> reg
 
 srcLoadDependency 3 bit，用于记录各 uop 的 Load 依赖关系。
 ldCancel 产生时，刷掉唤醒链上的全部 uop。
-

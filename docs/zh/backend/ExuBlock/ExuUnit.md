@@ -1,9 +1,9 @@
 # ExuUnit
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -73,22 +73,24 @@ busy 用于表示当前 ExeUnit 是否处于繁忙状态。对于延迟确定的
 
 ## 设计规格
 
-在 Backend 中一共有 3 个ExuBlock：intExuBlock，fpExuBlock 和 vfExuBlock，分别是整数、浮点、向量的执行模块。每个 ExuBlock 中包含若干个 ExeUnit 单元。
+启用矩阵扩展时，Backend 有 Int、Fp、Vf、Mf 四个 ExuBlock，各自按配置包含若干 ExeUnit。下表以 DefaultMatrixConfig 为口径。
 
-intExuBlock 中包含了 8 个 ExeUnit，每个 ExeUnit 对应的功能如下：
+intExuBlock 中包含了 10 个 ExeUnit，每个 ExeUnit 对应的功能如下：
 
 Table: intExuBlock 中 各个ExeUnit 包含的 Fu
 
-| ExeUnit | 功能                                    |
-| ------- | --------------------------------------- |
-| exus0   | alu，mul，bku                           |
-| exus1   | brh，jmp                                |
-| exus2   | alu，mul，bku                           |
-| exus3   | brh，jmp                                |
-| exus4   | alu                                     |
-| exus5   | brh，jmp，i2f，i2v，VSetRiWi，VSetRiWvf |
-| exus6   | alu                                     |
-| exus7   | csr，fence，div                         |
+| ExeUnit  | 功能                                    |
+| -------- | --------------------------------------- |
+| exus0    | alu，mul，bku                           |
+| exus1    | brh，jmp                                |
+| exus2    | alu，mul，bku                           |
+| exus3    | brh，jmp                                |
+| exus4    | alu                                     |
+| exus5    | brh，jmp，i2f，i2v，VSetRiWi，VSetRiWvf |
+| exus6    | alu                                     |
+| exus7    | csr，fence，div，Mcfg                   |
+| MSET0    | MSetMtilexRiWmf                         |
+| MRELEASE | Mrelease                                |
 
 fpExuBlock 中包含了 5 个 ExeUnit，每个 ExuUnit 对应的功能如下：
 
@@ -106,13 +108,25 @@ vfExuBlock 中包含了 5 个 ExeUnit，每个 ExuUnit 对应的功能如下：
 
 Table: vfExuBlock 中 各个ExeUnit 包含的 Fu
 
-| ExeUnit | 功能                           |
-| ------- | ------------------------------ |
-| exus0   | vfma，vialu，vimac，vppu       |
-| exus1   | vfalu，vfcvt，vipu，VSetRvfWvf |
-| exus2   | vfma，vialu                    |
-| exus3   | vfalu                          |
-| exus4   | vfdiv，vidiv                   |
+| ExeUnit | 功能                                   |
+| ------- | -------------------------------------- |
+| exus0   | vfma，vialu，vimac，vppu               |
+| exus1   | vfalu，vfcvt，vfexp2，vipu，VSetRvfWvf |
+| exus2   | vfma，vialu                            |
+| exus3   | vfalu                                  |
+| exus4   | vfdiv，vidiv                           |
+
+Table: mfExuBlock 中的 ExeUnit
+
+| ExeUnit | 功能 |
+| ------- | ---- |
+| MSET1 | MSetMtilexRmfWmf，读 mx 写整数 |
+| MEX0 | Mma，生成矩阵乘法控制请求 |
+| MEX1 | Marith，生成 mzero 控制请求 |
+
+MLSU0 配置在 MemScheduler，其执行流水线位于 MemBlock。Mcfg 与 CSR/Fence 共用 BJU3，类型配置不在 MEX0 内执行。
+
+ExeUnit 根据 FU 的 needAmuCtrl、needMxWen、needSrcMcsr 等配置生成接口。mcfgReadRaw 和 mmaMcfgReadRaw 随输入传入 FU；mxWen 和 amuCtrl 分别进入物理写回及 ROB 控制写回。矩阵 FU 同样按 robIdx 参与 flush 过滤。
 
 ## 门控
 

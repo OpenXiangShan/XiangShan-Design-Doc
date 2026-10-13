@@ -1,10 +1,32 @@
 # Scheduler
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/15
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
-不同种类的 Scheduler 及其策略的描述等。
+## 功能
 
-Scheduler 模块的主要作用是将IQ包装起来连接 Dispatch 模块和 DataPath模块，共有 intScheduler、fpScheduler、vfScheduler、memScheduler 四个，分别对应整数、浮点、向量、访存（包括标量访存和向量访存），特别需要注意的是在 memScheduler 内对 sta 和 std 两种 IQ 的 ready 做了与操作后传给了 Dispatch，Disptch 会根据 IQ 的 ready 状态回  valid，如果 IQ 不 ready 那 Dispatch 给 IQ enq 的 valid 会拉低。
+Scheduler 将 IQ 包装起来，连接 Dispatch 与 DataPath。XSAI 启用矩阵扩展后有 intScheduler、fpScheduler、vfScheduler、mfScheduler 和 memScheduler 五类。mfScheduler 与整数、浮点和向量调度器一样复用 SchedulerArithImp，采用已有的入队、年龄选择、唤醒、取消和出队反馈机制。
+
+Table: 调度器分工
+
+| 调度器 | 主要指令 |
+| ------ | -------- |
+| Int | 整数、CSR、Fence、规模写、mrelease、mcfg |
+| Fp | 标量浮点 |
+| Vf | 向量计算与向量配置 |
+| Mf | 规模读取、MMA、mzero 控制请求 |
+| Mem | 标量、向量和矩阵访存 |
+
+MemScheduler 对 sta、std 两种 IQ 的 ready 做与操作后传给 Dispatch。Dispatch 根据 IQ 的 ready 状态返回 valid，IQ 不 ready 时不会拉高其入队 valid。
+
+## 矩阵调度资源
+
+默认 MfScheduler 有两个 IQ，每个 16 项、2 个入队口、12 个复杂项。第一个 IQ 包含 MSET1，读取 mx 规模并写整数目的；第二个包含 MEX0 和 MEX1，分别生成 MMA 与矩阵算术请求。MSET0、MRELEASE 位于 IntScheduler，MLSU0 位于 MemScheduler。
+
+MfScheduler 按配置监听整数和 mx 写回。MMA 等待三个规模源 ready，普通 MLS 等待地址、stride 和两个规模源 ready。mx 写回有当前与延迟两组唤醒接口，供发射队列的相应阶段使用。Mcfg 原始配置作为指令元数据随队列保存，不经 mx BusyTable 唤醒。
+
+来自 CtrlBlock 的 flush、DataPath 的 OG0/OG1 取消和标量 load dependency 取消均接入 MfScheduler。矩阵 LSU 自身不产生可供标量寄存器消费者使用的 load 结果，因此 LdExuCnt 包含 MLSU，而 LdWakeupCnt、LdPfTrainCnt 仍只统计标量 load 与混合访存单元。
+
+实现见 [Scheduler.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/issue/Scheduler.scala)。

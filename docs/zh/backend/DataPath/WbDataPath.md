@@ -1,9 +1,9 @@
 # WbDataPath
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -30,7 +30,7 @@ wbDataPath 模块包含向量加载合并单元（VldMergeUnit）、写回仲裁
 
 ### 数据处理
 
-wbDataPath 接收来自不同执行单元（整数执行单元、浮点执行单元、向量执行单元、访存单元）的输出信号，将这些信号做为输入信号fromExuPre使用。从输入信号fromExuPre中过滤出向量加载操作VLoad相关的信号，并将这些元素组成一个新的元素序列。
+wbDataPath 接收来自不同执行单元（整数执行单元、浮点执行单元、向量执行单元、矩阵执行单元、访存单元）的输出信号，将这些信号做为输入信号fromExuPre使用。从输入信号fromExuPre中过滤出向量加载操作VLoad相关的信号，并将这些元素组成一个新的元素序列。
 
 根据元素序列的索引例化多个向量加载合并单元模块，并将重定向信号、向量加载操作相关的信号、来自vstart寄存器的值赋值给向量加载合并单元模块处理。
 
@@ -47,6 +47,12 @@ wbDataPath 接收来自不同执行单元（整数执行单元、浮点执行单
 
 如果是向量执行单元写回整数寄存器堆，则整数写仲裁器的输入延迟一拍。只有不确定延迟的执行单元才需要仲裁器的结果，结果数据可以保留直到仲裁器成功。对于具有确定延迟的执行单元，如果请求在仲裁器中失败，则结果数据将永久丢失。未写回物理寄存器堆的端口始终是就绪的，设置最高优先级的端口始终是就绪的。
 
+### mx 写回
+
+MxWB 使用参数化 RealWBCollideChecker。只有执行配置声明 writeMxRf 且输出 mxWen 有效的请求才进入 mx 写仲裁器。仲裁结果转换为 toMxPreg，发送给 DataPath、Dispatch BusyTable 和 Scheduler 写回唤醒路径。
+
+矩阵相关执行结果存在两种用途：msettile 的数据写 mx RF；MMA、mzero、mrelease 和 MLS 的 amuCtrl 经控制写回送 AmuCtrlBuffer。后一类可以不写任何控制核物理寄存器，但仍需要完成 ROB 写回。CUTE 的矩阵数据结果不会写入 mx RF。
+
 ### 输出
 
 如果整数写仲裁器的输入有效，并且整数写仲裁器就绪，数据通过整数写仲裁器后输出。如果浮点写仲裁器的输入有效，并且浮点写仲裁器就绪，数据通过浮点写仲裁器后输出。如果向量写仲裁器的输入有效，并且向量写仲裁器就绪，数据通过向量写仲裁器后输出。如果v0写仲裁器的输入有效，并且v0写仲裁器就绪，数据通过v0写仲裁器后输出。如果vl写仲裁器的输入有效，并且vl写仲裁器就绪，数据通过vl写仲裁器后输出。
@@ -56,6 +62,8 @@ wbDataPath 接收来自不同执行单元（整数执行单元、浮点执行单
 ### 写回ROB
 
 只有输出成功握手的功能单元，其输出数据能写回ROB，在CtrlBlock中打一拍，并判断写回数据是否刷新流水线、触发异常、trigger fire、重播，之后发送给ROB，用于ROB写回。
+
+amuCtrl 随执行单元输出保留 op 和 payload，经成功写回进入提交后控制缓冲。矩阵参数异常与普通异常信息一起进入 CtrlBlock/ROB；重定向过滤仍由 robIdx 判断，写回不意味着请求已经发送到 CUTE。
 
 ### 整体框图
 

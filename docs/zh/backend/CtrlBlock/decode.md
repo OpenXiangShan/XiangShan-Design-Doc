@@ -1,9 +1,9 @@
 # XiangShan Decode 设计文档
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/02/28
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## 术语说明
 
@@ -33,6 +33,8 @@ Table: 子模块列表
 | VecDecoder | 向量指令译码模块 |
 | VecExceptionGen | 向量异常检查模块 |
 | VTypeGen | 向量指令vtype配置生成模块 |
+| MatrixDecoder | 矩阵指令译码表 |
+| MCfgGen | 矩阵类型配置及重定向恢复 |
 
 ## 设计规格
 
@@ -118,6 +120,51 @@ vsetivli指令和vsetvli指令的vtype信息可通过立即数字段获得，VTy
 vtypeArch更新存在2种情况：
 1. vsetvl指令提交时，vtypeArch更新为vsetvl指令写回的vtype
 2. vsetivli指令或vsetvli指令提交时，vtypeArch更新为从vtype buffer传入的vtype提交信息
+
+## 矩阵指令译码
+
+MatrixDecoder 在启用 MatrixExtension 时加入统一译码表。当前矩阵指令采用简单译码路径，不经过向量复杂译码器拆成多条矩阵微操作。向量 BF16 和 exp2 指令仍沿用各自的向量拆分路径。
+
+Table: 矩阵指令译码分类
+
+| 类别 | 指令 | 功能单元 | 关键控制 |
+| ---- | ---- | -------- | -------- |
+| 类型配置 | msetcfg、mgetcfg | mcfg | msetcfg 阻塞后继并在提交后 flush |
+| 上下文初始化 | minit | csr | 等待前序，阻塞后继 |
+| 规模配置 | msettilem/n/k 及立即数形式 | msetmtilexiwf | 写对应 mx 逻辑项 |
+| 矩阵访存 | A/B/C load/store 及转置形式 | mls | 读整数地址、stride 和 mx 规模 |
+| 整寄存器访存 | mla.whole、mlb.whole、mlc.whole、msc.whole | mls | 只读基址，关闭 stride 和规模依赖 |
+| 乘法累加 | mmacc | mma | 读三个 mx 规模和三个 mcfg 快照 |
+| 清零 | mzero | marith | 无数据源读取 |
+| 完成同步 | mrelease | mrelease | 构造提交后发送的控制请求 |
+| 等待、重置和内存同步 | macquire、msyncregreset、mfence | fence | 采用各自的顺序控制属性 |
+
+当前有效表共 31 个指令模式。rocket-chip 中存在 msa.whole、msb.whole 的编码定义，但当前 MatrixDecoder 未接入，不能以编码常量存在作为实现支持的依据。
+
+`needAmuCtrl` 对 mma、marith、mls、mrelease 置位。`mxWen` 只表示写规模状态，矩阵乘法或加载矩阵数据不会因此写 mx。MMA 的三个源规模依次为 mtilem、mtilen、mtilek；MLS 根据 A/B/C 类别选择两项，whole-register 形式无需读取这些规模。
+
+### 立即数与状态读转译
+
+Table: 矩阵相关立即数
+
+| 类型 | 原始字段 | 用途 |
+| ---- | -------- | ---- |
+| IMM_MSET | instr[24:15] | 10 位规模立即数 |
+| IMM_MSETVAL | instr[24:20] | 5 位同步寄存器选择 |
+| IMM_CSRCONST | instr[31:12] | 常量 CSR 读转译 |
+| IMM_MATRIXREG | instr[22:20]、[17:15]、[9:7] | ms2、ms1、md 的三个 3 位 selector |
+
+读 mtilem/n/k 转为读 mx、写整数寄存器的专用功能单元路径；读 tlenb、trlenb、alenb、msync 转为 x0 加常量的 ALU 路径。这些读操作取消普通 CSR 访问的等待前序和阻塞后继属性。
+
+### 类型配置生成与恢复
+
+每个 DecodeUnit 接收 [MCfgGen](./MCfgGen.md) 输出的当前类型表。msetcfg、mgetcfg、MMA 和 MLS 按指令 selector 读取相应配置项，原始值随指令传到执行阶段。ROB 通过 MCfgBuffer 返回提交和 walk 更新；恢复期间暂停译码。
+
+### 异常处理
+
+矩阵类型和规模依赖执行操作数，因此 Mma、Mcfg、MLSU 在执行阶段完成对应合法性检查。CSR 权限模块仍检查矩阵控制 CSR 的 MS 状态；当前 DecodeUnit 中针对普通矩阵指令及上述状态读转译的 MS=Off 非法指令判断未启用，不能将其等同于浮点 FS、向量 VS 的完整门控。
+
+![矩阵控制链路](./figure/xsai-control.svg)
 
 ## 二级模块 DecodeUnit
 

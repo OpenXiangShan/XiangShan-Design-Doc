@@ -2,13 +2,13 @@
 
 ## 子模块列表
 
-CoupledL2 顶层分为（默认）4 个 Slice 、MMIOBridge、预取器。
+CoupledL2 顶层分为多个 Slice、MMIOBridge 和预取器。XSAI 的 `DefaultMatrixConfig` 配置 8 个 Slice，在原有 L1Cache / PTW 通路之外接入 CUTE 矩阵访存请求，并为每个 Slice 设置独立的矩阵读数据返回接口。这部分扩展称为高带宽二级缓存 HBL2，见 [矩阵访存通路 HBL2](HBL2.md)。
 
-预取器包括 L2 本地的预取器 Best-Offset Prefetch（BOP），和 L1 DCache 预取接收器，用于接收在 DCache 训练但是需要取到 L2 的预取请求。
+默认预取器包括 L2 本地的预取器 Best-Offset Prefetch（BOP），以及接收 L1 DCache 预取请求的接收器。矩阵引导预取由独立配置开启，`DefaultMatrixConfig` 不开启该预取器。
 
 MMIOBridge 即 MMIO 请求转接桥，用于将 TileLink 总线的 MMIO 请求转换为 CHI 请求，并和 cacheable 地址空间的 CHI 请求做仲裁，从统一的 CHI 接口接入互联总线。
 
-CoupledL2 的 4 个 Slice 按照地址低位划分，不同地址的请求或预取地址会被分散到不同的 Slice。
+各个 Slice 按照缓存行地址的低位划分，不同地址的请求或预取地址会被分散到不同的 Slice。
 
 每个 Slice 中的子模块列表如下：
 
@@ -16,7 +16,7 @@ CoupledL2 的 4 个 Slice 按照地址低位划分，不同地址的请求或预
 | --- | --- |
 | SinkA | 上游 TileLink 总线 A 通道控制器 |
 | SinkC | 上游 TileLink 总线 C 通道控制器 |
-| GrantBuffer | 上游 TileLink 总线 D/E 通道控制器 |
+| GrantBuffer | 上游 TileLink 总线 D/E 通道控制器，以及矩阵读数据返回控制器 |
 | TXREQ | 下游 CHI 总线 TXREQ 通道控制器 |
 | TXDAT | 下游 CHI 总线 TXDAT 通道控制器 |
 | TXRSP | 下游 CHI 总线 TXRSP 通道控制器 |
@@ -27,16 +27,18 @@ CoupledL2 的 4 个 Slice 按照地址低位划分，不同地址的请求或预
 | DataStorage | 数据 SRAM |
 | RefillBuffer | 回填数据寄存器堆 |
 | ReleaseBuffer | 释放数据寄存器堆 |
+| [PutBuffer](PutBuffer.md) | 收集 A 通道 PutFullData 请求的整行写数据 |
 | RequestBuffer | A 通道请求缓冲 |
 | RequestArb | 请求仲裁器，主流水线 s0~s2 流水级 |
 | MainPipe | 主流水线 s3~s5 流水级 |
 | MSHRCtl | MSHR（Miss Status Handling Registers）控制模块，默认包含 16 项 MSHR |
+| CustomL1Hint | 管理上游响应的提前唤醒信息，并与矩阵读数据返回配对 |
 
 
 ## 设计规格
 
-- 与上游 L1Cache / PTW 互联采用 TileLink 总线协议
-- 与下游 HN-F 采用 CHI 总线协议，支持 B/C/E.b 3 个 CHI 总线版本（默认 E.b）
+- 与上游 L1Cache / PTW 互联采用 TileLink 总线协议；矩阵单元通过 A 通道发送 Get / PutFullData 请求
+- 与下游 HN-F 采用 CHI 总线协议，支持 B/C/E.b 3 个 CHI 总线版本，由 `CHIIssue` 配置选择
 - 支持如下 CHI Read 事务：
   
     - ReadNoSnp（B/C/E.b）（仅用于 MMIO 与 Uncache 请求）
@@ -79,30 +81,36 @@ CoupledL2 的 4 个 Slice 按照地址低位划分，不同地址的请求或预
     - SnpMakeInvalidStash（B/C/E.b）
     - SnpQuery（E.b）
 
-- 1MB 容量，8 路组相联结构，按照地址低位划分为 4 个 Slice
-- 缓存行大小 64B，总线数据位宽 32B，一次完整的缓存行传输需要 2 个 beat 的数据传输
+- `DefaultMatrixConfig` 下总容量为 2 MiB，8 路组相联，分为 8 个 Slice，每个 Slice 为 512 组、256 KiB
+- 缓存行大小为 64 B，TileLink 数据位宽为 32 B，一次完整的缓存行传输需要 2 个 beat
+- 每个 Slice 的矩阵读返回通路宽度为 512 bit，一次握手返回一条缓存行；8 个 Slice 的聚合接口带宽上限为 512 B/cycle
+- 矩阵写请求仅支持整行、全字节掩码的 PutFullData，不支持 PutPartialData 或子行写入
 - 采用类 MESI 的缓存一致性协议
 - 和 DCache 之间采用严格包含策略，和 ICache / PTW 之间采用不严格包含策略
 - 采用非阻塞主流水线结构
-- 最高访问并行度为 4 × 16（每个 Slice 包含 16 项 MSHR，共 4 个 Slice），每个 Slice 中至多 15 项 MSHR 可用于 L1Cache / PTW 的访问
+- 共配置 8 × 16 项 MSHR；每个 Slice 中至多 15 项可用于 A 通道请求，包括 L1Cache / PTW 和矩阵请求，保留一项空闲资源供其他通道使用
 - 支持相同 set 请求的并行访问
 - 支持在收到 L2 Cache 缺失的重填数据后再进行替换路的选取和替换
-- 支持访存请求和预取请求的融合
+- 支持 Acquire 请求与同地址的未完成预取请求融合；矩阵 Get 不参与该融合
 - 支持产生 L2 Refill Hint 信号用于 Load 指令的提前唤醒
 - 支持 BOP 预取器
 - 支持 L1 训练并回填到 L2 的预取请求的处理
 - 支持 DRRIP / PLRU 等替换算法，默认 DRRIP
 - 支持硬件处理 Cache 别名
-- 支持 MMIO 请求的处理，MMIO 请求在 CoupledL2 中由 TileLink 总线转换为 CHI 总线，并和 4 个 Slice 发起的 cacheable 请求做仲裁
+- 支持 MMIO 请求的处理，MMIO 请求在 CoupledL2 中由 TileLink 总线转换为 CHI 总线，并和各个 Slice 发起的 cacheable 请求做仲裁
+
+上述容量按 `DefaultMatrixConfig` 的参数组合确定：`DefaultConfig` 先以 1 MiB、4 个 Slice 计算每个 Slice 的组数，得到 512 组；矩阵配置保留该组数和 8 路结构，将 Slice 数改为 8。因此总容量为 $512 \times 8 \times 64\ \mathrm{B} \times 8 = 2\ \mathrm{MiB}$。其他配置的容量应按组数、路数、行大小和 Slice 数计算。
+
+矩阵配置关闭 DataStorage 的 MCP2 请求间隔限制。接口带宽是各 Slice 在无冲突、持续就绪时的上限，实际吞吐还受到地址分布、队列占用、DataStorage 争用和一致性事务的影响。
 
 
 ## 功能描述
 
-CoupledL2 接收香山核 DCache / ICache / PTW 发送的 TileLink 回填、替换请求，完成相应数据块的转移与一致性状态转移，同时在片上网络中作为 RN-F，维护香山核在片上互联系统中的缓存一致性。
+CoupledL2 接收香山核 DCache / ICache / PTW 发送的 TileLink 回填、替换请求，以及 CUTE 发送的矩阵 Get / PutFullData 请求，完成相应数据块的转移与一致性状态转移，同时在片上网络中作为 RN-F，维护香山核在片上互联系统中的缓存一致性。
 
 CoupledL2 模块通过上游 TileLink 通道控制器（SinkA / SinkC）接收，将其转化为内部请求。请求通过请求仲裁进入主流水线，读取目录获取缓存块的状态，根据缓存块状态和请求信息判断是否能够处理：
 
-- 若本层缓存可以直接处理该请求，则继续在主流水线中进行读数据、更新目录等操作，然后进入 GrantBuffer，转化为 TileLink 总线响应。
+- 若本层缓存可以直接处理该请求，则继续在主流水线中进行读数据、更新目录等操作，然后进入 GrantBuffer。矩阵 Get 的 AccessAckData 从独立矩阵接口返回，其余响应通过 TileLink D 通道返回。
 - 若需要和其它缓存进行交互才能处理该请求，则为其配一个MSHR。MSHR根据需求向上下层Cache发送子请求，等待收到响应并满足释放条件后，再释放任务重新进入主流水线，进行读缓冲区、读写数据、更新目录等操作，然后进入通道控制器模块，转化为 TileLink 总线响应。
 
 当一个请求所需的全部操作在MSHR中完成时，MSHR被释放，等待接收新的请求。
@@ -122,11 +130,11 @@ CoupledL2 模块通过上游 TileLink 通道控制器（SinkA / SinkC）接收�
 
 CoupledL2 是基于目录结构的 Inclusive Cache（此处所指的“目录”是广义的，包含元数据和Tag）。元数据包含：状态位state / 脏位dirty / 是否在上层缓存 clients / 在上层的别名位 alias / 是否是预取上来的 prefetch / 来自哪个预取器 prefetchSrc / 是否被访问过 accessed。
 
-在流水线 s1 级 RequestArb 会向目录发起读请求，读取 Tag Array 判断是否命中。如果命中则选择命中路，如果不命中则根据替换算法选择一个替换路，然后将选中路的元数据信息返回给 s3 级 MainPipe。
+在流水线 s1 级 RequestArb 会向目录发起读请求，读取 Tag Array 判断是否命中，并将命中路的元数据信息返回给 s3 级 MainPipe。缺失请求先分配 MSHR，待数据或所需权限返回后，再由 MSHR 任务查询替换路；不会在初次缺失时立即选路并释放旧缓存行。
 
 ### 采用非阻塞流水线结构
 
-CoupledL2 采用主流水线架构，来自各通道的请求经过仲裁进入主流水线，进行都目录操作，然后根据请求信息和目录结果安排响应的操作：
+CoupledL2 采用主流水线架构，来自各通道的请求经过仲裁进入主流水线，进行目录操作，然后根据请求信息和目录结果安排响应的操作：
 
 #### Acquire 请求处理流程
 
@@ -149,6 +157,12 @@ Release 请求处理流程如下：
 3. s3 得到查目录的结果（由于是 L1 DCache 和 L2 是严格包含关系所以 Release 一定会命中）；s3 写目录，如果有脏数据需要在 s3 写入 DataStorage
 4. s3 生成 ReleaseAck 响应，在 s3~s5 的某一流水级离开流水线，进入 GrantBuffer 将 ReleaseAck 返回给 L1
 
+#### 矩阵 Get / PutFullData 请求处理流程
+
+矩阵请求在 SinkA 中转换为内部任务，经 RequestBuffer 和 RequestArb 进入主流水线。Get 命中且不需要获取上层最新数据时读取 DataStorage；缺失时分配 MSHR 向下发送 ReadNotSharedDirty；命中 TRUNK 且上层持有该行时，通过 Probe 获取最新数据。返回的 AccessAckData 携带矩阵任务索引和通道号，由 GrantBuffer 从独立的 512 bit 接口发送。
+
+PutFullData 的两个 beat 先存入 PutBuffer，最后一个 beat 同时产生内部任务。命中可写状态且不存在上层副本时，主流水线直接将新数据写入 DataStorage；否则将数据转入对应 MSHR 的 RefillBuffer，等待必要的 MakeUnique 和 Probe toN 完成后写入。Put 返回 TileLink D 通道 AccessAck。完整的分类和数据流见 [请求仲裁器与主流水线](ReqArb_MainPipe.md) 与 [MSHR](MSHR.md)。
+
 ### 收到重填数据后再进行替换路选取和替换
 
 缓存在收到新请求但是set已满的时候，按照常规逻辑，需要先选择一个替换路，将其写入下级缓存，从而为即将重填的缺失数据空出位置，然后等待新数据块从下级缓存重填上来，再将其写入。但是这种方式会存在一些问题：
@@ -157,7 +171,7 @@ Release 请求处理流程如下：
 
 2. 另一方面，如果在这段时间内，上层缓存正好又要访问被替换的数据块，因为此时数据块已经被释放，所以只能再次向下层缓存获取，从而使得访问延迟大大增加。
 
-CoupledL2 将替换路的选择和替换数据的释放延后到收到重填数据时。具体地，在请求进入缓存时，需要读取目录信息来判断是否命中。如果命中，则读取数据并返回（标准流程）。如果缺失，CoupledL2 不会根据读目录结果来选择一个替换块并安排替换块的释放，而只是为其分配一项 MSHR，并向下层缓存发请求获取数据。等待下层返回重填数据后，让 MSHR 任务再次读目录，此时再选出替换块，从数据存储单元读出替换块的数据，向下层缓存释放。最后再将新数据块写入存储单元。
+CoupledL2 将替换路的选择和替换数据的释放延后到收到重填数据时。具体地，在请求进入缓存时，需要读取目录信息来判断是否命中。如果命中，则读取数据并返回（标准流程）。如果缺失，CoupledL2 不会根据读目录结果来选择一个替换块并安排替换块的释放，而只是为其分配一项 MSHR，并向下层缓存发请求获取数据。等待下层返回重填数据后，让 MSHR 任务再次读目录，此时再选出替换块，从数据存储单元读出替换块的数据，向下层缓存释放。最后再将新数据块写入存储单元。对于整行 Put，数据已由请求携带，所等待的是 MakeUnique 的权限回复，随后采用同样的替换路查询与旧行释放机制。
 
 由于与DataStorage交互只在MainPipe的s3级，且DataStorage的SRAM是单端口的，因此我们无法利用一个MSHR Task同时完成 (1) 将被替换数据块的内容读出并向下层缓存释放，和 (2) 将新数据块写入。所以这 2 步操作需要分成 MSHR Refill 和 MSHR Release 两个任务，Refill先于Release发出。又基于另外 2 点考虑：(1) 读旧数据必须要早于写新数据，(2) 必须尽快向L1返回数据，所以我们为两个MSHR Task分别安排如下任务：
 
@@ -170,11 +184,15 @@ CoupledL2 支持多个相同 Set 请求的并行访问。对于多个相同 Set 
 
 ### Load 指令提前唤醒
 
-CoupledL2 每一次向 L1 DCache 重填数据时，都会在 GrantData 发出的前 3 拍发送 Refill Hint 信号送到核内的 LoadQueue。LoadQueueReplay 收到唤醒信号会立刻唤醒需要重发的 Load 进入 LoadUnit，Load 指令会在 LoadUnit 的 s2/s3 流水级收到重填的数据，从而减低 Load 在 L1 缺失时的访问延迟。
+CoupledL2 通过 CustomL1Hint 在响应数据返回前发送 Refill Hint，供核内 LoadQueue 提前唤醒等待回填的 Load。Hint 与响应按队列顺序处理，实际间隔受到流水线和响应通道握手的影响。
+
+矩阵 AccessAckData 也在 Hint 队列中占用一项，用于保持响应顺序，但不向 L1 发送普通 Hint。只有对应矩阵项位于队头时，Slice 才允许矩阵数据返回；矩阵接口握手同时释放该 Hint 项，见 [GrantBuffer](upstream/GrantBuffer.md)。
 
 ### 支持硬件预取
 
-CoupledL2 的硬件预取器会同时接收 BOP 预取请求和 L1 DCache 发送的预取请求，并将这些请求送进预取队列（PrefetchQueue）。预取队列满时会自动丢弃队头最老的预取请求，让更新的预取请求入队，从而保证预取时效性。
+CoupledL2 的硬件预取器接收 BOP 预取请求和 L1 DCache 发送的预取请求，并将这些请求送进各 Slice 的预取队列。传统推测预取使用 OverwriteQueue，满时允许新请求覆盖较老的请求。
+
+可选的矩阵引导预取利用 CUTE 提供的矩阵描述符和需求请求训练生成后续缓存行地址。该来源使用独立的无损队列，队列满时通过 ready 反压地址生成器，并与传统预取队列仲裁后进入 SinkA。`DefaultMatrixPrefetchConfig` 开启矩阵引导预取，`DefaultMatrixOnlyPrefetchConfig` 仅保留该来源；默认矩阵配置不启用。具体控制接口和配置边界见 [矩阵访存通路 HBL2](HBL2.md)。
 
 ### 支持请求融合
 
@@ -184,6 +202,8 @@ CoupledL2 的硬件预取器会同时接收 BOP 预取请求和 L1 DCache 发送
 2.	若满足合并条件，则新请求不需要进入队列被阻塞，而是直接进入同地址Prefetch对应的MSHR项中，并对该项标记mergeA，新增加一系列请求状态信息，使其包含两个请求的内容
 3.	当目标数据从L3返回后，MSHR项被唤醒，发送任务到主流水线进行处理。在主流水线中选择替换路并回填新数据，而数据块的meta则更新为Acquire请求处理完成后的状态，同时该请求还会将信息传入预取器作为训练
 4.	在处理请求响应时，这个合并请求会从主流水线进入GrantBuffer，对于Prefetch请求，L2返回预取响应；而对于Acquire请求，L2通过grantQueue队列对发出Acquire的上游节点返回数据和响应
+
+矩阵 Get 可被统计为访问了同地址的未完成预取，但不会生成 `mergeA` 任务。请求融合的条件仅包括 AcquireBlock / AcquirePerm，不能将该统计视为矩阵 Get 已参与融合。
 
 ### 支持硬件处理 Cache 别名
 
@@ -197,7 +217,7 @@ CoupledL2 的硬件预取器会同时接收 BOP 预取请求和 L1 DCache 发送
 
 ### 整体框图
 
-XSTile（包括香山核和 CoupledL2）结构框图如 [@fig:xstile] 所示。
+下图给出香山核与 CoupledL2 的通用连接关系；XSAI 增加的矩阵请求与返回通路见 [HBL2 矩阵通路图](HBL2.md#fig:xsai-hbl2) [矩阵访存通路 HBL2](HBL2.md)。
 
 ![XSTile 结构框图](./figure/CHI-CoupledL2-SoC.svg){#fig:xstile}
 

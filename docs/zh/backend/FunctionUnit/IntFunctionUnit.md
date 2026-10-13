@@ -1,11 +1,11 @@
 # IntFunctionUnit
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
-整数功能单元包括 jmp, brh ,i2f ,i2v ,f2v ,csr ,alu ,mul ,div, fence, bku; 每个功能单元支持的指令如下表：
+整数功能单元包括 jmp, brh, i2f, i2v, f2v, csr, alu, mul, div, fence, bku，以及矩阵扩展增加的规模设置、类型配置和 release 请求生成单元。矩阵乘加与置零请求在 Mf 执行块中生成，见 [MatrixFunctionUnit](./MatrixFunctionUnit.md)。每个功能单元支持的指令如下表：
 
 ## jmp
 
@@ -98,6 +98,23 @@ table: csr fu 支持的指令
 | csr      | wfi      |       | scalar |
 | csr      | wrs.nto  | zawrs | scalar |
 | csr      | wrs.sto  | zawrs | scalar |
+
+`minit` 同样由 csr 单元执行，用于将 mstatus.MS 置为 Initial。它不清空矩阵数据、mcfg 表或同步计数器；矩阵状态字段与当前实现边界见 [CSR](../CSR.md#sec:matrix-context)。
+
+## 矩阵配置与 release
+
+Table: 整数执行资源中的矩阵功能单元
+
+| 功能单元 | 指令 | 输入与结果 | 默认执行资源 |
+| -------- | ---- | ---------- | ------------ |
+| MSetMtilexRiWmf | msettilem/n/k、msettilemi/msettileni/msettileki | 整数或 10 位无符号立即数写对应 mx 物理寄存器 | MSET0 |
+| Mcfg | msetcfg | 检查整数源中的 type_code、table_sel，将原始配置写回 ROB | BJU3 |
+| Mcfg | mgetcfg | 译码阶段取得的 mcfg 原始值快照写整数 rd | BJU3 |
+| Mrelease | mrelease | 将同步计数器索引封装为 AMU release 请求 | MRELEASE |
+
+规模设置原样写入 XLEN 位状态，不在 MSet 单元中限制 M/N/K。`msetcfg` 的新值通过 ROB 中的 MCfgBuffer 提交，提交后刷新流水线，使后继指令重新取得配置；配置表的推测状态与恢复见 [MCfgGen](../CtrlBlock/MCfgGen.md)。
+
+Mrelease 不直接增加控制核中的同步计数器。其请求写回 [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md)，在 ROB 提交后送往 CUTE；计数器只在 CUTE 完成返回时更新。Mrelease 的 FU 延迟配置为 CertainLatency(0)，这描述请求生成通路，不描述矩阵任务完成时间。
 
 ## alu
 
@@ -220,6 +237,24 @@ table: fence fu 支持的指令
 | fence    | HFENCE.VVMA     |         | scalar |
 | fence    | HINVAL.GVMA     |         | scalar |
 | fence    | HINVAL.VVMA     |         | scalar |
+
+### 矩阵同步 {#sec:matrix-sync}
+
+Fence 增加 macquire、msyncregreset（译码常量 MSYNCRESET）和 mfence。默认配置有 32 个 64 位同步计数器，复位为 0。正向 mrelease 请求携带一个计数器索引，CUTE 的反向完成接口携带 32 位完成向量；一次有效返回可同时标记多个计数器。
+
+Table: Fence 矩阵同步行为
+
+| 指令 | 行为 | 状态转换 |
+| ---- | ---- | -------- |
+| macquire | 锁存整数源中的目标值和同步索引，等待计数器值大于等于目标值 | idle → wait_macquire → macquire → idle |
+| msyncregreset | 将指定同步计数器清零 | idle → msyncregreset → idle |
+| mfence | 请求清空标量 SBuffer，等待 sbIsEmpty 后完成 | idle → wait → fence → idle |
+
+`macquire` 和 `mfence` 在译码中同时设置 noSpec 与 blockBack，避免年轻指令越过等待点。msyncregreset 设置 noSpec。Fence 在等待 macquire 时仍可接受 CUTE 的完成返回；返回向量中每个置位项使对应计数器加 1，因此等待条件可由后续返回满足。
+
+若 msyncregreset 清零的索引与同周期返回向量中的置位项冲突，当前实现执行清零，并抑制该次返回向量的全部加一操作，包括其他索引。若没有这个冲突，则对所有置位项分别加一。
+
+`mfence` 当前只等待标量 SBuffer 排空，没有等待 CUTE 任务完成的条件。mrelease/macquire 建立的同步保证是此前 Store 及其依赖链完成，不等待无关的 Load 或 Compute，详见 [Release 的同步语义](../../cute/TaskController.md#sec:cute-release)。不能将 mfence 或 Release 的完成等同于所有矩阵访存或乘加已经完成。实现见 [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/Fence.scala)。
 
 ## bku
 

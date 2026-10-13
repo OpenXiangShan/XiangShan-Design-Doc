@@ -2,18 +2,19 @@
 
 ## 子模块列表
 
-| 子模块 | 描述 |
-| --- | --- |
-| [LoadUnit](LoadUnit.md)                       | Load 指令执行单元 |
-| [StoreUnit](StoreUnit.md)                     | Store 地址执行单元 |
-| [StdExeUnit](StdExeUnit.md)                   | Store 数据执行单元 |
-| [AtomicsUnit](AtomicsUnit.md)                 | 原子指令执行单元 |
-| [VLSU](VLSU/index.md)                          | 向量访存 |
-| [LSQ](LSQ/index.md)                             | 访存队列 |
-| [Uncache](Uncache.md)                         | Uncache 处理单元 |
-| [SBuffer](SBuffer.md)                         | Store 提交缓冲 |
-| [LoadMisalignBuffer](LoadMisalignBuffer.md)   | Load 非对齐缓冲 |
-| [StoreMisalignBuffer](StoreMisalignBuffer.md) | Store 非对齐缓冲 |
+| 子模块                                        | 描述                                 |
+| --------------------------------------------- | ------------------------------------ |
+| [LoadUnit](LoadUnit.md)                       | Load 指令执行单元                    |
+| [StoreUnit](StoreUnit.md)                     | Store 地址执行单元                   |
+| [StdExeUnit](StdExeUnit.md)                   | Store 数据执行单元                   |
+| [AtomicsUnit](AtomicsUnit.md)                 | 原子指令执行单元                     |
+| [VLSU](VLSU/index.md)                         | 向量访存                             |
+| [MLSU](MLSU.md)                               | 矩阵访存指令的地址准备与控制请求生成 |
+| [LSQ](LSQ/index.md)                           | 访存队列                             |
+| [Uncache](Uncache.md)                         | Uncache 处理单元                     |
+| [SBuffer](SBuffer.md)                         | Store 提交缓冲                       |
+| [LoadMisalignBuffer](LoadMisalignBuffer.md)   | Load 非对齐缓冲                      |
+| [StoreMisalignBuffer](StoreMisalignBuffer.md) | Store 非对齐缓冲                     |
 
 ## 设计规格
 
@@ -23,6 +24,7 @@
 - 支持 RVA 原子指令扩展
 - 支持 RVH 虚拟化扩展
 - 支持 RVV 向量扩展
+- XSAI 支持矩阵访存指令的地址准备和重发，实际矩阵数据由 CUTE 经二级缓存搬运
 - 支持 Cacheable 地址空间的 Load / Store / Atomic 访问
 - 支持 MMIO 与 Uncache 地址空间的 Load / Store 访问（不包括向量访存指令和非对齐访存指令）
 - 支持 Zicbom 和 Zicboz 等 cache 操作指令，支持 Zicbop 软件预取指令
@@ -71,6 +73,9 @@
 | VSMergeBuffer | 16 |
 | VSegmentBuffer | 8 |
 | VFOFBuffer | 1 |
+| MLSU（XSAI） | 1 |
+| VirtualMlsQueue（XSAI） | 8 |
+| MlsQueueReplay（XSAI） | 8 |
 | Load TLB | 48-entry fully associative |
 | Store TLB | 48-entry fully associative |
 | L1 Prefetch TLB | 48-entry fully associative |
@@ -119,6 +124,12 @@ Store 数据流水线从发射队列接收到数据后将数据写回到 StoreQu
 对于除 Segment 以外的向量访存指令，VLSplit 和 VSSplit 接收从向量访存发射队列发射的 uop，将 uop 拆分成若干元素，VLSplit 和 VSSplit 会将这些元素发射到 LoadUnit / StoreUnit 上执行，执行流程和标量访存相同。元素执行完成后会写回到 VLMerge / VSMerge，Merge 模块负责收集元素、组合成 uop 并写回向量寄存器堆。
 
 Segment 指令由独立的 VSegmentUnit 模块处理。
+
+### 矩阵访存指令的执行
+
+XSAI 的矩阵访存指令发往独立的 MLSU。MLSU 使用整数基址、步长和 mx 中的规模状态，完成起始基址的 DTLB 翻译、PMP 检查及访存描述符生成。描述符写回后端，经 ROB 提交和 AmuCtrlBuffer 转发后，才由 CUTE 发起实际矩阵数据访问。
+
+矩阵数据经二级缓存的专用返回通路进入 CUTE，不通过标量 LoadUnit 或 StoreQueue 搬运。矩阵 TLB 缺失由独立 MLSQ 重发；其原因列表、回收条件及完成语义不等同于标量 LoadQueue。详见 [矩阵访存指令执行单元 MLSU](MLSU.md) 和 [矩阵访存队列 MLSQ](LSQ/MLSQ.md)。
 
 ### Load 指令重发
 

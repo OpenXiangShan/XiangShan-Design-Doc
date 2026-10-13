@@ -1,9 +1,9 @@
 # FpFunctionUnit
 
-- 版本：V2R2
+- 版本：V2R2A
 - 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- 日期：2026/10/13
+- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 浮点运算功能单元包括 falu, fmac, fcvt, fDivSqrt; 每个功能单元支持的指令如下表：
 
@@ -84,6 +84,8 @@ table: fcvt 支持的指令
 
 | 功能单元 | 支持指令    | 扩展 | 描述   |
 | -------- | ----------- | ---- | ------ |
+| fcvt     | FCVT.BF16.S | BF16 | scalar |
+| fcvt     | FCVT.S.BF16 | BF16 | scalar |
 | fcvt     | FROUND.H    | zfa  | scalar |
 | fcvt     | FROUND.S    | zfa  | scalar |
 | fcvt     | FROUND.D    | zfa  | scalar |
@@ -113,6 +115,14 @@ table: fcvt 支持的指令
 | fcvt     | FMV.X.D     | D    | scalar |
 | fcvt     | FMV.X.W     | F    | scalar |
 | fcvt     | FMV.X.H     | Zfh  | scalar |
+
+### BF16 格式转换
+
+FCVT.BF16.S 与 FCVT.S.BF16 通过已有 fcvt 通路执行，分别在 FP32 和 BF16 之间转换。BF16 使用 1 位符号、8 位指数和 7 位显式尾数，与 FP16 的指数和尾数划分不同。
+
+FP32 转 BF16 保留输入高 16 位，对舍弃的低 16 位按舍入模式处理，并产生 NV、OF、UF、NX 标志。BF16 转 FP32 对有限值在尾数低位补 16 个 0，转换精确；NaN 规范化为 canonical NaN，sNaN 置 NV。标量路径检查 NaN boxing，结果按标量浮点寄存器格式装箱。
+
+此处是标量转换支持；向量 BF16 转换与加宽乘加见 [VecFunctionUnit](./VecFunctionUnit.md#sec:bf16-vector)，具体转换算法见 [VFPU](../VFPU.md#sec:bf16-convert)。
 
 ## fDivSqrt
 
