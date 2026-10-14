@@ -13,9 +13,9 @@
 
 ![TaskController 命令缓冲、发射窗口及完成路径](./figure/cute-task-window.svg){#fig:cute-task-window}
 
-[@fig:cute-task-window] 中的 decoded FIFO 保存命令和静态读写集合；发射窗口保存任务状态以及对更老任务的依赖。任务发射后，对应 FU tracker 以 `ownerSlot` 记录其窗口槽号。模块完成时按拥有者更新原槽；退休始终检查 `winHead`，不按完成信号到达次序释放槽。
+[@fig:cute-task-window] 中的 decoded FIFO 保存命令和静态读写集合；发射窗口保存任务状态以及对更老任务的依赖。任务发射后，对应 FU tracker 以 `ownerSlot` 记录其窗口槽号。模块完成时按拥有者更新原槽；退休检查 `winHead`，按入窗顺序释放槽。
 
-这里的窗口退休只表示 CUTE 释放任务记录。控制核矩阵指令的执行、ROB 提交和同步寄存器维护见控制核相关章节，不能用 CUTE 的 `completed` 或 `retire` 直接替代 CPU 提交状态。
+窗口退休释放 CUTE 的任务记录。控制核另行维护矩阵指令的执行和 ROB 提交状态，并通过 Release 完成脉冲更新同步寄存器；两侧状态分别由各自的控制逻辑推进。
 
 ## 命令入口与译码
 
@@ -40,7 +40,7 @@ Table: 任务分类和执行资源 {#tbl:cute-task-fu}
 | `Release` | 更新选定同步寄存器的完成状态 | 调度器内执行 |
 | `NopLike` | 无矩阵数据操作 | 调度器内执行 |
 
-加载类别 `isA`、`isB`、`isacc` 必须 one-hot。CUTE 内部的 AB 和 C 编号各取寄存器编号的低两位，类别由命令语义决定。Store 的数据搬运路径是 CML；依赖识别中对非累加寄存器 store 保留的分支不构成独立的 AB store 数据通路。
+加载类别 `isA`、`isB`、`isacc` 必须 one-hot。CUTE 内部的 AB 和 C 编号各取寄存器编号的低两位，类别由命令语义决定。Store 发射统一配置 CML，由 CML 读取选定的 C 寄存器；依赖识别仍按命令的寄存器类别建立读集合。Store 的类别要求见 [存储边界](MemoryLoader.md#sec:cute-store-boundary)。
 
 ## 发射窗口
 
@@ -79,7 +79,7 @@ Table: 矩阵寄存器依赖规则 {#tbl:cute-task-dependencies}
 
 Compute 对 C 同时读写，因此后续读取、覆盖同一 C 的任务必须等待 Compute 完成。A、B 读完成独立维护：若后续加载只覆盖 A 所在 AB 寄存器，只需要相应的 A 读完成。依赖建图分别记录 A、B 读完成；实际计算仍要求两个输入选择不同的 AB 寄存器，见 [矩阵寄存器](MatrixReg.md)。
 
-例如，依次进入窗口的任务为 `LoadA tr0`、`LoadB tr1`、`Compute tr0,tr1,acc0`、`LoadA tr0`、`Store acc0`。Compute 等待前两个加载完成；第二条 `LoadA tr0` 等待 Compute 的 `readADone`，可以在 C 结果写回完成前开始；Store 等待 Compute 的整体完成。这个重叠依赖 A 操作数已经被阵列接收，不依赖 PE 结果提前就绪。
+例如，依次进入窗口的任务为 `LoadA tr0`、`LoadB tr1`、`Compute tr0,tr1,acc0`、`LoadA tr0`、`Store acc0`。Compute 等待前两个加载完成；第二条 `LoadA tr0` 等待 Compute 的 `readADone`，可以在 C 结果写回完成前开始；Store 等待 Compute 的整体完成。A 的全部操作数被阵列接收后，后续加载即可覆盖 tr0，同时 PE 继续处理在途数据并写回 C。
 
 ## 最老就绪发射
 
@@ -101,9 +101,9 @@ AML/BML/CML load/CML store 完成时，设置拥有者槽的 `completed` 并释�
 
 Release 入窗时建立对所有更老 Store 的完成依赖。Release 发射时，在 `mrelease` 上产生一个 Valid 脉冲，将指定 `msyncRd` 位置为真，并将自身标记为已完成。此接口没有 ready，接收端按脉冲更新同步状态。
 
-Release 不等待无关的老 Load 或 Compute。它可以在这些任务仍执行时产生同步完成脉冲，也可能先产生脉冲、再因窗口头较老任务未完成而延后自身退休。若某个老 Store 依赖前面的 Compute，则 Release 通过等待 Store 间接等待这条依赖链。
+所有更老 Store 完成后，Release 满足依赖就绪条件，参与最老就绪发射选择；此时无关的老 Load 或 Compute 可以继续执行。若窗口头仍有未完成任务，Release 产生脉冲后保留在窗口中，直到按序退休。若某个老 Store 依赖前面的 Compute，则这条依赖链也会延后 Release。
 
-因此 Release 的直接保证是此前 Store 已取得 CML 所定义的完成应答；它不是所有 CUTE 任务的全局清空条件，也不代替 CPU 与矩阵访问之间的全部内存排序规则。
+Release 的完成条件覆盖此前 Store 的 CML 写应答。控制核的 `mrelease` 完成返回会使 Fence 更新对应同步计数器；`macquire` 等待目标计数器达到指定值。若需要排空标量存储缓冲，`mfence` 单独请求 SBuffer flush 并等待 `sbIsEmpty`，其完成条件与 CUTE Release 分开。详见[矩阵同步](../backend/FunctionUnit/IntFunctionUnit.md#sec:matrix-sync)。
 
 ## 实现对应
 

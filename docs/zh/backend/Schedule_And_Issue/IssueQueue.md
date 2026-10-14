@@ -48,7 +48,7 @@ MfScheduler 例化 IssueQueueMfImp，复用普通 IQ 的入队项、年龄选择
 
 mx 目的使用独立的写回忙表读写接口。出队选择将 mx 写端口冲突掩码与现有 Int/FP/V/V0/Vl 掩码共同考虑，发射失败时仍按 OG0/OG1 回应撤销相应预留。MxWenCopy 参与复制唤醒信息，与 pdestCopy 配对使用。
 
-矩阵访存 IQ 位于 MemScheduler，携带 mlsqIdx，并接收矩阵访存执行反馈及队列提交/取消状态。MLSU 的地址检查成功不表示矩阵数据搬运完成；实际 CUTE 请求仍经 ROB 后的 AMU 控制缓冲发送。
+矩阵访存 IQ 位于 MemScheduler，携带 mlsqIdx，并接收矩阵访存执行反馈及队列提交/取消状态。MLSU 完成地址检查后写回控制请求，请求经 AMU 控制缓冲等待 ROB 提交，再发送到 CUTE 执行数据搬运。
 
 ## 整体框图
 

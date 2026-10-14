@@ -239,7 +239,7 @@ Wait 状态项以 ```w_``` 为首命名，其概览如下：
 - 在完成 Get 或 Alias 替换流程时向上游发送的 Probe 收到了脏数据
 - 原始请求为 PutFullData，需要写入保存在 RefillBuffer 中的新数据
 
-若替换路有效，MainPipe 先读出旧行并存入 ReleaseBuffer，再由后续释放任务将新行写入 DataStorage。收到 denied 时，响应仍携带错误信息，但不进行该次回填的 DataStorage、Tag 和元数据写入。
+若替换路有效，MainPipe 先读出旧行并存入 ReleaseBuffer，再由后续释放任务将新行写入 DataStorage。MSHR 将收到的 denied 保存到响应任务中，并禁止该次回填写入 DataStorage、Tag 和元数据。
 
 #### 矩阵 Put 的权限与数据
 
@@ -247,9 +247,9 @@ PutFullData 未命中、命中 BRANCH 或命中且存在上层 client 时，分�
 
 MakeUnique 是不返回旧行数据的权限事务。MSHR 收到其 Comp 回复后，将 `w_grantfirst`、`w_grantlast` 和 `w_grant` 置为完成；必要的 Probe 回复全部到达后，才可发出 `mp_grant` 回填任务。Put 缺失也会查询替换路，并在需要时按原有流程释放旧缓存行。
 
-Put 回填任务的响应类型为 AccessAck，param 为 0。任务将 `useProbeData` 置为 false，始终选择 RefillBuffer 中的 Put 新数据，避免上层 ProbeAckData 携带的旧内容覆盖本次写入。更新后的行状态为 TIP、dirty 为 1、clients 为 0，表示新数据由 L2 持有，且上层副本已被撤销。
+Put 回填任务的响应类型为 AccessAck，param 为 0。任务将 `useProbeData` 置为 false，选择 RefillBuffer 中的 Put 新数据。更新后的行状态为 TIP、dirty 为 1、clients 为 0，表示新数据由 L2 持有，且上层副本已被撤销。
 
-AccessAck 通过普通 D 通道返回，矩阵索引由 AmeIndex 字段携带；其发送不代表省略了权限获取、Probe 或必要的替换任务。MSHR 仍按所有 Schedule / Wait 项均完成的条件释放。
+AccessAck 通过普通 D 通道返回，矩阵索引由 AmeIndex 字段携带。MSHR 继续跟踪本次请求的权限、Probe 和替换操作，在所有 Schedule / Wait 项均完成后释放。
 
 #### 下游 CopyBackWrData 任务（```mp_cbwrdata```）
 

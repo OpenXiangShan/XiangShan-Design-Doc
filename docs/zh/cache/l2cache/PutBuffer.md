@@ -10,11 +10,11 @@
 
 ## 功能描述
 
-PutBuffer 用于保存矩阵 PutFullData 请求自带的写数据。请求控制信息通过 RequestBuffer 进入主流水线，写数据保留在 PutBuffer，由任务的 `bufIdx` 关联。这样，TaskBundle 不需要携带整行数据。
+PutBuffer 保存矩阵 PutFullData 请求携带的写数据。请求控制信息通过 RequestBuffer 进入主流水线，TaskBundle 中的 `bufIdx` 指向保存整行数据的 PutBuffer 项。
 
 ### 特性 1：分配与写入
 
-SinkA 接收首 beat 时，PutBuffer 从无效项中按优先级选出一项，写入当前 beat，并将项号保存到 `sel_r`。同一条 Put 的后续 beat 使用 `sel_r`，不重新选择空闲项。即使其间其他项被释放，也不会改变该条请求的数据存放位置。
+SinkA 接收首 beat 时，PutBuffer 从无效项中按优先级选出一项，写入当前 beat，并将项号保存到 `sel_r`。同一条 Put 的后续 beat 使用 `sel_r`，保证两个 beat 写入同一缓冲项。
 
 每次写握手按照 beat 编号更新相应的 32 B 数据。只有最后一个 beat 写入后才置该项的 valid，表示整行已经收集完成。SinkA 同时把所选项号放入 Put 任务的 `bufIdx`，随后由 RequestBuffer 保留该索引，直至任务进入主流水线。
 
@@ -24,7 +24,7 @@ PutBuffer 的所有有效项均被占用时，写 ready 拉低，阻塞新的 Pu
 
 RequestArb 在 s2 识别普通 A 通道 PutFullData 任务，使用 `bufIdx` 发起一次整行读请求。PutBuffer 将该项的两个 beat 拼成 DSBlock 并寄存，下一拍交给 MainPipe，同时清除该项 valid。
 
-释放 PutBuffer 不表示写操作已经完成，而是表示整行数据已经移交主流水线。MainPipe 在 s3 根据目录结果选择后续位置：
+PutBuffer 项在整行数据移交主流水线时释放。MainPipe 在 s3 根据目录结果安排数据写入：
 
 - 命中可写状态且没有上层 client：直接写入 DataStorage。
 - 缺失、权限不足或存在上层 client：将数据写入新分配 MSHR 对应的 RefillBuffer，等待一致性操作和后续回填任务。
@@ -42,4 +42,4 @@ Table: PutBuffer 主要接口
 | r | RequestArb → PutBuffer | Valid 读请求，包含缓冲项号 id |
 | resp.data | PutBuffer → MainPipe | 寄存后的整行 DSBlock |
 
-读接口不使用 ready。读取时整行数据已被主流水线接收，后续等待由 RefillBuffer 和 MSHR 承担。
+读接口采用 Valid 协议，读请求有效时寄存整行数据并释放缓冲项。需要等待一致性操作的写请求由 RefillBuffer 保存数据、MSHR 跟踪控制状态。

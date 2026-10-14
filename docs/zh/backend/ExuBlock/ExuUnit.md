@@ -73,7 +73,7 @@ busy 用于表示当前 ExeUnit 是否处于繁忙状态。对于延迟确定的
 
 ## 设计规格
 
-启用矩阵扩展时，Backend 有 Int、Fp、Vf、Mf 四个 ExuBlock，各自按配置包含若干 ExeUnit。下表以 DefaultMatrixConfig 为口径。
+启用矩阵扩展时，Backend 有 Int、Fp、Vf、Mf 四个 ExuBlock，各自按配置包含若干 ExeUnit。DefaultMatrixConfig 的执行资源如下表所示。
 
 intExuBlock 中包含了 10 个 ExeUnit，每个 ExeUnit 对应的功能如下：
 
@@ -124,7 +124,7 @@ Table: mfExuBlock 中的 ExeUnit
 | MEX0 | Mma，生成矩阵乘法控制请求 |
 | MEX1 | Marith，生成 mzero 控制请求 |
 
-MLSU0 配置在 MemScheduler，其执行流水线位于 MemBlock。Mcfg 与 CSR/Fence 共用 BJU3，类型配置不在 MEX0 内执行。
+MLSU0 配置在 MemScheduler，其执行流水线位于 MemBlock。Mcfg 与 CSR/Fence 共用 BJU3。
 
 ExeUnit 根据 FU 的 needAmuCtrl、needMxWen、needSrcMcsr 等配置生成接口。mcfgReadRaw 和 mmaMcfgReadRaw 随输入传入 FU；mxWen 和 amuCtrl 分别进入物理写回及 ROB 控制写回。矩阵 FU 同样按 robIdx 参与 flush 过滤。
 

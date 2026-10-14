@@ -49,7 +49,7 @@ Table: 子模块列表
 
 Rob 模块包括：RobEnqPtrWrapper 负责入队指针，NewRobDeqPtrWrapper 负责出队指针，Rab 负责维护 commit 或 walk 时各个 rat 的状态，VTypeBuffer 负责维护 Vtype 的状态，ExceptionGen 负责产生异常，SnapshotGenerator 负责产生快照。
 
-Rob 模块主体是一个容量由 RobSize 指定的循环队列，DefaultMatrixConfig 继承的默认容量为 256，指针包含 1 比特 flag 和 log2Ceil(RobSize) 比特 value，当 value 的值从最大值加 1 的时候，flag 会反转，以此来区分指令的顺序。当队列空的时候，enqptr === deqptr，flag 和 value 均相等，当队列满时，enqptr.value === deqptr.value，enqptr.flag =/= deqptr.flag，value 相等 flag 不等。每个RobEntry包含的信号见下表。
+Rob 模块主体是一个容量由 RobSize 指定的循环队列，DefaultMatrixConfig 沿用默认 RobSize=160。指针包含 1 比特 flag 和 log2Ceil(RobSize) 比特 value，当 value 从最大值加 1 时 flag 反转，用于区分指令顺序。队列为空时 enqptr 与 deqptr 的 flag、value 均相等；队列满时 value 相等而 flag 不等。每个 RobEntry 包含的信号见下表。
 
 Table: RobEntry 信号列表
 
@@ -70,11 +70,11 @@ Table: RobEntry 信号列表
 | stdWritebacked   | store 指令是否写回                                     |
 | uopNum           | 需要写回的 uop 个数                                    |
 
-Rob采用分8个Bank读的设计，根据 robidx 的低 3 比特分 bank，例如 robBanks0 包含的 robidx（十进制）: 0 8 16 24 32 ...，robBanks1 包含的 robidx（十进制）: 1 9 17 25 33 ...，每 8 个 entry 为一个 Line，0-7，8-15，16-23 ...。DefaultMatrixConfig 的 RobSize=256，因此每个 Bank 有 32 个 Entry，一共有 32 个 Line；下图沿用 bank 组织方式示意，容量按配置展开。
+Rob采用分8个Bank读的设计，根据 robidx 的低 3 比特分 bank，例如 robBanks0 包含 robidx 0、8、16、24、32 等，robBanks1 包含 robidx 1、9、17、25、33 等，每 8 个 entry 为一个 Line。DefaultMatrixConfig 的 RobSize=160，每个 Bank 有 20 个 Entry，共 20 个 Line；RobSize 变化时，Bank 和 Line 数量按参数展开。
 
 ![rob_entries](./figure/rob_entries.png)
 
-使用独热的 Line 指针（RobSize/8 bit，默认 32 bit）来读取 RobEntry 数据，从 8 个 Bank 中读出当前 Line 和下一 Line 的数据（共 16 个 Entry），经过当拍的写回信息更新后，从两个 Line 中选一个 Line 写到 8 个 robDeqGroup 寄存器中（如果第一个 Line 的指令当拍全部提交就选第二个 Line），指令提交时从 8 个 robDeqGroup 中读数据进行提交。hasCommitted（8 bit）表示当前行每一条指令是否已经提交，作为其它指令是否可以提交的条件之一，allCommitted 表示当前行全部提交，是切换行指针的控制信号，allCommitted 为 1 时，选读出的第二行数据，也就是后 8 个数据更新后写入到 robDeqGroup。
+使用独热的 Line 指针（RobSize/8 bit，默认 20 bit）来读取 RobEntry 数据，从 8 个 Bank 中读出当前 Line 和下一 Line 的数据（共 16 个 Entry），经过当拍的写回信息更新后，从两个 Line 中选一个 Line 写到 8 个 robDeqGroup 寄存器中（如果第一个 Line 的指令当拍全部提交就选第二个 Line），指令提交时从 8 个 robDeqGroup 中读数据进行提交。hasCommitted（8 bit）表示当前行每一条指令是否已经提交，作为其它指令是否可以提交的条件之一，allCommitted 表示当前行全部提交，是切换行指针的控制信号，allCommitted 为 1 时，选读出的第二行数据，也就是后 8 个数据更新后写入到 robDeqGroup。
 
 ![rob_enq](./figure/rob_enq.svg)
 
@@ -127,15 +127,15 @@ Msetcfg 写回时保存新的 raw 配置和 illegalInstr 结果。MCfgBuffer 从
 
 MMA、MLS、mzero、mrelease 的 amuCtrl 写回到 [AmuCtrlBuffer](./AMUCtrlBuffer.md)。该缓冲与 ROB 同步分配、提交和重定向；只有已写回且已正常提交的项才能发出请求。CUTE 背压可以在 ROB 退休之后继续保存请求，并通过缓冲容量反馈到 ROB 入队条件。
 
-ROB 提交仅表示控制核的检查和排序完成。CUTE 的实际访存与计算完成需要完成同步；每拍至多一个控制请求通过 XSCore 仲裁器，不能由 ROB 的 CommitWidth 推导矩阵请求吞吐。
+ROB 提交后，控制请求每拍至多一个通过 XSCore 仲裁器。CUTE 接收请求后执行访存与计算，软件通过矩阵同步指令等待相应任务完成。
 
-dirtyMs 在有效提交 lane 上取或，寄存后作为 dirty_ms 送 CSR。MLS 的 mcommit 和 pendingmls 反馈到访存队列，区别于 CUTE 完成返回。
+dirtyMs 在有效提交 lane 上取或，寄存后作为 dirty_ms 送 CSR。MLS 的 mcommit 和 pendingmls 向访存队列反馈控制核提交状态，CUTE 通过完成接口返回矩阵任务状态。
 
 ### 差分状态与提交停顿观察
 
-当前 RAB 根据 newCommitSize 输出 diffCommits，用于更新差分 RAT，并包含 mx 映射。矩阵相关观测另有 MCFG 状态、AMU 请求事件、同步事件和 CUTE store 事件，不能只用普通指令提交事件比较矩阵结果。
+RAB 根据 newCommitSize 输出 diffCommits，更新包含 mx 映射的差分 RAT。矩阵差分接口分别提供 MCFG 状态、AMU 请求事件、同步事件和 CUTE store 事件，覆盖配置、请求发送与数据存储状态。
 
-ROB 的提交停顿计数排除 MMIO 和允许的 WFI 等待场景。当前 mcorepwr 不提供控制提交停顿检查的控制位。Palladium 环境另有独立 CommitStuckFinish 黑盒，在达到调试超时后打印信息并结束仿真；其他环境该黑盒的 fired 输出固定为 0。这是仿真观察机制，不是矩阵运算完成或架构异常。
+ROB 的提交停顿计数排除 MMIO 和允许的 WFI 等待场景，mcorepwr 未设置控制该检查的字段。Palladium 环境使用 CommitStuckFinish 黑盒，在达到调试超时后打印信息并结束仿真；其他环境该黑盒的 fired 输出固定为 0。
 
 ## 总体设计
 

@@ -25,11 +25,11 @@ Table: GrantBuffer 的资源统计
 | 等待 GrantAck 的资源 | inflightGrant 有效项数 | 来自 A 通道的任务 | 总数 ≥ N | 总数 ≥ N − 1 |
 | 预取响应队列 | pftRespQueue 项数 | 来自 A 通道的任务 | 总数 ≥ 10 | 总数 ≥ 9 |
 
-流水线统计不计入 s1，并通过更保守的阈值保留入口空间。计入 A 通道任务不代表每条任务最终都需要 GrantAck，而是入口处对可能使用资源的任务进行保守估计。
+流水线统计使用 s2～s5 的有效任务，MSHR 阈值额外预留一项供 s1 使用。等待 GrantAck 的资源检查统一计入流水线中的 A 通道任务，以预留可能分配的 inflightGrant 项。
 
 A 通道在任意一种资源不足时被阻塞；C 通道在响应任务队列资源不足时被阻塞；MSHR 任务在任意一种对应资源不足时被阻塞。对于 B 通道，只要存在同地址的 inflightGrant 项，就需要等待 GrantAck 完成，避免 Probe 越过尚未完成的 Grant。
 
-矩阵响应虽然不占普通 D 通道的数据 beat，仍占用响应队列。矩阵接口长时间未就绪时，队列占用会通过上述入口检查反压后续请求。
+矩阵响应占用响应队列，并从独立接口返回数据。矩阵接口长时间未就绪时，队列占用通过上述入口检查反压后续请求。
 
 ### 特性 2：普通 D 通道数据宽度
 
@@ -39,7 +39,7 @@ A 通道在任意一种资源不足时被阻塞；C 通道在响应任务队列�
 
 ### 特性 3：矩阵数据返回
 
-队头任务满足 `matrixTask && opcode == AccessAckData` 时，GrantBuffer 不生成普通 D 通道数据响应，而是从 MatrixDataOut 返回完整缓存行：
+队头任务满足 `matrixTask && opcode == AccessAckData` 时，GrantBuffer 从 MatrixDataOut 返回完整缓存行：
 
 Table: MatrixDataOut 字段
 
@@ -59,7 +59,7 @@ MainPipe 中的 CustomL1Hint 按响应顺序记录提前唤醒信息。普通 D 
 
 矩阵 AccessAckData 在 Hint 队列中设置 `isMatrixData`，不发送普通 l1Hint。Slice 将 GrantBuffer 的矩阵数据 valid 与“Hint 队头为矩阵响应”的条件相与；同时将矩阵接口 ready 和该条件返回给 GrantBuffer。MatrixDataOut 握手后，同步弹出对应 Hint 项。
 
-因此矩阵响应需要同时满足三个条件：它位于响应队头、普通 D 通道没有暂存的 beat、对应矩阵 Hint 已到队头。独立的数据接口不会绕过这一配对顺序，也不会将一拍整行返回当作普通两拍 D 数据响应处理。
+矩阵响应的发送条件为：响应任务位于 grantQueue 队头，grantBuf 中没有待发送的普通 D 通道 beat，对应的矩阵项位于 Hint 队头。一次矩阵接口握手同步弹出响应任务、两个数据队列项及匹配的 Hint 项。
 
 ## 整体框图
 

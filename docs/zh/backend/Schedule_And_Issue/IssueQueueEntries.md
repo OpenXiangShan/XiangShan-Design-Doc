@@ -53,11 +53,11 @@ Entries 不处理唤醒逻辑，只将唤醒和取消信号传入所有 entry。
 
 ### mx 源状态
 
-XSAI 的源状态增加 SrcType.mx，用于 mtilem/n/k。发射项根据物理源号和 mxWen 匹配整数侧规模写的写回或唤醒，更新 ready 与数据来源。MfScheduler 的五源指令中，后面三个源可能是 mx，不能套用向量指令“第 4 个源一定是 v0、第 5 个源一定是 vl”的规则。
+SrcType.mx 用于 mtilem/n/k。发射项根据物理源号和 mxWen 匹配整数侧规模写的写回或唤醒，更新 ready 与数据来源。MfScheduler 的五源指令按各源的 SrcType 处理依赖，MMA 的 src(2..4) 对应三个 mx 规模源。
 
 入队延迟唤醒也按寄存器源类型处理 mx。EnqEntry、OthersEntry 和普通复杂项沿用相同的转移、清除和重定向机制。取消信号使用 LdWakeupCnt 对应的标量 load 通道，MLSU 的重放由矩阵访存反馈处理。
 
-mcfgReadView、mmaMcfgReadRaw 是随项保存的控制元数据；矩阵数据寄存器号随立即数字段传递。它们不在此处建立 CUTE 数据寄存器的物理重命名关系。
+mcfgReadView、mmaMcfgReadRaw 作为控制元数据随项保存，CUTE 的矩阵数据寄存器号通过立即数字段传递。
 
 ## 整体框图
 

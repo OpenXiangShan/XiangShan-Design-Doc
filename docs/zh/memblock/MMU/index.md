@@ -230,7 +230,7 @@ Page Table Walker 和 Last Level Page Table Walker 均可以向内存发送请�
 
 XSAI 在 MemBlock 的 Load DTLB 请求组中增加 MLSU 请求端口，复用非阻塞 DTLB、Repeater 和 L2 TLB。矩阵 Load / Store 分别发送读、写翻译命令，并使用对应的 PMP / PMA 权限结果。`DefaultMatrixConfig` 将 L2 TLB 的数据侧过滤项数 `dfilterSize` 配置为 48。
 
-MLSU 翻译的是矩阵访存描述符的起始基址。描述符中的物理基址和行步长随后交给 CUTE；CUTE LocalMMU 负责内部访存请求的仲裁与标识路由，没有页表遍历功能。因此，不能将此路径解释为对矩阵的每一行、每个跨页元素分别翻译和检查权限。当前的地址与异常边界见 [MLSU](../LSU/MLSU.md)。
+MLSU 对矩阵访存描述符的起始基址执行翻译和权限检查，再将物理基址、行步长与规模交给 CUTE。CUTE 根据这些信息生成后续行地址，LocalMMU 负责请求仲裁和标识路由；后续行不会逐行执行页表遍历或权限检查。地址要求和异常处理见 [MLSU](../LSU/MLSU.md)。
 
 ### 原有请求接口
 

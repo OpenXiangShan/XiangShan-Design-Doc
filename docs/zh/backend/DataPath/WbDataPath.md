@@ -51,7 +51,7 @@ wbDataPath 接收来自不同执行单元（整数执行单元、浮点执行单
 
 MxWB 使用参数化 RealWBCollideChecker。只有执行配置声明 writeMxRf 且输出 mxWen 有效的请求才进入 mx 写仲裁器。仲裁结果转换为 toMxPreg，发送给 DataPath、Dispatch BusyTable 和 Scheduler 写回唤醒路径。
 
-矩阵相关执行结果存在两种用途：msettile 的数据写 mx RF；MMA、mzero、mrelease 和 MLS 的 amuCtrl 经控制写回送 AmuCtrlBuffer。后一类可以不写任何控制核物理寄存器，但仍需要完成 ROB 写回。CUTE 的矩阵数据结果不会写入 mx RF。
+Msettile 的结果写入 mx RF；MMA、mzero、mrelease 和 MLS 的 amuCtrl 经控制写回送往 AmuCtrlBuffer，并完成 ROB 写回。矩阵运算的数据结果保存在 CUTE 中。
 
 ### 输出
 
@@ -63,7 +63,7 @@ MxWB 使用参数化 RealWBCollideChecker。只有执行配置声明 writeMxRf �
 
 只有输出成功握手的功能单元，其输出数据能写回ROB，在CtrlBlock中打一拍，并判断写回数据是否刷新流水线、触发异常、trigger fire、重播，之后发送给ROB，用于ROB写回。
 
-amuCtrl 随执行单元输出保留 op 和 payload，经成功写回进入提交后控制缓冲。矩阵参数异常与普通异常信息一起进入 CtrlBlock/ROB；重定向过滤仍由 robIdx 判断，写回不意味着请求已经发送到 CUTE。
+amuCtrl 随执行单元输出保留 op 和 payload，成功写回后保存在 AmuCtrlBuffer，等待 ROB 提交。矩阵参数异常与其他异常信息一起进入 CtrlBlock/ROB，写回的重定向过滤由 robIdx 判断。
 
 ### 整体框图
 

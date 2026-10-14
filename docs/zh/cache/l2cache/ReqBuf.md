@@ -9,7 +9,7 @@
 ### 特性1： 请求融合
 当 RequestBuffer 接收到的 Acquire 请求和某一项 MSHR 中的预取请求有相同地址时，RequestBuffer 会将合并请求（aMergeTask）发送到相应的 MSHR entry，该项 MSHR 会被标注mergeA并更新MSHR的相关域。
 
-可融合的需求请求仅包括 AcquireBlock / AcquirePerm。矩阵 Get 虽然会参与同地址晚到预取的统计，但不会生成 `mergeA`，仍需按照通常的请求冲突条件等待后续处理。
+可融合的需求请求类型为 AcquireBlock / AcquirePerm。矩阵 Get 命中同地址的未完成预取时更新晚到预取统计，并按请求冲突条件等待后续处理。
 
 ### 特性2：请求接收条件
 RequestBuffer 入口的请求在哪些情况下允许被接收：

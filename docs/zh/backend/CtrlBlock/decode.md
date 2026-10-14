@@ -123,7 +123,7 @@ vtypeArch更新存在2种情况：
 
 ## 矩阵指令译码
 
-MatrixDecoder 在启用 MatrixExtension 时加入统一译码表。当前矩阵指令采用简单译码路径，不经过向量复杂译码器拆成多条矩阵微操作。向量 BF16 和 exp2 指令仍沿用各自的向量拆分路径。
+MatrixDecoder 在启用 MatrixExtension 时加入统一译码表，矩阵指令通过简单译码路径生成单条微操作。向量 BF16 和 exp2 指令使用向量拆分路径。
 
 Table: 矩阵指令译码分类
 
@@ -139,9 +139,9 @@ Table: 矩阵指令译码分类
 | 完成同步 | mrelease | mrelease | 构造提交后发送的控制请求 |
 | 等待、重置和内存同步 | macquire、msyncregreset、mfence | fence | 采用各自的顺序控制属性 |
 
-当前有效表共 31 个指令模式。rocket-chip 中存在 msa.whole、msb.whole 的编码定义，但当前 MatrixDecoder 未接入，不能以编码常量存在作为实现支持的依据。
+MatrixDecoder 的有效表共 31 个指令模式，整寄存器访存包含 mla.whole、mlb.whole、mlc.whole 和 msc.whole。rocket-chip 定义的 msa.whole、msb.whole 编码未接入该译码表。
 
-`needAmuCtrl` 对 mma、marith、mls、mrelease 置位。`mxWen` 只表示写规模状态，矩阵乘法或加载矩阵数据不会因此写 mx。MMA 的三个源规模依次为 mtilem、mtilen、mtilek；MLS 根据 A/B/C 类别选择两项，whole-register 形式无需读取这些规模。
+`needAmuCtrl` 对 mma、marith、mls、mrelease 置位。`mxWen` 在写规模状态时置位，矩阵乘法和加载指令的 mxWen 为 0。MMA 的三个源规模依次为 mtilem、mtilen、mtilek；MLS 根据 A/B/C 类别选择两项，whole-register 形式按寄存器几何生成规模。
 
 ### 立即数与状态读转译
 
@@ -162,7 +162,7 @@ Table: 矩阵相关立即数
 
 ### 异常处理
 
-矩阵类型和规模依赖执行操作数，因此 Mma、Mcfg、MLSU 在执行阶段完成对应合法性检查。CSR 权限模块仍检查矩阵控制 CSR 的 MS 状态；当前 DecodeUnit 中针对普通矩阵指令及上述状态读转译的 MS=Off 非法指令判断未启用，不能将其等同于浮点 FS、向量 VS 的完整门控。
+Mma、Mcfg、MLSU 在执行阶段取得类型和规模操作数，完成对应的合法性检查。CSR 权限模块根据 MS 状态检查矩阵控制 CSR 的访问权限。DecodeUnit 对普通矩阵指令及上述状态读转译未启用 MS=Off 非法指令判断。
 
 ![矩阵控制链路](./figure/xsai-control.svg)
 

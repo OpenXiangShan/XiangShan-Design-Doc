@@ -99,7 +99,7 @@ table: csr fu 支持的指令
 | csr      | wrs.nto  | zawrs | scalar |
 | csr      | wrs.sto  | zawrs | scalar |
 
-`minit` 同样由 csr 单元执行，用于将 mstatus.MS 置为 Initial。它不清空矩阵数据、mcfg 表或同步计数器；矩阵状态字段与当前实现边界见 [CSR](../CSR.md#sec:matrix-context)。
+`minit` 由 csr 单元执行，将 mstatus.MS 置为 Initial，矩阵数据、mcfg 表和同步计数器保持原值。矩阵上下文状态的更新路径见 [CSR](../CSR.md#sec:matrix-context)。
 
 ## 矩阵配置与 release
 
@@ -112,9 +112,9 @@ Table: 整数执行资源中的矩阵功能单元
 | Mcfg | mgetcfg | 译码阶段取得的 mcfg 原始值快照写整数 rd | BJU3 |
 | Mrelease | mrelease | 将同步计数器索引封装为 AMU release 请求 | MRELEASE |
 
-规模设置原样写入 XLEN 位状态，不在 MSet 单元中限制 M/N/K。`msetcfg` 的新值通过 ROB 中的 MCfgBuffer 提交，提交后刷新流水线，使后继指令重新取得配置；配置表的推测状态与恢复见 [MCfgGen](../CtrlBlock/MCfgGen.md)。
+规模设置原样写入 XLEN 位状态，规模合法性由使用 M/N/K 的功能单元检查。`msetcfg` 的新值通过 ROB 中的 MCfgBuffer 提交，提交后刷新流水线，使后继指令重新取得配置；配置表的推测状态与恢复见 [MCfgGen](../CtrlBlock/MCfgGen.md)。
 
-Mrelease 不直接增加控制核中的同步计数器。其请求写回 [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md)，在 ROB 提交后送往 CUTE；计数器只在 CUTE 完成返回时更新。Mrelease 的 FU 延迟配置为 CertainLatency(0)，这描述请求生成通路，不描述矩阵任务完成时间。
+Mrelease 的 FU 延迟配置为 CertainLatency(0)。生成的请求写回 [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md)，在 ROB 提交后送往 CUTE；CUTE 完成返回时，Fence 更新对应的同步计数器。
 
 ## alu
 
@@ -250,11 +250,11 @@ Table: Fence 矩阵同步行为
 | msyncregreset | 将指定同步计数器清零 | idle → msyncregreset → idle |
 | mfence | 请求清空标量 SBuffer，等待 sbIsEmpty 后完成 | idle → wait → fence → idle |
 
-`macquire` 和 `mfence` 在译码中同时设置 noSpec 与 blockBack，避免年轻指令越过等待点。msyncregreset 设置 noSpec。Fence 在等待 macquire 时仍可接受 CUTE 的完成返回；返回向量中每个置位项使对应计数器加 1，因此等待条件可由后续返回满足。
+`macquire` 和 `mfence` 在译码中同时设置 noSpec 与 blockBack，等待前序指令并阻塞后继指令进入 ROB。msyncregreset 设置 noSpec。Fence 在等待 macquire 时继续接收 CUTE 的完成返回，返回向量中每个置位项使对应计数器加 1，直到等待条件满足。
 
 若 msyncregreset 清零的索引与同周期返回向量中的置位项冲突，当前实现执行清零，并抑制该次返回向量的全部加一操作，包括其他索引。若没有这个冲突，则对所有置位项分别加一。
 
-`mfence` 当前只等待标量 SBuffer 排空，没有等待 CUTE 任务完成的条件。mrelease/macquire 建立的同步保证是此前 Store 及其依赖链完成，不等待无关的 Load 或 Compute，详见 [Release 的同步语义](../../cute/TaskController.md#sec:cute-release)。不能将 mfence 或 Release 的完成等同于所有矩阵访存或乘加已经完成。实现见 [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/Fence.scala)。
+`mfence` 以标量 SBuffer 排空作为完成条件，CUTE 任务可以继续在途。mrelease/macquire 等待此前 Store 及其依赖链完成，无关 Load 或 Compute 可以继续执行，详见 [Release 的同步语义](../../cute/TaskController.md#sec:cute-release)。实现见 [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/Fence.scala)。
 
 ## bku
 

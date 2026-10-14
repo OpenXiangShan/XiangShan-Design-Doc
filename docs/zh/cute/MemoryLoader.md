@@ -4,7 +4,7 @@
 
 MemoryLoader 将外部按行存放的数据搬入 MatrixReg，或将 C 寄存器结果写回外部存储器。默认外部数据宽度为 64 B，MatrixReg bank entry 为 32 B；一次外部响应通常需要拆成两次内部写入。
 
-默认配置 `ALBLCLLCSL` 中，普通 A/B loader 和 C load/store 均采用 legacy 实现。A、B 转置加载共用 AML 封装中的 `TransposeLoadEngine`，不使用普通 BML 的转置分支。参数化通道实现作为另一种静态配置，见 [参数化 loader](#sec:cute-parameterized-loader)。
+默认配置 `ALBLCLLCSL` 中，普通 A/B loader 和 C load/store 均采用 legacy 实现。A、B 转置加载统一交给 AML 封装中的 `TransposeLoadEngine`，BML 处理普通 B 加载。参数化通道实现作为另一种静态配置，见 [参数化 loader](#sec:cute-parameterized-loader)。
 
 ## 总体设计
 
@@ -16,7 +16,7 @@ MemoryLoader 将外部按行存放的数据搬入 MatrixReg，或将 C 寄存器
 
 TaskController 通过 `MicroTaskValid`、`MicroTaskReady` 启动 loader，通过 `MicroTaskEndValid`、`MicroTaskEndReady` 回收执行资源。CML load 和 store 分别具有任务 ready、valid 和完成信号，也分别保存目标 C 寄存器编号。
 
-loader 启动后锁存地址、stride、矩阵尺寸、寄存器编号和相关模式。请求计数在外部请求 `fire` 时推进；响应计数和内部写入计数在相应阶段推进。因此请求全部发出、响应全部收到、数据全部写入是三个不同的完成条件。load 必须等内部填充结束，store 必须等写应答收齐。
+loader 启动后锁存地址、stride、矩阵尺寸、寄存器编号和相关模式。请求计数在外部请求 `fire` 时推进，响应计数在返回握手时推进，内部写入计数在填充阶段推进。load 在全部数据填入 MatrixReg 后完成；store 在全部数据发出且写应答收齐后完成。
 
 ## 普通 A/B 加载
 
@@ -30,7 +30,7 @@ targetBank    = r % 8
 targetEntry   = floor(r / 8) * 2 + b * 2
 ```
 
-一次 64 B 响应拆为 `targetEntry` 与 `targetEntry+1` 两个 32 B entry。内部物理行间距的系数 2 由 AB 寄存器完整行容量决定，不根据任务中的短 K 改成紧凑布局。
+一次 64 B 响应拆为 `targetEntry` 与 `targetEntry+1` 两个 32 B entry。内部物理行间距的系数 2 由 AB 寄存器完整行容量决定，短 K 任务也使用这个固定间距。
 
 MLSU 生成的 A 描述符为 `row=M, column=K`，B 描述符为 `row=K, column=N`。这些字段保存架构形状，TaskController 会按操作类别解释：普通 B 使用 N 个外层行，每行 K 个连续元素；转置 B 从 K 个源行、每行 N 个连续元素加载。A 转置同样将源行数改为 K、每行元素数改为 M。四种源布局及整寄存器 B 的对应关系见 [MLSU 源内存布局](../memblock/LSU/MLSU.md#tbl:MLSU-source-layout)。
 
@@ -38,11 +38,11 @@ MLSU 生成的 A 描述符为 `row=M, column=K`，B 描述符为 `row=K, column=
 
 ### 响应定位和填充
 
-请求发出时，loader 以分配的 SourceID 为索引记录目标 bank、起始 entry 和是否尾 beat。响应返回时使用 SourceID 查表，而不是按返回次序推断目标位置。响应数据进入 fill table，目标 bank 的队列保存对应 fill 项编号。
+请求发出时，loader 以分配的 SourceID 为索引记录目标 bank、起始 entry 和是否尾 beat。响应返回时使用 SourceID 查表，恢复该请求对应的写入位置。响应数据进入 fill table，目标 bank 的队列保存对应 fill 项编号。
 
-每个 bank 从自己的队列取待填充项，先写低 32 B，再写高 32 B。不同 bank 可以同时推进内部填充；某个 bank 的 fill 队列满会反压指向该 bank 的返回。loader 的完成条件覆盖所有预期内部 entry 写入，不以最后一条请求或最后一条内存响应为界。
+每个 bank 从自己的队列取待填充项，先写低 32 B，再写高 32 B。不同 bank 可以同时推进内部填充；某个 bank 的 fill 队列满会反压指向该 bank 的返回。最后一条内存响应也需要经过 fill 队列和两次内部写入，loader 才能完成任务。
 
-尾 beat 记录的是有效字节数，loader 将其展开为前缀掩码，再拆为两个 32 B 写掩码。外部读仍按完整 beat 发出；有效范围之外的数据不写入 MatrixReg，也不自动写零。软件需要保证访问覆盖的完整外部 beat 可读。
+尾 beat 记录的是有效字节数，loader 将其展开为前缀掩码，再拆为两个 32 B 写掩码。有效范围之外的 MatrixReg 字节保留原值；外部读仍覆盖完整 beat，因此源内存需要提供完整 beat 的可读空间。
 
 ### AB 清零
 
@@ -52,21 +52,21 @@ MLSU 生成的 A 描述符为 `row=M, column=K`，B 描述符为 `row=K, column=
 
 ### 任务与资源
 
-转置 A 和转置 B 均路由到 AML 的 `TransposeLoadEngine`。普通 B 加载仍使用 BML，因此可以与 AML 转置任务在不同 AB 寄存器上重叠；普通 A 与 A/B 转置共享 AML，不能同时占用该任务资源。
+转置 A 和转置 B 均路由到 AML 的 `TransposeLoadEngine`。普通 B 加载使用 BML，可以与 AML 转置任务在不同 AB 寄存器上重叠；普通 A、A/B 转置和 ZeroTr 由 AML 串行执行。
 
-转置引擎以源行和源列构成搬运范围，将源矩阵的列转换为 AB 寄存器的外层行。其默认外部 beat 为 64 B，支持 e8、e16、e32，明确不支持 e4。输入基地址要求 64 B 对齐；多源行时 stride 也要求 64 B 对齐。源行数乘元素字节数不能超过 `Tensor_K`，源列数不能超过 `Tensor_MN`。零尺寸任务直接完成。
+转置引擎以源行和源列构成搬运范围，将源矩阵的列转换为 AB 寄存器的外层行。其默认外部 beat 为 64 B，元素格式为 e8、e16 或 e32，e4 会触发格式断言。输入基地址要求 64 B 对齐；多源行时 stride 也要求 64 B 对齐。源行数乘元素字节数最多为 `Tensor_K`，源列数最多为 `Tensor_MN`。零尺寸任务直接完成。
 
 ### 两槽收集与标签
 
 引擎设置两个收集槽，每槽保存八个 512 bit 源行响应，共 512 B。槽先预留，再发出对应请求，分别维护 expected、issued、received 掩码。响应 SourceID 携带槽号和源行号，回数位置由标签恢复；乱序返回不会改变矩阵坐标。
 
-物理响应 lane 还需满足源行与通道分配规则。槽只有在所需响应全部到达后才进入转置写回，不能一边缺行一边把该槽当作完整转置块输出。两槽使前后两块的收集与排出能够重叠，但槽满或写回阻塞仍会停止后续请求。
+物理响应 lane 按源行与通道分配规则接收数据。槽在 expected 掩码覆盖的响应全部到达后进入转置写回。两个槽分别收集和排出相邻块，槽满或写回阻塞时停止后续请求。
 
 ### 转置写回
 
 填满槽后，通过固定连线从八个源行中选取相应元素，拼成目标 bank 的片段。写回有两个寄存级：第一级选择转置片段，第二级按固定 8 B 步长放置到目标 entry，并输出各 bank 地址、数据和字节掩码。
 
-写回流水线接受反压，只有 writeback 握手才释放当前片段。最后一个片段写入之后，任务才产生完成信号；最后一个内存响应到达时尚未满足这个条件。AML 适配层将写回转为 AB 的逐 bank 字节写，未覆盖的字节继续保留原值。
+写回流水线接受反压，只有 writeback 握手才释放当前片段。最后一个内存响应到达后，剩余片段继续经过转置和写回流水线；最后一个片段写入后产生任务完成信号。AML 适配层将写回转为 AB 的逐 bank 字节写，未覆盖的字节继续保留原值。
 
 ## 默认 C 加载
 
@@ -79,7 +79,7 @@ entry = floor(m / 8) * 16 + beat * 2 + fillPhase
 fillPhase = 0 or 1
 ```
 
-尾字节用内部写掩码限制；没有写到的 C lane 保留旧值。CML load 与 store 具有独立状态机和独立目标寄存器，可以在不同 C 寄存器上重叠。二者共享配置 payload，TaskController 每周期单发射，不会同周期发送两个不同 CML 任务配置。
+尾字节用内部写掩码限制；没有写到的 C lane 保留旧值。CML load 与 store 具有独立状态机和独立目标寄存器，可以在不同 C 寄存器上重叠。二者共享配置 payload，TaskController 每周期选择并发送一个任务配置。
 
 ### 转置加载
 
@@ -91,13 +91,13 @@ fillPhase = 0 or 1
 
 `ZeroAcc` 通过 CML load 通路将选定 C 寄存器的所有 256 个 entry、所有 bank 全掩码写零，不访问外部存储器。清零不按当前小矩阵形状缩减范围。
 
-当前 CML 不执行 RepeatRowLoad，普通加载也不启用这一模式。重复 bias 行广播不能作为已实现的 C 加载功能。
+TaskController 为 CML 选择普通加载或清零模式，`RepeatRowLoad` 控制位保持为 false；CML 中对应的重复行填充逻辑未启用。
 
 ## 默认 C 存储
 
 ### 读取与两槽重排
 
-CML store 每次从八个 bank 读取同一 entry，获得一块 8×8×32 bit 数据，共 256 B。返回数据进入深度为 4 的块 FIFO。SRAM 读有一周期延迟，发请求的满阈值会为已在途的返回预留空间，不能只依据当前 FIFO 是否全满继续读。
+CML store 每次从八个 bank 读取同一 entry，获得一块 8×8×32 bit 数据，共 256 B。返回数据进入深度为 4 的块 FIFO。SRAM 读有一周期延迟，读请求的满阈值为在途返回预留一个队列位置。
 
 重排缓冲设置两个槽。每槽保存八行，每行收集两个 32 B 片段，组成八条 64 B 请求，共 512 B。普通存储把相邻 N 块的同一行拼接；转置存储先在 8×8 块内交换行列，再按原 M 方向拼接。因此两种模式的块读取遍历不同：普通存储 N 块最快，转置存储 M 块最快。
 
@@ -111,17 +111,17 @@ CML 保存 64 项写等待状态。请求成功发出后标记对应 SourceID �
 
 ### 存储边界 {#sec:cute-store-boundary}
 
-默认 C store 的数据布局和重排以 `ResultWidthByte=4` 为基础，即 32 bit 的 INT32/FP32 元素。普通 MLS 描述符的 `widths` 可以来自其它 mcfg 类型，CML 也保留相应地址和计数字段，但 store 的缓冲、拼接和尾部填零仍按 32 bit 元素执行，没有将 C 数据转换或压缩为 e8、e16、e4 的数据通路。因此，当前 C store 的有效说明范围为 e32，不能把较小 `widths` 解释为已实现的窄元素存储。
+默认 C store 处理 e32 的 INT32/FP32 元素，数据布局和重排以 `ResultWidthByte=4` 为基础。MLS 描述符的 `widths` 参与地址与请求计数，但 store 的缓冲、拼接和尾部填零始终按 32 bit 元素执行。e8、e16、e4 描述符会改变计数而不改变数据格式，因此存储任务需要使用 e32。
 
-默认 C store 发出完整 64 B `PutFullData`，掩码全一。连续维最后一条请求中超出逻辑范围的元素填零，但这些字节仍被写到外部存储器。因此它不提供保留相邻字节的 masked store 语义。
+默认 C store 发出完整 64 B `PutFullData`，掩码全一。连续维最后一条请求中超出逻辑范围的元素填零，并随有效元素一起写入外部存储器；该请求覆盖范围内的全部字节都会更新。
 
 例如 e32 的一行只有八个待存元素，占 32 B，发出的最后一条请求仍覆盖 64 B；后半部分按尾部规则写零。软件必须为输出保留完整写 beat 覆盖的空间，特别是转置存储中 M 方向不足 16 个元素的最后一组。
 
-Store 派发当前无条件使用 CML 和 `ms` 的低两位选择 C 寄存器。MLSU 可以形成 A/B store 的控制描述符，但 CUTE 没有读取 AB 的存储数据通路；这些描述符既不会执行 AB 写回，也不会被 TaskController 转成 NopLike，而是进入 CML 的 C 寄存器路径。A/B store 不能作为当前可用功能。
+Store 派发统一使用 CML 和 `ms` 的低两位选择 C 寄存器，因此有效的存储类别为 C。MLSU 形成的 A/B store 描述符也会进入这一派发分支，实际读取相同低两位编号的 C 寄存器。AB 寄存器只有加载写入和计算读取端口，当前 A/B store 不执行架构定义的 AB 写回。
 
 ## 参数化 loader {#sec:cute-parameterized-loader}
 
-`LoaderBridgeChannelConfig` 可分别为 A、B、C load、C store 选择 legacy 或参数化响应宽度 1、2、4、8。C load 和 C store 必须同时属于 legacy，或同时属于参数化实现，不能混合两类。legacy 并不等同于将参数化实现的通道数设置为 1。
+`LoaderBridgeChannelConfig` 分别选择 A、B、C load、C store 的实现：`L` 使用 legacy，`1`、`2`、`4`、`8` 使用相应响应宽度的参数化模块。C load 和 C store 共用模块，二者必须同为 legacy 或同为参数化实现；参数化模块内部可以为 load 和 store 选择不同响应宽度。
 
 Table: 参数化数据通路与默认路径的区别 {#tbl:cute-parameterized-loaders}
 
@@ -129,13 +129,13 @@ Table: 参数化数据通路与默认路径的区别 {#tbl:cute-parameterized-lo
 | --- | --- | --- |
 | `MultiChannelsABMemLoader` | 每 bank 独立行/beat 计数、请求 FIFO 和返回填充队列；SourceID 编码 tail、bank、entry | 普通加载；转置仍由 AML wrapper 的独立引擎承接 |
 | `ResponseChannelBridge` | 按 SourceID 的 bank 字段，经 Omega 路由到 bank-group 队列 | 路由竞争和队列满会产生反压 |
-| 参数化 C load | 每 bank 独立计数和 fill 队列 | 当前不锁存或执行转置标志，不能沿用 legacy Cload 转置功能 |
+| 参数化 C load | 每 bank 独立计数和 fill 队列 | 使用普通加载布局；转置标志未参与锁存和地址生成 |
 | 参数化 C store | 每 bank 深度 4 的读返回队列，两次 32 B collector 拼成 64 B | 普通路径；转置地址状态和块内转置尚不完整 |
 | 参数化 C store ACK | 默认直接统计各 lane ACK 数；也可按 bank 统计 | 全部预计 ACK 到达后完成 |
 
-参数化 AB 返回队列默认深度为 2，C load fill 队列默认深度为 2，response bridge 每 bank 队列默认深度为 8。Omega 网络采用多层 2×2 组合交换及 perfect shuffle，不是每层都插寄存器的流水化全交叉开关。
+参数化 AB 返回队列默认深度为 2，C load fill 队列默认深度为 2，response bridge 每 bank 队列默认深度为 8。Omega 网络由多层 2×2 组合交换及 perfect shuffle 构成，响应在网络输出处进入 bank-group 队列；路径竞争或队列满时向输入传播反压。
 
-参数化 C store 虽保留转置标志，当前 `transpose_scp_addr` 没有形成随块推进的地址，collector 也没有默认路径的块内转置机制；参数化 C load 则没有转置处理。共享配置接口不表示这些功能已与 legacy 等价。参数化 store 同样发全 64 B 写请求，其小尺寸尾部数据行为也不能直接套用默认重排路径。
+参数化 C store 的 `transpose_scp_addr` 固定为零，collector 按 bank 原顺序拼接两个 32 B 返回；转置模式目前缺少逐块地址推进和块内行列交换，需要使用 legacy CML 完成转置加载或存储。参数化 store 同样发出全掩码 64 B 写请求，其 collector 按原数据拼接，尾部行为由该模块的计数和数据选择逻辑决定。
 
 ## 实现对应
 

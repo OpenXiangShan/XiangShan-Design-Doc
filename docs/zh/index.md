@@ -21,15 +21,15 @@
 
 ## 版本信息 {.unnumbered .unlisted}
 
-本分支介绍在昆明湖 V2 控制核基础上集成 CUTE 的 XSAI 实现。XSAI 专有部分按以下固定源码基线编写；配置、接口和实现范围与通用昆明湖 V2R2 说明有差异时，以相应章节的 XSAI 说明为准。
+XSAI 基于昆明湖 V2 控制核，集成 CUTE 矩阵计算单元，并扩展指令译码、矩阵配置、任务调度和访存通路。本文所述 XSAI 设计对应以下源码版本：
 
 | 仓库 | 分支或集成来源 | 源码提交 |
 | --- | --- | --- |
 | [XSAI](https://github.com/OpenXiangShan/XSAI) | `master` | `e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f` |
-| [CUTE](https://github.com/OpenXiangShan/CUTE) | XSAI 记录的版本，与本次核查的 `master` 一致 | `d27b93d61c359478f4202f8f42cbfe82c830912a` |
-| [XSAICache](https://github.com/OpenXiangShan/XSAICache) | XSAI 记录的版本，与本次核查的 `master` 一致 | `1186ab336ad130767f6e86fd6afc7cd1d24d1098` |
+| [CUTE](https://github.com/OpenXiangShan/CUTE) | XSAI 固定提交 | `d27b93d61c359478f4202f8f42cbfe82c830912a` |
+| [XSAICache](https://github.com/OpenXiangShan/XSAICache) | XSAI 固定提交 | `1186ab336ad130767f6e86fd6afc7cd1d24d1098` |
 
-本文默认矩阵配置为 `DefaultMatrixConfig`。独立 CUTE 预设、可选加载器及矩阵预取实验配置在相关章节中分别说明，不作为默认配置的能力。
+本文采用 `DefaultMatrixConfig`：每个 AB 矩阵寄存器容量为 8 KiB，每个 C 累加寄存器容量为 64 KiB，AB 行宽为 64 B，L2 配置为 8 个 bank，CUTE 采用 `CUTE_8Tops_128SCP` 的计算阵列参数，并按控制核的矩阵参数设置张量维度。该配置关闭矩阵预取；启用矩阵预取的配置、独立 CUTE 预设和其他加载器的参数与接口见相应章节。
 
 | 日期       | 版本            | 说明                                         |
 | ---------- | --------------- | -------------------------------------------- |

@@ -2,7 +2,7 @@
 
 ## 设计规格
 
-CUTE 采用四个共享 AB MatrixReg 和四个 C MatrixReg。A、B 是矩阵操作中的角色，两个角色从同一组 AB 寄存器中选择输入；C 保存初始累加值和结果。矩阵寄存器不经过控制核的标量物理寄存器重命名。
+CUTE 采用四个共享 AB MatrixReg 和四个 C MatrixReg。A、B 是矩阵操作中的角色，两个角色从同一组 AB 寄存器中选择输入；C 保存初始累加值和结果。TaskController 直接以矩阵寄存器编号维护任务依赖。
 
 Table: 默认矩阵寄存器组织 {#tbl:cute-matrixreg-geometry}
 
@@ -19,7 +19,7 @@ Table: 默认矩阵寄存器组织 {#tbl:cute-matrixreg-geometry}
 
 ![AB 与 C 矩阵寄存器的 bank 和 SRAM 组织](./figure/cute-matrixreg.svg){#fig:cute-matrixreg}
 
-[@fig:cute-matrixreg] 中每个逻辑 bank 的 32 B 数据由 byte-wide way 组成，SRAM 的 waymask 作为字节写使能。部分写只更新掩码覆盖的字节；其它字节保留此前的寄存器内容。初始化或加载尾部不能依靠掩码自动得到零。
+[@fig:cute-matrixreg] 中每个逻辑 bank 的 32 B 数据由 byte-wide way 组成，SRAM 的 waymask 作为字节写使能。部分写只更新掩码覆盖的字节，其它字节保留此前的寄存器内容；清零由独立的 ZeroTr 或 ZeroAcc 任务执行。
 
 ## AB 地址映射
 
@@ -51,7 +51,7 @@ MemoryLoader 按 bank 提供地址、数据和字节掩码；DataController 提�
 
 没有写请求且 DataController 提出读请求时，`BankAddr.ready` 允许读取；SRAM 在下一周期返回数据，`Data.valid` 是读允许信号的打一拍结果。ABMatrixReg 内部不保存被下游拒收的读数据，这个保存责任由 ADC/BDC 的 hold 寄存器承担。
 
-例如，周期 t 接受一次读地址，周期 t+1 返回八个 bank 的数据；如果 MTE 在 t+1 不能接收，DataController 保存该组数据，等待后续输入握手。loader 写优先和 MTE 反压是两个不同的阻塞来源，不能把固定一周期 SRAM 延迟理解为固定一周期供数吞吐保证。
+例如，周期 t 接受一次读地址，周期 t+1 返回八个 bank 的数据；如果 MTE 在 t+1 不能接收，DataController 保存该组数据，等待后续输入握手。供数间隔同时受 loader 写优先和 MTE 反压影响。
 
 ## C 地址映射
 
@@ -74,7 +74,7 @@ Table: C 默认布局示例 {#tbl:cute-c-layout}
 | m=8～15，n=0～7 | m−8 | 16 | n |
 | m=120～127，n=120～127 | m−120 | 255 | n−120 |
 
-M 方向行组的物理间距固定为 16 个 entry，CML 存储也按该物理间距读取。不能将较小逻辑 N 的矩阵自行改为紧凑的 `N/8` 行组间距；当前计算路径还要求 N 等于 128，见 [计算形状限制](Compute.md#sec:cute-compute-shape)。
+M 方向行组的物理间距固定为 16 个 entry，CML 存储也按该物理间距读取。较小逻辑 N 的加载和存储仍使用这个固定布局；计算路径要求 N 等于 128，见 [计算形状限制](Compute.md#sec:cute-compute-shape)。
 
 ## C 的奇偶单口组织
 
@@ -85,7 +85,7 @@ physicalBank = entry % 2
 physicalRow  = floor(entry / 2)
 ```
 
-同周期读偶 entry、写奇 entry，或读奇 entry、写偶 entry，可以使用两个不同的 SRAM。对同一奇偶 SRAM 同周期读写会触发冲突断言；这里没有通用双端口 SRAM，也没有通过自动重发掩盖冲突的仲裁器。
+同周期读偶 entry、写奇 entry，或读奇 entry、写偶 entry，可以使用两个不同的 SRAM。每个物理 SRAM 只有一个访问端口；对同一奇偶 SRAM 同周期读写会触发冲突断言，访问时序需要满足这一端口约束。
 
 CMatrixReg 接收来自 CDC、CML load、CML store 的请求类别。CDC 读取初始 C、写入 D；CML load 写 C；CML store 读 C。模块断言同周期不能存在两个读来源，也不能存在两个写来源。对同一个 C 寄存器的任务顺序由 TaskController 保证；不同 C 寄存器上的 load、compute、store 可以使用各自的存储体重叠。
 
@@ -95,7 +95,7 @@ CMatrixReg 接收来自 CDC、CML load、CML store 的请求类别。CDC 读取�
 
 `ZeroTr` 通过 AML 逐 entry 将选定 AB 寄存器的所有 bank 写零；`ZeroAcc` 通过 CML load 逐 entry 将选定 C 寄存器写零。这两种任务不发外部存储请求，仍占用对应 loader，并在最后内部写入之后完成。
 
-普通加载和转置加载只写有效数据所覆盖的字节。若软件需要补齐矩阵尾部，必须使补齐区域的内容和计算读取范围一致；对部分区域执行 load 并不会自动清除同一 MatrixReg 中其余区域。C store 的外部写掩码与 MatrixReg 内部字节写掩码也不同，见 [矩阵加载与存储](MemoryLoader.md)。
+普通加载和转置加载只写有效数据所覆盖的字节，其余区域继续保存原内容。计算按完整归约块和行组读取，因此尾部补齐区域也需要预先准备有效值。MatrixReg 内部按字节更新，C store 则按完整外部 beat 写出，见 [矩阵加载与存储](MemoryLoader.md)。
 
 ## 实现对应
 

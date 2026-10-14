@@ -71,7 +71,7 @@ TileLink 的 source 与矩阵侧索引是两个独立标识。MatrixDataOut 的 
 3. 若命中 TRUNK 且上层持有该行，分配 MSHR，通过 Probe toB 获取最新副本。若缺失，分配 MSHR 向下发送 ReadNotSharedDirty，等待数据和权限回复，并按正常替换流程回填。
 4. 返回任务保留 matrixTask、ameIndex 和 ameChannel，响应类型为 AccessAckData。GrantBuffer 将整行数据从 MatrixDataOut 一次发出。
 
-矩阵 Get 使用 Get 所需的读权限。目录状态和上层副本决定是否需要 Probe，矩阵标识本身不省略一致性检查。详细状态与数据源见 [MSHR](MSHR.md)。
+矩阵 Get 根据目录状态和上层副本决定数据来源及 Probe 操作，详细状态与数据源见 [MSHR](MSHR.md)。
 
 ### 矩阵 PutFullData
 
@@ -84,9 +84,9 @@ MainPipe 在 s2 读取 PutBuffer，在 s3 根据目录结果选择处理方式�
 - 命中且有上层 client：分配 MSHR，Probe toN 撤销上层副本；需要升级权限时同时安排 MakeUnique。
 - 缺失：分配 MSHR，获得 MakeUnique 的 Comp 回复后查询替换路，按需释放旧行并写入新数据。
 
-需要 MSHR 时，Put 的新数据从 PutBuffer 转入 RefillBuffer，等待必要的一致性响应。回填任务选择该新数据，避免将 Probe 返回的旧内容写入本次 Put。整行覆盖不需要下游返回旧行数据，但仍需要取得写权限和完成必要的旧行处理。
+需要 MSHR 时，Put 的新数据从 PutBuffer 转入 RefillBuffer，等待必要的一致性响应。回填任务将 `useProbeData` 置为 false，选用 RefillBuffer 中的新数据。MakeUnique 返回写权限，Probe 和替换任务完成上层副本撤销及旧行释放。
 
-Put 响应为普通 D 通道 AccessAck，source 对应 TileLink source，AmeIndex 对应矩阵侧索引。PutBuffer 项释放表示数据已移交主流水线，MSHR 释放则要求其全部 Schedule / Wait 项完成。具体数据流见 [PutBuffer](PutBuffer.md) 和 [请求仲裁器与主流水线](ReqArb_MainPipe.md)。
+Put 响应为普通 D 通道 AccessAck，source 对应 TileLink source，AmeIndex 对应矩阵侧索引。PutBuffer 在数据移交主流水线时释放，MSHR 在全部 Schedule / Wait 项完成后释放。具体数据流见 [PutBuffer](PutBuffer.md) 和 [请求仲裁器与主流水线](ReqArb_MainPipe.md)。
 
 ### 返回顺序与背压
 
@@ -120,4 +120,4 @@ CUTE 通过 MatrixPrefetchControl 提供 allocate、activate、retire、cStoreSt
 
 矩阵来源使用每 bank 独立的无损队列，ready 反压地址生成器；传统推测预取保留 OverwriteQueue 的覆盖行为。两个来源经过仲裁后发送到各个 Slice 的 SinkA，普通需求请求与 Put 最后一个 beat 优先于预取。
 
-矩阵 Get 可以被统计为访问了同地址的未完成预取，但 `mergeA` 仍只适用于 AcquireBlock / AcquirePerm。矩阵引导预取不改变 Get / Put 的基本一致性处理流程。
+矩阵 Get 命中同地址的未完成预取时更新晚到预取统计，`mergeA` 的需求请求类型限定为 AcquireBlock / AcquirePerm。矩阵预取使用 Hint 事务，Get / Put 需求请求按目录状态完成各自的一致性操作。

@@ -35,7 +35,7 @@ VFDivSqrt 主要负责除法和开方相关的指令。
 
 VFCvt 主要负责格式转换和倒数估计相关的指令，增加了 BF16 加宽与缩窄转换。VFMA 复用 FP32 通路完成 BF16 加宽乘加。VFExp2 负责逐元素计算 2 的 x 次方近似值。
 
-控制核 wrapper 的结果宽度为 128 位，下文传统浮点算法以一个 64 位数据子通路为单位介绍；wrapper 通过例化两个子通路形成完整的向量结果。BF16 与 exp2 的新增实现见本节对应小节。
+控制核 wrapper 例化两个 64 位数据子通路，组成 128 位向量结果。VFAlu、VFMA、VFDivSqrt 和 VFCvt 的单个子通路算法如下。
 
 ## 算法设计
 
@@ -1150,23 +1150,23 @@ $[2:0]$：对于不同的指令有不同的作用：对于浮点跟整数之间�
 
 ### BF16 格式转换 {#sec:bf16-convert}
 
-BF16 与 FP32 共享 1 位符号和 8 位指数，显式尾数分别为 7 位和 23 位，因此有限值 BF16 → FP32 只需在尾数低位补 16 个 0，不需要重新编码指数。非规格化 BF16 的尾数也按同一方式保留。
+BF16 与 FP32 均使用 1 位符号和 8 位指数，显式尾数分别为 7 位和 23 位。有限值 BF16 → FP32 保留符号与指数，在尾数低位补 16 个 0，非规格化 BF16 同样按此方式展开。
 
 FP32 → BF16 保留输入高 16 位，将输入 bit15 作为 round 位、bit14:0 的或作为 sticky 位，结合舍入模式决定是否进位。舍入后检查上溢、下溢与不精确；NaN 输出 canonical BF16 NaN。BF16 → FP32 的有限值精确转换，sNaN 规范化并置 NV。标量转换还检查输入 NaN boxing，并将结果高位填 1；向量元素无需逐元素 NaN boxing。
 
-当前 YunSuan 的 CVT_bf16 通过两级有效数据寄存器输出转换结果和 fflags。XSAI 的 VCVT wrapper 单独识别 vfwcvtbf16 与 vfncvtbf16，分别指定 FP32 与 BF16 结果元素位宽，并沿用掩码、尾部和 vstart 的结果合并逻辑。
+YunSuan 的 CVT_bf16 通过两级有效数据寄存器输出转换结果和 fflags。XSAI 的 VCVT wrapper 识别 vfwcvtbf16 与 vfncvtbf16，分别指定 FP32 与 BF16 结果元素位宽，并使用掩码、尾部和 vstart 的结果合并逻辑。
 
 ### BF16 加宽乘加 {#sec:bf16-fma}
 
 vfwmaccbf16 的两个乘法源为 BF16，累加器与结果为 FP32。VFMA wrapper 用专用的格式选择标记 BF16 加宽操作；YunSuan VectorFloatFMA 将两个 BF16 源在尾数低位补零后送到 FP32 FMA，复用其乘积、累加和舍入通路。vuopIdx 选择当前 uop 对应的 BF16 元素片段，FP32 目的数据和异常标志沿用已有向量 FMA 的返回路径。
 
-这种展开保持 BF16 输入值精确，不在乘法前把源重新舍入为 FP16。控制核中的向量 BF16 路径与 CUTE 矩阵乘加是两组独立的执行资源。
+BF16 源展开为 FP32 时保持输入值精确，舍入发生在 FP32 FMA 的结果输出阶段。控制核向量 BF16 功能单元与 CUTE 矩阵乘加单元各自使用独立的执行资源。
 
 ### 向量 exp2 近似计算 {#sec:vector-exp2}
 
 VFExp2 支持 vfexp2.v 的 FP16/FP32 格式以及 vfexp2bf16.v 的 BF16 格式。XSAI 的 128 位 wrapper 例化两个 64 位 YunSuan VfExp2，每个子通路含 4 个共享 FP16/BF16 的 16 位元素流水线和 2 个 FP32 元素流水线；按格式选择对应输出。
 
-有限输入先分解为整数部分 k=floor(x) 和小数部分。小数部分选取区间和查表系数，在局部区间变量 t 上用 Horner 形式计算二次多项式 `(A*t+B)*t+C`，最后结合整数 k 调整结果指数并舍入。FP16 与 FP32 使用 128 个区间，BF16 使用 16 个区间。三种格式的小数定点位宽与系数精度分别按格式设置，不能直接用同一套系数替代。
+有限输入先分解为整数部分 k=floor(x) 和小数部分。小数部分选取区间和查表系数，在局部区间变量 t 上用 Horner 形式计算二次多项式 `(A*t+B)*t+C`，最后结合整数 k 调整结果指数并舍入。FP16 与 FP32 使用 128 个区间，BF16 使用 16 个区间，各格式分别配置小数定点位宽和系数精度。
 
 Table: YunSuan VfExp2 流水线
 
@@ -1181,6 +1181,6 @@ Table: YunSuan VfExp2 流水线
 
 该流水线的固定延迟配置为 6。sNaN 产生 canonical NaN 并置 NV，qNaN 产生 canonical NaN；正无穷输出正无穷，负无穷输出 0；非零非规格化输入在当前实现中输出 1 并置 NX。有限结果还按舍入与范围条件产生 OF、UF、NX。
 
-wrapper 按 mask 与 VL 汇总元素异常标志，并使用 MGU 按 vstart 等控制合并未更新元素。当前 fflagsEn 表达式没有单独按 vstart 排除元素；结果合并和异常标志过滤应分别理解。exp2 采用近似算法，当前正文不将其声明为对所有输入正确舍入；源码中的随机与定向测试阈值也不等同于已经证明的全输入误差界。
+wrapper 根据 mask 与 VL 生成 fflagsEn，汇总参与计算的元素异常标志；该表达式未按 vstart 排除元素。MGU 根据 vstart、VL、mask 和尾部策略合并结果数据。exp2 使用分段二次多项式近似，未提供全输入误差上界或正确舍入保证。
 
 实现见 [VFExp2 wrapper](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/wrapper/VFExp2.scala) 和 XSAI 固定依赖版本的 [YunSuan VfExp2](https://github.com/OpenXiangShan/YunSuan/blob/64e5cf98bc12d7a393aeb8102978ddcda72b7206/src/main/scala/yunsuan/vector/VfExp2.scala)。

@@ -66,7 +66,7 @@ HPM 的基本功能如下：
 
 ### XSAI 矩阵性能事件
 
-开启 HasMatrixExtension 且 MatAcc=CUTE 时，CUTE 的 CutePerfToCoreIO 向控制核输出 9 个 backendEvents 和 12 个 memEvents，每项宽 6 位。XSCore 将后端事件接入 Backend，将访存事件接入 MemBlock；两者继续通过各自的 HPerfMonitor 组合计数，不另外占用一组 CSR 计数器。
+开启 HasMatrixExtension 且 MatAcc=CUTE 时，CUTE 的 CutePerfToCoreIO 向控制核输出 9 个 backendEvents 和 12 个 memEvents，每项宽 6 位。XSCore 将后端事件接入 Backend，将访存事件接入 MemBlock，两组事件分别通过对应的 HPerfMonitor 组合计数，使用现有 CSR 性能计数器。
 
 Table: CUTE 后端事件的接口顺序
 
@@ -99,13 +99,13 @@ Table: CUTE 访存事件的接口顺序
 | 10 | amu_mem_rd_32B_req | 握手读请求掩码的有效字节数除以 32，跨 bank 求和 |
 | 11 | amu_mem_wr_32B_req | 握手写请求掩码的有效字节数除以 32，跨 bank 求和 |
 
-表中下标是 CUTE 接口内部顺序，不是 mhpmevent 的事件索引。A/C 的装载完成事件还包括通过对应 load-like 通路执行的 mzero 完成，因此不一定伴随内存读取。即使某个计算类型未在 MatrixIsaParams 中启用，对应接口位置仍保留；事件名称的存在不表示默认配置允许该类型。
+backendEvents、memEvents 的下标标识 CUTE 接口中的位置。A/C 的装载完成事件包含对应装载通路执行的 mzero 完成，计数覆盖数据加载和寄存器清零。计算类型事件的位置固定保留，具体可执行的类型组合由 MatrixIsaParams 决定。
 
-Backend 将事件分成基线前缀和矩阵扩展后缀。前缀顺序为 noEvent、CtrlBlock 基线事件、DataPath、IntScheduler 的前 5 项、FpScheduler、VfScheduler、MemScheduler 的前 10 项；后缀依次为 CtrlBlock 扩展事件、IntScheduler 剩余项、MfScheduler、MemScheduler 剩余项、上述 9 个 CUTE 事件。这样保留原有前缀的构造位置，矩阵规模 free list、MSET/MRELEASE、Mf IQ 和 MLS IQ 的事件追加在后。
+Backend 按顺序拼接事件列表。前缀为 noEvent、CtrlBlock 基线事件、DataPath、IntScheduler 的前 5 项、FpScheduler、VfScheduler、MemScheduler 的前 10 项；后缀为 CtrlBlock 扩展事件、IntScheduler 剩余项、MfScheduler、MemScheduler 剩余项、上述 9 个 CUTE 事件。矩阵规模 free list、MSET/MRELEASE、Mf IQ 和 MLS IQ 的事件位于后缀中。
 
-MemBlock 则将 12 个 CUTE 访存事件追加在原有访存单元、DTLB、PTW 和 ldDeqCount/stDeqCount 事件之后。最终绝对索引取决于实际硬件配置和这些事件列表的展开长度；配置的 printEventCoding 开启时，硬件生成日志打印每组事件的名称与索引，软件应使用对应生成结果。
+MemBlock 将 12 个 CUTE 访存事件追加在访存单元、DTLB、PTW 和 ldDeqCount/stDeqCount 事件之后。mhpmevent 使用的绝对索引由硬件配置和各事件列表的展开长度确定。开启 printEventCoding 时，硬件生成日志输出每组事件的名称与索引。
 
-`amu_retire` 是 CUTE 任务窗口退休，`rob_commitInstr` 是控制核指令提交，两者时间点和计数对象不同。矩阵操作已经从 ROB 提交后仍可能停留在 CUTE 中，不能只用 ROB 提交事件判断矩阵吞吐或完成延迟。
+`rob_commitInstr` 统计控制核指令提交，`amu_retire` 统计 CUTE 任务窗口退休。矩阵操作从 ROB 提交后，经过请求发送、CUTE 调度和执行，在窗口头完成时计入 `amu_retire`。
 
 实现见 [Backend.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/Backend.scala) 和 [MemBlock.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/MemBlock.scala)。
 
@@ -341,7 +341,7 @@ Table: 机器模式性能事件选择器说明
 * 访存：mhpmevent19-26
 * 缓存：mhpmevent27-31
 
-以下四张索引表保留 kunminghu-v2 文档基线，便于理解原有事件组织。它们不是当前 XSAI DefaultMatrixConfig 的完整事件编码表；XSAI 新增矩阵资源并调整部分发射队列名称，绝对索引及事件名应以本次配置的生成日志为准。矩阵事件及其追加顺序见上文。
+以下四张表列出 kunminghu-v2 的事件索引。XSAI 增加矩阵事件并调整部分发射队列名称，各配置的完整事件编码由 printEventCoding 输出；矩阵事件的拼接顺序见上文。
 
 Table: kunminghu-v2 基线前端性能事件索引表
 
@@ -732,9 +732,9 @@ Table: kunminghu-v2 基线缓存性能事件索引表
 
 ### Topdown PMU
 
-当前 XSAI DataPath 将 Mf 发射纳入 uopsIssued 统计；EXEC_STALL_CYCLE 的条件为发射 uop 数小于 FewUops=4，访存停顿条件延迟两拍后结合 LQ/SQ 状态与 cache miss 信息。DataPath 向 HPM 输出 EXEC_STALL_CYCLE、MEMSTALL_STORE、MEMSTALL_L1MISS、MEMSTALL_L2MISS、MEMSTALL_L3MISS；内部虽然计算 memStallAnyLoad，但该项不在当前 DataPath 的 HPM 输出列表中。
+DataPath 将 Mf 发射纳入 uopsIssued 统计；EXEC_STALL_CYCLE 的条件为发射 uop 数小于 FewUops=4。访存停顿条件延迟两拍后，结合 LQ/SQ 状态与 cache miss 信息生成 MEMSTALL_STORE、MEMSTALL_L1MISS、MEMSTALL_L2MISS、MEMSTALL_L3MISS。上述五项输出到 HPM，memStallAnyLoad 作为内部信号参与各级 miss 停顿判断。
 
-下列公式与事件说明保留原有 Topdown 分析方法，使用时必须先确认所需事件在当前配置中的实际来源与条件，尤其不能把公式中的 MEMSTALL_ANYLOAD 自动视为当前 DataPath 已导出的同名事件。CUTE 内部停顿还需结合上述矩阵专用事件分析。
+下列 Topdown 公式中的 MEMSTALL_ANYLOAD 表示任意 load 停顿，当前 DataPath 未将该信号独立导出为 HPM 事件。CUTE 内部的任务与资源占用由矩阵专用事件记录。
 
 Topdown 性能分析是一种自顶向下的分析方法，用来快速分析CPU的性能瓶颈，其核心思想是从高层次的性能分类逐步向下分解，逐层细化问题，最终精准定位根本原因。我们实现了三层 Topdown 性能事件，如下所示：
 

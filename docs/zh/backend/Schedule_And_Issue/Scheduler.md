@@ -25,8 +25,8 @@ MemScheduler 对 sta、std 两种 IQ 的 ready 做与操作后传给 Dispatch。
 
 默认 MfScheduler 有两个 IQ，每个 16 项、2 个入队口、12 个复杂项。第一个 IQ 包含 MSET1，读取 mx 规模并写整数目的；第二个包含 MEX0 和 MEX1，分别生成 MMA 与矩阵算术请求。MSET0、MRELEASE 位于 IntScheduler，MLSU0 位于 MemScheduler。
 
-MfScheduler 按配置监听整数和 mx 写回。MMA 等待三个规模源 ready，普通 MLS 等待地址、stride 和两个规模源 ready。mx 写回有当前与延迟两组唤醒接口，供发射队列的相应阶段使用。Mcfg 原始配置作为指令元数据随队列保存，不经 mx BusyTable 唤醒。
+MfScheduler 按配置监听整数和 mx 写回。MMA 等待三个规模源 ready，MemScheduler 中的普通 MLS 等待地址、stride 和两个规模源 ready。mx 写回有当拍与延迟两组唤醒接口，供发射队列的相应阶段使用。Mcfg 原始配置作为指令元数据随队列保存。
 
-来自 CtrlBlock 的 flush、DataPath 的 OG0/OG1 取消和标量 load dependency 取消均接入 MfScheduler。矩阵 LSU 自身不产生可供标量寄存器消费者使用的 load 结果，因此 LdExuCnt 包含 MLSU，而 LdWakeupCnt、LdPfTrainCnt 仍只统计标量 load 与混合访存单元。
+来自 CtrlBlock 的 flush、DataPath 的 OG0/OG1 取消和标量 load dependency 取消均接入 MfScheduler。LdExuCnt 统计包括 MLSU 在内的访存执行资源；LdWakeupCnt、LdPfTrainCnt 统计产生标量 load 结果的标量 load 与混合访存单元。
 
 实现见 [Scheduler.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/issue/Scheduler.scala)。

@@ -44,7 +44,7 @@ Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码�
 
 ## 分配 mx 物理寄存器
 
-XSAI 增加 Reg_Mx 类型，对 mtilem、mtilen、mtilek 三个规模状态重命名。默认 MxLogicRegs=3、MxPhyRegs=32，每个物理项为 64 位。mx 保存矩阵规模，不保存 CUTE 的 tile/accumulator 数据；mcfg 类型表由 DecodeStage 的 MCfgGen 单独维护。
+Reg_Mx 类型用于 mtilem、mtilen、mtilek 三个规模状态的重命名。默认 MxLogicRegs=3、MxPhyRegs=32，每个物理项为 64 位。矩阵数据保存在 CUTE 的 tile/accumulator 寄存器中，mcfg 类型表由 DecodeStage 的 MCfgGen 维护。
 
 mx 使用不支持 move 消除的 RenameTable 和 StdFreeList。msettile 指令置 mxWen 时分配新物理目的，更新对应逻辑项的推测映射；MMA、MLS 和规模 CSR 读使用映射后的 psrc。DecodeStage 为每条指令提供三个 mx RAT 读口，对应 lsrc(2..4)。
 
@@ -106,7 +106,7 @@ Rename 模块还负责决定是否生成重命名快照。重命名快照旨在�
 
 ## 矩阵状态标记
 
-Rename 为写 mx 的指令、MMA、矩阵算术和矩阵 load 生成 dirtyMs，矩阵 store 不置该标记。压缩项按包含指令的标记取或，提交后由 ROB 输出 dirty_ms。该信号的产生与 CSR 中 MS 的实际更新分开；当前 mstatus 自动置 Dirty 的消费逻辑未启用，详见 [CSR](../CSR.md#sec:matrix-context)。
+Rename 为写 mx 的指令、MMA、矩阵算术和矩阵 load 生成 dirtyMs，矩阵 store 的 dirtyMs 为 0。压缩项对包含指令的标记取或，提交后由 ROB 输出 dirty_ms。mstatus 根据该信号自动置 Dirty 的更新路径未启用，详见 [CSR](../CSR.md#sec:matrix-context)。
 
 ## 整体框图
 

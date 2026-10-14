@@ -99,7 +99,7 @@ MMIOBridge 即 MMIO 请求转接桥，用于将 TileLink 总线的 MMIO 请求�
 - 支持硬件处理 Cache 别名
 - 支持 MMIO 请求的处理，MMIO 请求在 CoupledL2 中由 TileLink 总线转换为 CHI 总线，并和各个 Slice 发起的 cacheable 请求做仲裁
 
-上述容量按 `DefaultMatrixConfig` 的参数组合确定：`DefaultConfig` 先以 1 MiB、4 个 Slice 计算每个 Slice 的组数，得到 512 组；矩阵配置保留该组数和 8 路结构，将 Slice 数改为 8。因此总容量为 $512 \times 8 \times 64\ \mathrm{B} \times 8 = 2\ \mathrm{MiB}$。其他配置的容量应按组数、路数、行大小和 Slice 数计算。
+`DefaultMatrixConfig` 继承 `DefaultConfig` 的 512 组、8 路结构，将 Slice 数从 4 改为 8。总容量为 $512 \times 8 \times 64\ \mathrm{B} \times 8 = 2\ \mathrm{MiB}$，由每个 Slice 的组数、路数、缓存行大小和 Slice 数共同决定。
 
 矩阵配置关闭 DataStorage 的 MCP2 请求间隔限制。接口带宽是各 Slice 在无冲突、持续就绪时的上限，实际吞吐还受到地址分布、队列占用、DataStorage 争用和一致性事务的影响。
 
@@ -130,7 +130,7 @@ CoupledL2 模块通过上游 TileLink 通道控制器（SinkA / SinkC）接收�
 
 CoupledL2 是基于目录结构的 Inclusive Cache（此处所指的“目录”是广义的，包含元数据和Tag）。元数据包含：状态位state / 脏位dirty / 是否在上层缓存 clients / 在上层的别名位 alias / 是否是预取上来的 prefetch / 来自哪个预取器 prefetchSrc / 是否被访问过 accessed。
 
-在流水线 s1 级 RequestArb 会向目录发起读请求，读取 Tag Array 判断是否命中，并将命中路的元数据信息返回给 s3 级 MainPipe。缺失请求先分配 MSHR，待数据或所需权限返回后，再由 MSHR 任务查询替换路；不会在初次缺失时立即选路并释放旧缓存行。
+在流水线 s1 级 RequestArb 向目录发起读请求，读取 Tag Array 判断是否命中，并将命中路的元数据信息返回给 s3 级 MainPipe。缺失请求先分配 MSHR，待数据或所需权限返回后，由 MSHR 任务查询替换路，再安排旧缓存行的释放。
 
 ### 采用非阻塞流水线结构
 
@@ -203,7 +203,7 @@ CoupledL2 的硬件预取器接收 BOP 预取请求和 L1 DCache 发送的预取
 3.	当目标数据从L3返回后，MSHR项被唤醒，发送任务到主流水线进行处理。在主流水线中选择替换路并回填新数据，而数据块的meta则更新为Acquire请求处理完成后的状态，同时该请求还会将信息传入预取器作为训练
 4.	在处理请求响应时，这个合并请求会从主流水线进入GrantBuffer，对于Prefetch请求，L2返回预取响应；而对于Acquire请求，L2通过grantQueue队列对发出Acquire的上游节点返回数据和响应
 
-矩阵 Get 可被统计为访问了同地址的未完成预取，但不会生成 `mergeA` 任务。请求融合的条件仅包括 AcquireBlock / AcquirePerm，不能将该统计视为矩阵 Get 已参与融合。
+矩阵 Get 命中同地址的未完成预取时，RequestBuffer 更新晚到预取统计，并继续按请求冲突条件等待。`mergeA` 的需求请求类型限定为 AcquireBlock / AcquirePerm。
 
 ### 支持硬件处理 Cache 别名
 
@@ -217,7 +217,7 @@ CoupledL2 的硬件预取器接收 BOP 预取请求和 L1 DCache 发送的预取
 
 ### 整体框图
 
-下图给出香山核与 CoupledL2 的通用连接关系；XSAI 增加的矩阵请求与返回通路见 [HBL2 矩阵通路图](HBL2.md#fig:xsai-hbl2) [矩阵访存通路 HBL2](HBL2.md)。
+香山核与 CoupledL2 的连接关系如下图所示。矩阵请求与返回通路见 [HBL2 矩阵通路图](HBL2.md#fig:xsai-hbl2)。
 
 ![XSTile 结构框图](./figure/CHI-CoupledL2-SoC.svg){#fig:xstile}
 

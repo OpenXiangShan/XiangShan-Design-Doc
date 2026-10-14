@@ -45,7 +45,7 @@ RequestArb 在 ```s2``` 决定读取 ReleaseBuffer、RefillBuffer 或 PutBuffer�
 1. 该任务是由替换任务引起的下游缓存行写回、踢出任务（此时写回的数据已不再被需要，替换读取到的数据在此时被写入 DataStorage）
 2. 该任务是 MSHR 产生的上游响应任务，需要读取回填数据，且不使用上游 Probe 回复的数据（若使用上游 Probe 回复的数据，则应当读取 ReleaseBuffer）
 
-矩阵 Put 对应的 AccessAck 回填任务也会读取 RefillBuffer。虽然 AccessAck 不向上游返回数据，这一读取仍用于把 Put 的新数据写入 DataStorage。
+矩阵 Put 对应的 AccessAck 回填任务读取 RefillBuffer，将 Put 的新数据写入 DataStorage，并安排无数据的上游响应。
 
 于以下情况之一，ReqArbiter 会于 ```s2``` 向 ReleaseBuffer 发送读请求：
 
@@ -115,7 +115,7 @@ MainPipe 在 ```s3``` 阶段满足以下条件之一时会分配 MSHR：
 
 MainPipe 在 ```s3``` 会按照任务的要求向 Directory 发送写请求。
 
-对于可直接完成的 PutFullData，更新后的缓存行标记为 dirty，权限为 TIP，clients 为 0。Get 命中且无需分配 MSHR 时只读数据，不更新目录。需要 MSHR 的 Put 在权限获取、Probe 和替换处理完成后，由返回主流水线的任务更新目录；不能在尚未撤销上层副本时先把目录改为无 client。
+对于可直接完成的 PutFullData，更新后的缓存行标记为 dirty，权限为 TIP，clients 为 0。Get 命中且无需分配 MSHR 时只读数据，不更新目录。需要 MSHR 的 Put 在权限获取、Probe 和替换处理满足回填条件后，由返回主流水线的任务更新目录；clients 在上层副本撤销后清零。
 
 ### DataStorage 读写
 
@@ -134,9 +134,9 @@ Table: PutFullData 的主流水线处理
 | 命中且有上层 client | Probe toN；若为 BRANCH，还需 MakeUnique | PutBuffer → RefillBuffer，必要的一致性响应完成后写 DataStorage |
 | 缺失 | MakeUnique 获取写权限，并查询替换路 | PutBuffer → RefillBuffer，按替换流程写 DataStorage |
 
-对于等待 MSHR 的 Put，后续写入的数据必须来自 RefillBuffer 中的新数据，不能选择 ProbeAckData 携带的旧数据。MSHR 返回任务将 `useProbeData` 置为 false。若所选替换路已有有效数据，则先从 DataStorage 读出旧行存入 ReleaseBuffer，后续释放任务再将 RefillBuffer 中的新数据写入 DataStorage。
+对于等待 MSHR 的 Put，MSHR 返回任务将 `useProbeData` 置为 false，选择 RefillBuffer 中的新数据写入。若所选替换路已有有效数据，则先从 DataStorage 读出旧行存入 ReleaseBuffer，后续释放任务再将 RefillBuffer 中的新数据写入 DataStorage。
 
-因此 PutBuffer 的释放、DataStorage 的写入和上游 AccessAck 是不同阶段的动作。缓冲项可先移交和释放，写操作仍由 MSHR 跟踪，直至其必要任务完成。
+PutBuffer 在 s2 读出数据后释放。等待一致性操作的写请求由 MSHR 跟踪，后续回填任务安排 DataStorage 写入和上游 AccessAck；MSHR 在全部必要任务完成后释放。
 
 ### 请求与消息分发
 

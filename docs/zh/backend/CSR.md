@@ -77,7 +77,7 @@ CSR 负责根据当前的特权模式和寄存器的状态，设置和传递与�
 
 ## 矩阵 CSR
 
-XSAI 增加矩阵控制、矩阵规模和同步资源容量相关的 CSR。矩阵类型配置使用独立的 mcfg0–mcfg7 表，通过 msetcfg/mgetcfg 访问，不属于下表的 CSR 地址空间。
+XSAI 的矩阵 CSR 提供矩阵控制、矩阵规模和同步资源容量信息。矩阵类型配置保存在独立的 mcfg0–mcfg7 表中，通过 msetcfg/mgetcfg 访问。
 
 Table: 矩阵 CSR 列表
 
@@ -97,7 +97,7 @@ Table: 矩阵 CSR 列表
 | mtilek | 0xcc6 | 当前 K 维规模，只读 |
 | msync | 0xcc7 | 同步计数器数量 |
 
-地址以 XSAI 指定的 rocket-chip `bb5d63cbddcc` 中 CSRs 定义为准。DefaultMatrixConfig 的 TLEN=65536 位、TRLEN=512 位、ROWNUM=128、MELEN=32，ARLEN=4096 位、ALEN=524288 位，因此 tlenb=8192、trlenb=64、alenb=65536；默认 msync=32。
+上述地址由 rocket-chip `bb5d63cbddcc` 的 CSRs 定义。DefaultMatrixConfig 的 TLEN=65536 位、TRLEN=512 位、ROWNUM=128、MELEN=32，ARLEN=4096 位、ALEN=524288 位，对应 tlenb=8192、trlenb=64、alenb=65536、msync=32。
 
 ### mcsr
 
@@ -111,25 +111,25 @@ Table: mcsr 的定义
 | MFRM | [10:8] | 0 | 浮点舍入模式 |
 | MSATEN | 11 | 0 | 饱和使能 |
 
-别名 CSR 的读写映射到 mcsr 对应字段。MMA 功能单元读取 MXRM、MFRM 和 MSATEN，打包到提交后发送的 AMU 请求中。当前 CUTE 不消费请求中的 rm、sat 字段，详见 [计算数据通路](../cute/Compute.md)；可编程舍入和饱和控制尚未作用于实际计算。CUTE 运算结果到 MSAT、MFFLAGS 的自动回传更新也未接通，因此这些字段的存在不表示矩阵运算会自动累计饱和或浮点异常状态。
+别名 CSR 的读写映射到 mcsr 对应字段。MMA 功能单元读取 MXRM、MFRM 和 MSATEN，打包为 AMU 请求中的 rm、sat 字段，随请求在提交后发送到 CUTE。CUTE 的计算通路尚未使用这两个字段，具体舍入行为见 [计算数据通路](../cute/Compute.md)。MSAT、MFFLAGS 由软件写入，尚无 CUTE 运算结果触发的自动累计更新路径。
 
 ### 矩阵规模与只读转译
 
 mtilem/n/k 由 msettile 指令写 mx 重命名域。读这些 CSR 时，DecodeUnit 转为读取对应 mx 物理项并写整数寄存器；读 tlenb、trlenb、alenb、msync 转为 ALU 常量读。这些特殊读路径允许乱序执行。
 
-CSR 模块中的 mtile 字段是只读定义。实际规模值在 mx 寄存器堆中，Backend 通过体系结构 mx 映射提供差分观察值；不能把向 CSR/DiffTest 回传的调试信息视为另一次普通 CSR 写操作。
+CSR 模块将 mtile 字段定义为只读。规模值保存在 mx 寄存器堆中，Backend 根据体系结构 mx 映射读出三个规模状态，供 CSR 差分接口观察。
 
 ### 矩阵上下文状态 {#sec:matrix-context}
 
-mstatus、sstatus、vsstatus 增加 MS[26:25]，复位为 Off。SD 聚合条件增加 MS==Dirty。`minit` 通过 CSR 功能单元将 mstatus.MS 写为 Initial；当前实现没有同时清空 mcfg 表、CUTE 数据寄存器或同步计数器的操作。
+mstatus、sstatus、vsstatus 的 MS[26:25] 复位为 Off，SD 聚合条件包含 MS==Dirty。`minit` 通过 CSR 功能单元将 mstatus.MS 写为 Initial，mcfg 表、CUTE 数据寄存器和同步计数器保持原值。
 
 访问 mcsr 及其五个别名时，CSRPermitModule 检查有效 MS 状态；虚拟化模式同时考虑 mstatus 和 vsstatus。MS 在 Off 与非 Off 之间切换时，CSR 模块要求 flushPipe。
 
-当前实现有两项限制：普通矩阵指令以及上述规模/容量读转译的 Decode MS=Off 检查未启用；mstatus 根据 dirty_ms 或矩阵 CSR 写自动置 Dirty 的代码也未启用。vsstatus 在虚拟化模式下的自动置 Dirty 路径仍保留。ROB 会产生 dirty_ms，但不能据此推断完整的矩阵上下文管理已实现。
+普通矩阵指令以及规模/容量读转译的 Decode 路径未启用 MS=Off 非法指令检查。ROB 在提交时产生 dirty_ms，mstatus 根据该信号或矩阵 CSR 写自动置 Dirty 的更新路径未启用；vsstatus 在虚拟化模式下保留自动置 Dirty 的更新路径。
 
 ### 其他特权状态实现
 
-当前 CSRConfig 将 mstatus.MDT 复位为 0，mnstatus.NMIE 复位为 1。EnvCfg.PMM、EnvCfg.CBIE、hstatus.HUPMM 和 mseccfg.PMM 的写函数为 wNoEffect，写入保持旧值，复位值分别为 Disable 或 Inval；这些字段不应描述为已开放的软件可配置功能。当前实现也不提供单独的 reset_mtvec 顶层输入。
+CSRConfig 将 mstatus.MDT 复位为 0，mnstatus.NMIE 复位为 1。EnvCfg.PMM、EnvCfg.CBIE、hstatus.HUPMM 和 mseccfg.PMM 的写函数为 wNoEffect，写入保持旧值，复位值分别为 Disable 或 Inval。mtvec 使用 CSR 模块的复位值，顶层接口未设置独立的 reset_mtvec 输入。
 
 ## 自定义 CSR
 

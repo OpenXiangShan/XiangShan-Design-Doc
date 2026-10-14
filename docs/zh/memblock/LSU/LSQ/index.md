@@ -16,7 +16,7 @@
 
 ## 功能描述
 
-LSQ 包括 LoadQueue 和 StoreQueue，并通过 LsqWrapper 连接各流水线。XSAI 在此基础上增加独立的 MlsQueue，使用 `mlsqIdx` 管理矩阵访存指令；其准备完成状态与矩阵数据搬运完成不同，详见 [矩阵访存队列 MLSQ](MLSQ.md)。
+LSQ 包括 LoadQueue 和 StoreQueue，并通过 LsqWrapper 连接各流水线。XSAI 增加独立的 MlsQueue，使用 `mlsqIdx` 管理矩阵访存指令，在 MLSU 完成地址准备后回收队列项。指令提交后的数据搬运由 CUTE 跟踪，详见 [矩阵访存队列 MLSQ](MLSQ.md)。
 
   * LoadQueue
 

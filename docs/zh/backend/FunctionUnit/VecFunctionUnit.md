@@ -9,7 +9,7 @@
 
 ## 功能单元与对应的延迟
 
-下表列出 `FuConfig.scala` 中的延迟配置值。CertainLatency(n) 是功能单元调度所用的固定延迟参数；这里不叠加操作数生成、写回仲裁等外围通路的时延。UncertainLatency 表示不能按单一固定周期预约结果。
+`FuConfig.scala` 中的 CertainLatency(n) 为功能单元调度和结果预约使用的固定延迟参数，取值如下表所示。操作数生成与写回仲裁使用各自的流水级。UncertainLatency 的结果时刻由执行反馈确定。
 
 | 功能单元 | FU 延迟配置 | 流水线 | 说明                     |
 | -------- | ----------- | ------ | ------------------------ |
@@ -417,7 +417,7 @@ Table: BF16 指令与功能单元
 | vfcvt | vfwcvtbf16.f.f.v | BF16 加宽为 FP32 |
 | vfcvt | vfncvtbf16.f.f.w | FP32 缩窄为 BF16 |
 
-上述指令要求 SEW=16，并沿用加宽/缩窄指令的寄存器组、掩码、VL 与 vstart 检查。VFMA 将 BF16 操作数精确展开为 FP32 后复用 FP32 FMA，按 vuopIdx 选择当前加宽片段；VFCvt 单独识别 BF16 指令，覆盖结果元素位宽与舍入模式选择，避免将 BF16 缩窄误判为 round-to-odd 转换。结果通过原有 MGU 合并，算法见 [VFPU](../VFPU.md#sec:bf16-fma)。
+上述指令要求 SEW=16，并沿用加宽/缩窄指令的寄存器组、掩码、VL 与 vstart 检查。VFMA 将 BF16 操作数精确展开为 FP32 后复用 FP32 FMA，按 vuopIdx 选择当前加宽片段。VFCvt 识别 BF16 指令，指定结果元素位宽，并通过 frm 选择 BF16 缩窄的舍入模式。结果通过 MGU 合并，算法见 [VFPU](../VFPU.md#sec:bf16-fma)。
 
 ## vfdiv
 

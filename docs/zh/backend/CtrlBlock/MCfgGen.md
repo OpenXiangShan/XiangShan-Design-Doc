@@ -25,9 +25,9 @@ Table: 术语说明
 
 ## 功能
 
-MCfgGen 位于 DecodeStage 内，输出当前译码需要的 mcfg 表。`msetcfg` 的值来自整数寄存器，译码阶段不能直接获得新值。因此，`msetcfg` 阻塞后继指令进入 ROB，并在提交后冲刷流水线；MCfgGen 接收提交值，再为重新译码的后继指令提供新配置。
+MCfgGen 位于 DecodeStage 内，向 DecodeUnit 提供 mcfg 表。`msetcfg` 在执行阶段取得整数源中的新配置，阻塞后继指令进入 ROB，并在提交后冲刷流水线。MCfgGen 接收提交值，更新类型表，为重新译码的后继指令提供新配置。
 
-普通矩阵访存指令读取其矩阵寄存器对应的一个配置项。`mmacc` 读取 ms1、ms2、md 对应的三个配置项。读取值随指令进入后端，执行阶段使用该快照进行类型检查和 AMU 控制信息生成。
+普通矩阵访存指令读取其矩阵寄存器对应的一个配置项，执行阶段根据类型快照确定元素位宽。`mmacc` 读取 ms1、ms2、md 对应的三个配置项，Mma 使用这组快照检查类型组合并生成 AMU 控制信息。
 
 ## 配置格式
 
@@ -37,7 +37,7 @@ Table: mcfg 格式
 | ---- | ---- | ---- |
 | [3:0] | type_code | 数据类型编码 |
 | [7:4] | table_sel | 类型表选择，当前仅支持 0 |
-| [XLEN-1:8] | payload | 原样保存与读回，当前执行语义不解释 |
+| [XLEN-1:8] | payload | 原样保存与读回，保留字段 |
 
 Table: 当前合法的数据类型编码
 
@@ -51,15 +51,15 @@ Table: 当前合法的数据类型编码
 | 5 | nvfp4 | 12 | fp32 |
 | 6 | mxfp4 | 13–15 | 未实现 |
 
-`Mcfg` 功能单元对不受支持的 `msetcfg` 产生非法指令异常。类型编码合法与矩阵乘法组合受支持是两个条件，后者还由 `MatrixIsaParams` 控制。默认 `DefaultMatrixConfig` 启用 int8/uint8 到 int32、同类型 FP8 到 FP32、BF16 到 FP32。
+`Mcfg` 功能单元检查 `msetcfg` 的 type_code 和 table_sel，非法编码产生非法指令异常。Mma 在执行时进一步检查 `MatrixIsaParams` 启用的 A/B/C 类型组合。`DefaultMatrixConfig` 启用 int8/uint8 到 int32、同类型 FP8 到 FP32、BF16 到 FP32。
 
 ## 状态更新
 
 mcfgArch、mcfgSpec 均复位为 0。正常提交时，MCfgBuffer 从 ROB 提交项中筛出合法的 `msetcfg`，更新选择的表项。同拍多个更新按提交顺序处理，较后的更新覆盖同一表项的较早更新。
 
-进入 walk 时，MCfgGen 以包含当拍提交结果的 mcfgArch 为恢复起点，再按 walk 信息重建 mcfgSpec。walk 更新优先于普通 mcfgSpec 提交更新。恢复期间 DecodeStage 暂停接收与输出指令，避免使用尚未恢复完成的类型配置。
+进入 walk 时，MCfgGen 以包含当拍提交结果的 mcfgArch 为恢复起点，再按 walk 信息重建 mcfgSpec。walk 更新优先于普通 mcfgSpec 提交更新，恢复期间 DecodeStage 暂停接收与输出指令。
 
-MCfgBuffer 只整理 ROB 中的配置更新信息，不维护另一套独立配置表。未受支持的 `msetcfg` 不进入 commit/walk 配置更新。
+MCfgBuffer 从 ROB 项生成 commit/walk 配置更新，配置表保存在 MCfgGen 中。生成更新时，MCfgBuffer 筛选 isMsetcfg 有效且配置检查合法的项。
 
 ## 接口列表
 

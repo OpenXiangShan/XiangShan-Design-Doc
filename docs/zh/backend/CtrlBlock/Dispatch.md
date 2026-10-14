@@ -62,7 +62,7 @@ Dispatch 模块会将一些异常情况的指令屏蔽掉（将发送给 IQ 的 
 
 Dispatch 增加 mx BusyTable。分配 mx 物理目的时置忙，收到对应 MxWB 或有效的调度器唤醒后清忙。源类型为 SrcType.mx 时，以 psrc 查询这张表；整数地址和 stride 仍查询整数 BusyTable。跨调度器唤醒集合加入 MfScheduler，取消路径继续使用 OG0 取消和标量 load dependency。
 
-MMA、mzero、规模状态读取派发到 MfScheduler；规模写和 mrelease 使用整数调度资源；矩阵访存使用 memScheduler 的 MLSU IQ。派发由 FU 配置决定，不能将所有矩阵相关指令送入同一个 IQ。
+Dispatch 根据 FU 配置选择矩阵指令的目标 IQ。MMA、mzero、规模状态读取派发到 MfScheduler；规模写和 mrelease 使用整数调度资源；矩阵访存使用 memScheduler 的 MLSU IQ。
 
 Table: LSQ 分配掩码
 

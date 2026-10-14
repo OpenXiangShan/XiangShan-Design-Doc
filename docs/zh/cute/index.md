@@ -20,7 +20,7 @@ Table: CUTE 术语说明 {#tbl:cute-terms}
 
 CUTE 在控制核之外执行矩阵数据搬运和矩阵乘加。控制核通过 `AmuCtrlIO` 下发已经确定操作数、矩阵寄存器编号、形状和数据类型的命令；CUTE 维护这些命令之间的矩阵寄存器依赖，将就绪任务发往不同执行模块。矩阵数据留在 CUTE 的 MatrixReg 中，计算输入和输出不经过控制核的标量寄存器堆。
 
-矩阵乘加的基本操作为 `C ← A × B + C`。A 和 B 共用四个 AB MatrixReg，C 使用另外四个 C MatrixReg。每条计算命令读取两个不同编号的 AB 寄存器和一个 C 寄存器，并将累加结果写回同一个 C 寄存器。共享 AB 读端口不支持两个计算输入选择同一寄存器，详见 [矩阵寄存器](MatrixReg.md)。加载、计算、存储是独立命令；TaskController 不根据一条命令自动产生完整大矩阵的加载、分块计算和存储序列。
+矩阵乘加的基本操作为 `C ← A × B + C`。A 和 B 共用四个 AB MatrixReg，C 使用另外四个 C MatrixReg。每条计算命令读取两个不同编号的 AB 寄存器和一个 C 寄存器，并将累加结果写回同一个 C 寄存器。ADC、BDC 分别占用所选 AB 寄存器的读端口，端口约束见 [矩阵寄存器](MatrixReg.md)。软件按矩阵分块组织独立的加载、计算和存储命令，TaskController 负责这些命令的调度。
 
 TaskController 允许没有依赖且执行资源不同的任务重叠执行。对同一个矩阵寄存器的读写按任务年龄建立依赖；AB 操作数被计算阵列读完后，可以提前允许后续加载覆盖，从而使下一批操作数加载与前一批计算流水线排空重叠。
 
@@ -46,11 +46,11 @@ Table: CUTE 子模块列表 {#tbl:cute-submodules}
 | LocalMMU | 各访问流仲裁、事务标识分配和来源标签编码、响应分流 |
 | Cute2TL | 将内部访存请求转换为 TileLink 请求，并合并矩阵数据返回与普通应答 |
 
-LocalMMU 当前不包含地址翻译、TLB 或 PTW。Cute2TL 的矩阵读数据使用独立的 `matrix_data_in` 通道；请求标识通过 HBL2 扩展字段传递。接口细节见 [访存接口与系统集成](Integration.md)。
+LocalMMU 将请求地址直接送往 Cute2TL，负责请求仲裁和事务标识管理。命令基地址由控制核 MLSU 翻译后提供，loader 据此生成各行请求地址。Cute2TL 的矩阵读数据使用独立的 `matrix_data_in` 通道，请求标识通过 HBL2 扩展字段传递。接口细节见 [访存接口与系统集成](Integration.md)。
 
 ## 默认参数
 
-本章描述 XSAI `DefaultMatrixConfig` 的静态配置。该配置采用 `CUTE_8Tops_128SCP` 的阵列和存储几何参数，并以控制核 `MatrixExtension` 覆盖 CUTE 预设中的指令能力开关。配置名称中的算力数字不表示实际工作频率或应用性能。
+XSAI `DefaultMatrixConfig` 采用 `CUTE_8Tops_128SCP` 的阵列和存储几何参数，并以控制核 `MatrixExtension` 设置 CUTE 的指令能力开关。以下参数决定静态硬件规模；实际吞吐量还取决于工作频率、任务形状和供数状态。
 
 Table: CUTE 默认参数 {#tbl:cute-default-params}
 
@@ -69,7 +69,7 @@ Table: CUTE 默认参数 {#tbl:cute-default-params}
 | `LoaderBridgeChannelConfig` | `ALBLCLLCSL` | A、B、C load、C store 均采用默认 legacy 实现 |
 | `EnableMatrixPrefetch` | false | 默认不生成矩阵引导预取接口和标签 |
 
-AB 与 C 的容量、bank 布局及单口 SRAM 限制见 [矩阵寄存器](MatrixReg.md)。普通加载采用 legacy 实现时，内部外部请求使用通道 0；八个物理接口不等于每个默认 loader 每周期均能发出八条请求。
+AB 与 C 的容量、bank 布局及单口 SRAM 限制见 [矩阵寄存器](MatrixReg.md)。普通加载采用 legacy 实现时，经内部通道 0 发出外部请求；多通道请求用于转置引擎或参数化 loader。
 
 ## 数据类型
 
@@ -83,15 +83,15 @@ Table: 默认矩阵乘加类型 {#tbl:cute-default-types}
 | BF16 | FP32 | 开启 |
 | FP16 | FP32 | 关闭 |
 | TF32 | FP32 | 关闭 |
-| 16 bit 累加、INT4、FP32×FP32、块缩放格式 | — | 不属于默认可执行计算集 |
+| 16 bit 累加、INT4、FP32×FP32、块缩放格式 | — | 未启用 |
 
-格式编码、FPE 可选数据通路和默认可执行能力应分别理解。当前 TaskController 不发射 Scale loader/controller 任务，普通 MMA 不启用 AfterOps；CUTE 没有元素级激活、归一化或硬件 im2col 数据通路。FPE 的数值处理见 [计算数据通路](Compute.md)。
+上述类型由 TaskController 派发到 FPE。默认 MMA 将 AfterOps 控制位设为关闭，结果直接写回 C；Scale loader/controller 的任务 valid 保持为 false。Arith 类命令执行矩阵寄存器清零，其余操作按 `NopLike` 完成。FPE 的数值处理见 [计算数据通路](Compute.md)。
 
 ## 形状与访问边界
 
-默认完整计算形状为 `8 <= M <= 128` 且 M 按 8 对齐、`N = 128`、A/B 每行归约维为 64 B，即 INT8/FP8 的 `K = 64` 或 BF16 的 `K = 32`。CDC 要求 N 为 `Tensor_MN`；M 在控制器中向 PE 宽度补齐。加载时未覆盖的字节保留旧值，计算器不自动将这些位置补零。
+默认计算使用 `8 <= M <= 128` 且 M 按 8 对齐、`N = 128`、A/B 每行归约维为 64 B，即 INT8/FP8 的 `K = 64` 或 BF16 的 `K = 32`。CDC 要求 N 为 `Tensor_MN`；M 在控制器中向 PE 宽度补齐。加载时未覆盖的字节保留旧值，补齐区域需要在计算前准备有效数据。
 
-短 K 同时涉及 loader 的固定物理行间距与 DataController 按任务 K 计数形成的读地址，两者不能按任意紧凑形状互换。控制核的维度合法性检查也不等于对所有尾块的自动处理。计算形状、尾部填充和整行存储边界分别见 [计算形状限制](Compute.md#sec:cute-compute-shape) 与 [存储边界](MemoryLoader.md#sec:cute-store-boundary)。
+AB loader 按每逻辑行两个 entry 的固定间距写入，DataController 按任务 K 的归约块数计算行组地址。两条路径在默认 64 B 归约维上使用相同布局；短 K 的地址和尾部数据需要另行满足控制器访问范围。具体要求见 [计算形状限制](Compute.md#sec:cute-compute-shape) 与 [存储边界](MemoryLoader.md#sec:cute-store-boundary)。
 
 ## 章节组织
 

@@ -85,7 +85,7 @@ table: mou fu 支持的指令
 
 ## MLSU
 
-MLSU0 接收矩阵访存指令，读整数基址、整数步长与 mx 规模状态，并携带译码阶段取得的 mcfg 快照。MlsUnit 按配置类型映射元素位宽，接入 DTLB、PMP、矩阵访存队列和重发通路，检查起始基址的翻译、访问权限、矩阵寄存器类别及规模，再向后端写回异常信息或 AMU 访存控制参数。MLSU 没有单独调用 mcfg 的 `isSupported` 检查，不能将这里的位宽映射与 MMA 的三元类型合法性检查混同。
+MLSU0 接收矩阵访存指令，读取整数基址、整数步长与 mx 规模状态，并携带译码阶段取得的 mcfg 快照。MlsUnit 按 type_code 映射元素位宽，接入 DTLB、PMP、矩阵访存队列和重发通路，检查起始基址的翻译、访问权限、矩阵寄存器类别及规模，再向后端写回异常信息或 AMU 访存控制参数。该检查路径未调用 mcfg 的 `isSupported`。
 
 Table: MLSU 支持的指令
 
@@ -98,10 +98,10 @@ Table: MLSU 支持的指令
 | 整寄存器装载 | mla.whole、mlb.whole、mlc.whole | 装载完整 tile 或累加器寄存器 |
 | 整寄存器存储 | msc.whole | 存储完整累加器寄存器 |
 
-当前有效译码没有 msa.whole 和 msb.whole。whole 形式在 MlsUnit 中按寄存器物理几何确定规模和步长，不使用软件设置的 tile 尺寸。
+whole 形式在 MlsUnit 中按寄存器物理几何确定规模和步长。有效译码中的 whole Store 为 msc.whole，msa.whole 和 msb.whole 未接入译码表。
 
-表中列出控制核能译码并生成描述符的形式。当前 CUTE Store 统一送往 CML，未实现独立 A / B 数据写回；msa / msb 及其转置形式不能据此作为可用的 A / B Store。详见 [MLSU 的实现边界](../../memblock/LSU/MLSU.md)。
+上述指令均可在控制核中译码并生成访存描述符。CUTE 的 Store 描述符统一送往 CML，从 C 寄存器读取待存数据；msa / msb 及其转置形式尚无 A / B 数据存储通路。详细的数据通路见 [MLSU](../../memblock/LSU/MLSU.md)。
 
-MLSU 的控制结果写入 [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md)，待 ROB 提交后送往 CUTE。矩阵数据搬运由 CUTE 完成，MLSU 写回和 ROB 提交均不代表矩阵数据已经到达目的寄存器或内存。详细的队列、跨页检查和翻译路径见矩阵访存章节。
+MLSU 的控制结果写入 [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md)，待 ROB 提交后送往 CUTE 执行数据搬运。矩阵访存的队列、跨页检查和翻译路径见 [MLSU](../../memblock/LSU/MLSU.md)。
 
 实现见 [MlsUnit.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/pipeline/MlsUnit.scala)。

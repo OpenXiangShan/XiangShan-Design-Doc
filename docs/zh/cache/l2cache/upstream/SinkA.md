@@ -1,7 +1,7 @@
 # SinkA
 
 ## 功能描述
-SinkA 接收 TileLink A 通道请求和预取器请求，将请求转换为 TaskBundle 后发往 RequestBuffer。矩阵 Get 与 PutFullData 和普通 A 通道请求共用这一入口；Put 的写数据单独存入 [PutBuffer](../PutBuffer.md)，不随任务逐级传递。
+SinkA 接收 TileLink A 通道请求和预取器请求，将请求转换为 TaskBundle 后发往 RequestBuffer。矩阵 Get 与 PutFullData 和普通 A 通道请求共用这一入口；Put 的写数据存入 [PutBuffer](../PutBuffer.md)，TaskBundle 携带对应的缓冲索引。
 
 ### 特性 1：请求元数据
 
@@ -24,7 +24,7 @@ Table: 矩阵 A 通道请求元数据
 
 矩阵 Put 仅支持完整的 64 B 缓存行：opcode 为 PutFullData，size 等于缓存行偏移位数，每个 beat 的字节 mask 全为 1，MatrixKey 为 `2'b01`。PutPartialData、子行 PutFullData 和带部分 mask 的写入均不支持。
 
-A 通道每个 beat 为 32 B，因此整行 Put 包含两个 beat。首 beat 只写 PutBuffer，并锁定该行使用的缓冲项；最后一个 beat 在写 PutBuffer 的同时生成任务，将该项的索引写入 `bufIdx`。这样，RequestBuffer 只保存请求控制信息，而不需要保存整行写数据。
+A 通道每个 beat 为 32 B，因此整行 Put 包含两个 beat。首 beat 写 PutBuffer，并锁定该行使用的缓冲项；最后一个 beat 在写 PutBuffer 的同时生成任务，将该项的索引写入 `bufIdx`。RequestBuffer 保存请求控制信息及缓冲索引，写数据由 PutBuffer 保留。
 
 首 beat 能否接收由 PutBuffer 的 ready 决定；最后一个 beat 能否接收由 RequestBuffer 的 ready 决定。SinkA 在首 beat 握手后记录尚未完成的 Put，在最后一个 beat 握手后清除该状态。
 

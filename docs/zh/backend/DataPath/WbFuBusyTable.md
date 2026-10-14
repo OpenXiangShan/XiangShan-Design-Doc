@@ -21,7 +21,7 @@ WbFuBusyTable 模块的主要功能是管理和同步不同执行单元的忙碌
 
 XSAI 增加 MxWB 的延迟映射、写回端口忙表和冲突标志。IQ 的 mx busy 预留由 mxWen 门控，OG0/OG1 失败回应可撤销预留；结果分发回对应 IQ，防止确定延迟的规模写在同一物理写端口发生冲突。
 
-MfScheduler 增加读响应接口，与 Int、Fp、Vf、Mem 调度器一起接收全局忙表结果。当前全局 busy/deqResp 写入汇总表达式仍由 Int/Fp/Vf/Mem 四类输入构成，Mf 输入并未加入该拼接；因此不能把新增 Mf IO 等同于所有全局写回预留来源已经完整接入。该实现边界与单独的 MxRF 写回仲裁应区分。
+全局 busy/deqResp 的写入汇总由 Int/Fp/Vf/Mem 四类输入构成，MfScheduler 的输入未参与汇总。忙表读响应分发到 Int、Fp、Vf、Mf、Mem 五类调度器。MxRF 的实际写回仲裁由 WbDataPath 独立执行。
 
 ### 功能单元忙碌表 FuBusyTable
 

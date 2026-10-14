@@ -118,11 +118,11 @@ table: fcvt 支持的指令
 
 ### BF16 格式转换
 
-FCVT.BF16.S 与 FCVT.S.BF16 通过已有 fcvt 通路执行，分别在 FP32 和 BF16 之间转换。BF16 使用 1 位符号、8 位指数和 7 位显式尾数，与 FP16 的指数和尾数划分不同。
+FCVT.BF16.S 与 FCVT.S.BF16 通过 fcvt 通路执行，分别在 FP32 和 BF16 之间转换。BF16 使用 1 位符号、8 位指数和 7 位显式尾数。
 
 FP32 转 BF16 保留输入高 16 位，对舍弃的低 16 位按舍入模式处理，并产生 NV、OF、UF、NX 标志。BF16 转 FP32 对有限值在尾数低位补 16 个 0，转换精确；NaN 规范化为 canonical NaN，sNaN 置 NV。标量路径检查 NaN boxing，结果按标量浮点寄存器格式装箱。
 
-此处是标量转换支持；向量 BF16 转换与加宽乘加见 [VecFunctionUnit](./VecFunctionUnit.md#sec:bf16-vector)，具体转换算法见 [VFPU](../VFPU.md#sec:bf16-convert)。
+向量 BF16 转换与加宽乘加见 [VecFunctionUnit](./VecFunctionUnit.md#sec:bf16-vector)，转换算法见 [VFPU](../VFPU.md#sec:bf16-convert)。
 
 ## fDivSqrt
 

@@ -129,7 +129,7 @@ Segment 指令由独立的 VSegmentUnit 模块处理。
 
 XSAI 的矩阵访存指令发往独立的 MLSU。MLSU 使用整数基址、步长和 mx 中的规模状态，完成起始基址的 DTLB 翻译、PMP 检查及访存描述符生成。描述符写回后端，经 ROB 提交和 AmuCtrlBuffer 转发后，才由 CUTE 发起实际矩阵数据访问。
 
-矩阵数据经二级缓存的专用返回通路进入 CUTE，不通过标量 LoadUnit 或 StoreQueue 搬运。矩阵 TLB 缺失由独立 MLSQ 重发；其原因列表、回收条件及完成语义不等同于标量 LoadQueue。详见 [矩阵访存指令执行单元 MLSU](MLSU.md) 和 [矩阵访存队列 MLSQ](LSQ/MLSQ.md)。
+矩阵读数据经二级缓存的专用返回通路进入 CUTE，矩阵写数据由 CUTE 发送到二级缓存。矩阵 TLB 缺失请求保存在独立 MLSQ 中，等待 TLB hint 唤醒后重发；地址准备完成后即可回收 MLSQ 项。详见 [矩阵访存指令执行单元 MLSU](MLSU.md) 和 [矩阵访存队列 MLSQ](LSQ/MLSQ.md)。
 
 ### Load 指令重发
 
