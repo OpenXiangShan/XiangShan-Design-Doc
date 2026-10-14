@@ -1,13 +1,11 @@
 # FpFunctionUnit
 
-- Version: V2R2
+- Version: V2R2A
 - Status: OK
-- Date: 2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- Date: 2026/10/13
+- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
-The floating-point arithmetic functional units include falu, fmac, fcvt,
-fDivSqrt; the instructions supported by each functional unit are listed in the
-following table:
+The floating-point arithmetic functional units include falu, fmac, fcvt, fDivSqrt; the instructions supported by each functional unit are listed in the following table:
 
 ## falu
 
@@ -86,6 +84,8 @@ table: fcvt supported instructions
 
 | Functional Unit | Supported Instructions | Extension | Description |
 | --------------- | ---------------------- | --------- | ----------- |
+| fcvt            | FCVT.BF16.S            | BF16      | scalar      |
+| fcvt            | FCVT.S.BF16            | BF16      | scalar      |
 | fcvt            | FROUND.H               | zfa       | scalar      |
 | fcvt            | FROUND.S               | zfa       | scalar      |
 | fcvt            | FROUND.D               | zfa       | scalar      |
@@ -115,6 +115,14 @@ table: fcvt supported instructions
 | fcvt            | FMV.X.D                | D         | scalar      |
 | fcvt            | FMV.X.W                | F         | scalar      |
 | fcvt            | FMV.X.H                | Zfh       | scalar      |
+
+### BF16 Format Conversion
+
+FCVT.BF16.S and FCVT.S.BF16 execute through the fcvt path to convert between FP32 and BF16. BF16 uses a 1-bit sign, an 8-bit exponent, and 7 explicit fraction bits.
+
+FP32 to BF16 conversion retains the upper 16 input bits, processes the discarded lower 16 bits according to the rounding mode, and generates NV, OF, UF, and NX flags. BF16 to FP32 conversion appends 16 zeros to the low fraction bits of finite values and is exact; NaNs become canonical NaN, and sNaN sets NV. The scalar path checks NaN boxing and boxes results according to the scalar floating-point register format.
+
+See [VecFunctionUnit](./VecFunctionUnit.md#sec:bf16-vector) for vector BF16 conversion and widening multiply-accumulate, and [VFPU](../VFPU.md#sec:bf16-convert) for conversion algorithms.
 
 ## fDivSqrt
 

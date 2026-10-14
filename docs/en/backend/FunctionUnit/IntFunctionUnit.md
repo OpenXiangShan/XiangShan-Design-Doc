@@ -1,13 +1,11 @@
 # IntFunctionUnit
 
-- Version: V2R2
+- Version: V2R2A
 - Status: OK
-- Date: 2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- Date: 2026/10/13
+- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
-The integer functional units include jmp, brh, i2f, i2v, f2v, csr, alu, mul,
-div, fence, bku; the instructions supported by each functional unit are listed
-in the following table:
+The integer functional units include jmp, brh, i2f, i2v, f2v, csr, alu, mul, div, fence, bku, and the dimension-setting, type-configuration, and release-request units added by the matrix extension. Matrix multiply-accumulate and zeroing requests are generated in the Mf execution block; see [MatrixFunctionUnit](./MatrixFunctionUnit.md). The instructions supported by each functional unit are listed below:
 
 ## jmp
 
@@ -61,11 +59,7 @@ table: i2v fu supported instructions
 | i2v             | FMV.W.X                | F         | scalar      |
 | i2v             | FMV.H.X                | Zfh       | scalar      |
 
-Additionally, as uops split from vector instructions (for specific splitting
-methods, please refer to decode), the supported UopSplitType includes VSET,
-VEC_0XV, VEC_VXV, VEC_VXW, VEC_WXW, VEC_WXV, VEC_VXM, VEC_SLIDE1UP,
-VEC_SLIDE1DOWN, VEC_SLIDEUP, VEC_SLIDEDOWN, VEC_RGATHER_VX, VEC_US_LDST,
-VEC_US_FF_LD, VEC_S_LDST, VEC_I_LDST. Supports:
+Additionally, as uops split from vector instructions (for specific splitting methods, please refer to decode), the supported UopSplitType includes VSET, VEC_0XV, VEC_VXV, VEC_VXW, VEC_WXW, VEC_WXV, VEC_VXM, VEC_SLIDE1UP, VEC_SLIDE1DOWN, VEC_SLIDEUP, VEC_SLIDEDOWN, VEC_RGATHER_VX, VEC_US_LDST, VEC_US_FF_LD, VEC_S_LDST, VEC_I_LDST. Supports:
 
 * integer to vector move
 
@@ -79,9 +73,7 @@ table: f2v fu supported instructions
 | f2v             | FLI.S                  | I         | zfa         |
 | f2v             | FLI.D                  | I         | zfa         |
 
-Additionally, as uops split from vector instructions (for specific splitting
-methods, refer to decode), the supported UopSplitTypes are VEC_VFV, VEC_0XV,
-VEC_VFW, VEC_WFW, VEC_VFM, VEC_FSLIDE1UP, VEC_FSLIDE1DOWN. Supports:
+Additionally, as uops split from vector instructions (for specific splitting methods, refer to decode), the supported UopSplitTypes are VEC_VFV, VEC_0XV, VEC_VFW, VEC_WFW, VEC_VFM, VEC_FSLIDE1UP, VEC_FSLIDE1DOWN. Supports:
 
 * floating-point to vector move
 
@@ -106,6 +98,23 @@ table: csr fu supported instructions
 | csr             | wfi                    |           | scalar      |
 | csr             | wrs.nto                | zawrs     | scalar      |
 | csr             | wrs.sto                | zawrs     | scalar      |
+
+`minit` executes in the csr unit and sets mstatus.MS to Initial; matrix data, the mcfg table, and synchronization counters retain their values. See [CSR](../CSR.md#sec:matrix-context) for the matrix context state update paths.
+
+## Matrix Configuration and release
+
+Table: Matrix Functional Units in Integer Execution Resources
+
+| Functional Unit | Instructions                                    | Inputs and Results                                                                                | Default Execution Resource |
+| --------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------- |
+| MSetMtilexRiWmf | msettilem/n/k, msettilemi/msettileni/msettileki | Write an integer or 10-bit unsigned immediate to the corresponding physical mx register           | MSET0                      |
+| Mcfg            | msetcfg                                         | Check type_code and table_sel from the integer source and write the raw configuration back to ROB | BJU3                       |
+| Mcfg            | mgetcfg                                         | Write the raw mcfg snapshot obtained at decode to integer rd                                      | BJU3                       |
+| Mrelease        | mrelease                                        | Pack the synchronization counter index into an AMU release request                                | MRELEASE                   |
+
+Dimension-setting instructions write the XLEN-bit state unchanged; functional units that use M/N/K check dimension legality. The new value from `msetcfg` commits through MCfgBuffer in ROB. Commit flushes the pipeline so subsequent instructions obtain the new configuration; see [MCfgGen](../CtrlBlock/MCfgGen.md) for speculative configuration state and recovery.
+
+Mrelease has the FU latency configuration CertainLatency(0). Its request is written back to [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md) and sent to CUTE after ROB commit. When CUTE returns completion, Fence updates the corresponding synchronization counter.
 
 ## alu
 
@@ -228,6 +237,24 @@ table: fence fu supported instructions
 | fence           | HFENCE.VVMA            |           | scalar      |
 | fence           | HINVAL.GVMA            |           | scalar      |
 | fence           | HINVAL.VVMA            |           | scalar      |
+
+### Matrix Synchronization {#sec:matrix-sync}
+
+Fence adds macquire, msyncregreset (decode constant MSYNCRESET), and mfence. The default configuration has 32 synchronization counters, each 64 bits wide and reset to 0. A forward mrelease request carries one counter index; CUTE's completion return interface carries a 32-bit completion vector, allowing a valid return to mark multiple counters at once.
+
+Table: Fence Matrix Synchronization Behavior
+
+| Instruction   | Behavior                                                                                                                                 | State Transitions                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| macquire      | Latch the target value and synchronization index from the integer sources; wait until the counter is greater than or equal to the target | idle → wait_macquire → macquire → idle |
+| msyncregreset | Clear the selected synchronization counter                                                                                               | idle → msyncregreset → idle            |
+| mfence        | Request that the scalar SBuffer be drained; complete after sbIsEmpty                                                                     | idle → wait → fence → idle             |
+
+`macquire` and `mfence` set both noSpec and blockBack at decode, waiting for preceding instructions and preventing subsequent instructions from entering ROB. msyncregreset sets noSpec. While waiting for macquire, Fence continues to accept completion returns from CUTE. Each set bit in the return vector increments its counter by 1 until the wait condition is satisfied.
+
+If the index cleared by msyncregreset conflicts with a set bit in the same-cycle return vector, the current implementation performs the clear and suppresses all increments from that return vector, including increments to other counters. With no conflict, every set bit increments its counter independently.
+
+`mfence` completes when the scalar SBuffer is drained; CUTE tasks may remain in flight. mrelease/macquire waits for earlier Store tasks and their dependency chains to complete, while unrelated Load or Compute tasks may continue. See [Release Synchronization Semantics](../../cute/TaskController.md#sec:cute-release) and [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/Fence.scala).
 
 ## bku
 

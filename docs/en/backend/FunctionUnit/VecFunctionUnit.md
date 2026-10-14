@@ -1,20 +1,52 @@
 # VecFunctionUnit
 
-- Version: V2R2
+- Version: V2R2A
 - Status: OK
-- Date: 2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- Date: 2026/10/13
+- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
-The vector functional units include vsetiwi, vsetiwf, vsetfwf, vipu, vialuF,
-vfpu, vldu, vstu, vppu, vimac, vidiv, vfalu, vfma, vfdiv, vfcvt; the
-instructions supported by each functional unit are listed in the following
-table:
+The vector functional units include vsetiwi, vsetiwf, vsetfwf, vipu, vialuF, vldu, vstu, vppu, vimac, vidiv, vfalu, vfma, vfdiv, vfcvt, and vfexp2.
+
+## Functional Units and Their Latencies
+
+CertainLatency(n) in `FuConfig.scala` is the fixed latency parameter used for functional-unit scheduling and result reservation, with values listed below. Operand generation and writeback arbitration use their own pipeline stages. Execution feedback determines the result timing for UncertainLatency.
+
+| Functional Unit | FU Latency Configuration | Pipelined | Description                                      |
+| --------------- | ------------------------ | --------- | ------------------------------------------------ |
+| vsetiwi         | 0                        | Yes       |                                                  |
+| vsetiwf         | 0                        | Yes       |                                                  |
+| vsetfwf         | 0                        | Yes       |                                                  |
+| vipu            | 2                        | Yes       |                                                  |
+| vialuF          | 1                        | Yes       |                                                  |
+| vimac           | 2                        | Yes       |                                                  |
+| vppu            | 2                        | Yes       |                                                  |
+| vidiv           | Variable                 | No        | Depends on SEW                                   |
+| vfalu           | 1                        | Yes       |                                                  |
+| vfma            | 3                        | Yes       | Includes BF16 widening multiply-accumulate       |
+| vfdiv           | Variable                 | No        | Depends on the instruction and SEW               |
+| vfcvt           | 2                        | Yes       | Includes BF16 widening and narrowing conversions |
+| vfexp2          | 6                        | Yes       | HasVfexp2=true by default                        |
+| vldu            | Variable                 | Yes       | Depends on memory access                         |
+| vstu            | Variable                 | Yes       | Depends on memory access                         |
+
+## Variable-Cycle Latency
+
+| Functional Unit | Instruction     | SEW | Latency |
+| --------------- | --------------- | --- | ------- |
+| vidiv           | vdiv{u},vrem{u} | 8   | 6       |
+| vidiv           | vdiv{u},vrem{u} | 16  | 4-7     |
+| vidiv           | vdiv{u},vrem{u} | 32  | 4-11    |
+| vidiv           | vdiv{u},vrem{u} | 64  | 4-19    |
+| vfdiv           | vf{r}div        | 16  | 7       |
+| vfdiv           | vf{r}div        | 32  | 9       |
+| vfdiv           | vf{r}div        | 64  | 14      |
+| vfdiv           | vfsqrt          | 16  | 7       |
+| vfdiv           | vfsqrt          | 32  | 9       |
+| vfdiv           | vfsqrt          | 64  | 14      |
 
 ## vsetiwi vsetiwf vsetfwf
 
-The functional units vsetiwi, vsetiwf, and vsetfwf are used to support the uop
-splitting of vset instructions (VSETVLI, VSETIVLI, VSETVL). For specific
-splitting methods, please refer to decode.
+The functional units vsetiwi, vsetiwf, and vsetfwf are used to support the uop splitting of vset instructions (VSETVLI, VSETIVLI, VSETVL). For specific splitting methods, please refer to decode.
 
 ## vipu
 
@@ -374,6 +406,19 @@ table: vfma fu supported instructions
 | vfma            | vfwmsac.vf             | V         | vector      |
 | vfma            | vfwnmsac.vf            | V         | vector      |
 
+### BF16 Vector Operations {#sec:bf16-vector}
+
+Table: BF16 Instructions and Functional Units
+
+| Functional Unit | Instruction      | Operation Format                                                                            |
+| --------------- | ---------------- | ------------------------------------------------------------------------------------------- |
+| vfma            | vfwmaccbf16.vv   | Accumulate the product of two BF16 vector sources into an FP32 destination                  |
+| vfma            | vfwmaccbf16.vf   | Accumulate the product of a BF16 vector source and a scalar source into an FP32 destination |
+| vfcvt           | vfwcvtbf16.f.f.v | Widen BF16 to FP32                                                                          |
+| vfcvt           | vfncvtbf16.f.f.w | Narrow FP32 to BF16                                                                         |
+
+These instructions require SEW=16 and use the existing register group, mask, VL, and vstart checks for widening/narrowing instructions. VFMA expands BF16 operands exactly to FP32 and reuses the FP32 FMA, selecting the current widening slice with vuopIdx. VFCvt recognizes BF16 instructions, selects the result element width, and uses frm to select the rounding mode for BF16 narrowing. MGU merges the results; see [VFPU](../VFPU.md#sec:bf16-fma) for the algorithm.
+
 ## vfdiv
 
 Table: Instructions Supported by vfdiv FU
@@ -413,3 +458,16 @@ table: vfcvt fu supported instructions
 | vfcvt           | vfncvt.f.x.w           | V         | vector      |
 | vfcvt           | vfncvt.f.f.w           | V         | vector      |
 | vfcvt           | vfncvt.rod.f.f.w       | V         | vector      |
+
+## vfexp2
+
+Table: Instructions Supported by vfexp2
+
+| Functional Unit | Instruction  | Supported Formats | Description                                           |
+| --------------- | ------------ | ----------------- | ----------------------------------------------------- |
+| vfexp2          | vfexp2.v     | FP16, FP32        | Element-wise approximation of 2 raised to the power x |
+| vfexp2          | vfexp2bf16.v | BF16              | Element-wise approximation of 2 raised to the power x |
+
+HasVfexp2=true by default, and VFEX1 includes Vfexp2Cfg. When this parameter is disabled, VecDecoder removes the valid decodes for both instructions. vfexp2.v only permits SEW=16/32, and the BF16 form only permits SEW=16.
+
+The VFExp2 wrapper divides the 128-bit vector into two 64-bit YunSuan VfExp2 subpaths, supporting up to 8 16-bit elements or 4 FP32 elements per uop. It passes the frm rounding mode, aggregates fflags for elements enabled by mask and VL, and uses MGU to merge results according to oldVd, vstart, VL, mask, and vta/vma. The underlying algorithm uses a piecewise quadratic approximation; see [VFPU](../VFPU.md#sec:vector-exp2) for the pipeline.

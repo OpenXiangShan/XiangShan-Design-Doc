@@ -1,9 +1,9 @@
 # CSR
 
-- Version: V2R2
+- Version: V2R2A
 - Status: OK
-- Date: 2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
+- Date: 2026/10/13
+- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
 
 ## Glossary of Terms
 
@@ -29,11 +29,9 @@ Supports execution of CSR read-only instructions
 
 Supports out-of-order execution of CSR read-only instructions
 
-Support execution of system-level instructions such as mret, sret, ecall,
-ebreak, wfi, etc.
+Support execution of system-level instructions such as mret, sret, ecall, ebreak, wfi, etc.
 
-Supports receiving interrupts, selects the highest-priority interrupt, and sends
-it to the ROB for processing
+Supports receiving interrupts, selects the highest-priority interrupt, and sends it to the ROB for processing
 
 Supports generating EX_II and EX_VI exceptions
 
@@ -55,102 +53,97 @@ Supports receiving and processing external interrupts
 
 ## Function
 
-As a functional unit (FU), CSR is located in the same ExeUnit as fence and div
-within the intExuBlock. The CSR primarily consists of four submodules: csrMod,
-trapInstMod, trapTvalMod, and imsic. csrMod serves as the main functional
-component of CSR.
+As a functional unit (FU), CSR is located in the same ExeUnit as fence and div within the intExuBlock. The CSR primarily consists of four submodules: csrMod, trapInstMod, trapTvalMod, and imsic. csrMod serves as the main functional component of CSR.
 
-The trapTvalMod module is mainly responsible for managing and updating the
-trap-related target value tval. It updates or clears tval based on input signals
-such as flush, targetPc, and clear, ensuring tval is valid when cleared. The
-module also includes state logic to ensure tval is updated correctly under
-specific conditions. This module needs to select the source from targetPc issued
-by csrMod and fullTarget from flush, and decide whether to update or clear by
-comparing the order of robIdx, ultimately outputting the tval information.
+The trapTvalMod module is mainly responsible for managing and updating the trap-related target value tval. It updates or clears tval based on input signals such as flush, targetPc, and clear, ensuring tval is valid when cleared. The module also includes state logic to ensure tval is updated correctly under specific conditions. This module needs to select the source from targetPc issued by csrMod and fullTarget from flush, and decide whether to update or clear by comparing the order of robIdx, ultimately outputting the tval information.
 
-The trapInstMod module is primarily responsible for managing and updating the
-instruction encoding information of traps. It updates or clears trap instruction
-information based on input signals (such as flush, faultCsrUop, and readClear),
-ensuring correct updates under specific conditions. The module also includes
-state logic to guarantee proper updates to trap instruction information when
-required. It selects the source from either instruction information provided by
-decode (including instruction encoding, FtqPtr, and FtqOffset) or CSR
-instruction information derived from CSR itself through combinatorial
-concatenation. By comparing the sequence of FtqPtr and FtqOffset, it determines
-whether to update or clear, as well as the update source. The module invalidates
-the information when a flush or readClear is needed. Ultimately, it outputs
-trap-related instruction encoding along with the corresponding FtqPtr and
-FtqOffset.
+The trapInstMod module is primarily responsible for managing and updating the instruction encoding information of traps. It updates or clears trap instruction information based on input signals (such as flush, faultCsrUop, and readClear), ensuring correct updates under specific conditions. The module also includes state logic to guarantee proper updates to trap instruction information when required. It selects the source from either instruction information provided by decode (including instruction encoding, FtqPtr, and FtqOffset) or CSR instruction information derived from CSR itself through combinatorial concatenation. By comparing the sequence of FtqPtr and FtqOffset, it determines whether to update or clear, as well as the update source. The module invalidates the information when a flush or readClear is needed. Ultimately, it outputs trap-related instruction encoding along with the corresponding FtqPtr and FtqOffset.
 
-The imsic (Incoming MSI Controller) module primarily interacts with csrMod when
-accessing IMSIC content through indirect alias CSRs (mireg/sireg/vsireg),
-providing necessary information such as the accessed CSR address, privilege
-level mode, write data, etc., and then waits for imsic's output response. If
-csrMod's own permission check has already determined that an exception should be
-raised, it will not send a request to imsic.
+The imsic (Incoming MSI Controller) module primarily interacts with csrMod when accessing IMSIC content through indirect alias CSRs (mireg/sireg/vsireg), providing necessary information such as the accessed CSR address, privilege level mode, write data, etc., and then waits for imsic's output response. If csrMod's own permission check has already determined that an exception should be raised, it will not send a request to imsic.
 
-The CSR is responsible for executing CSR-type instructions and system-type
-instructions such as mret, sret, ecall, ebreak, and wfi. It receives instruction
-uops and data information from the Backend, and outputs data and jump addresses
-upon completion. If an exception occurs, it sets EX_II or EX_VI according to the
-rules.
+The CSR is responsible for executing CSR-type instructions and system-type instructions such as mret, sret, ecall, ebreak, and wfi. It receives instruction uops and data information from the Backend, and outputs data and jump addresses upon completion. If an exception occurs, it sets EX_II or EX_VI according to the rules.
 
-The CSR is responsible for receiving interrupt pending signals such as MSIP,
-MTIP, MEIP, SEIP, VSTIP, and VSEIP from the external interrupt controllers CLINT
-and IMSIC. It determines whether to respond based on the current privilege level
-and its global interrupt enable bits, prioritizes the interrupts, and selects
-the highest-priority interrupt to be handled by the ROB.
+The CSR is responsible for receiving interrupt pending signals such as MSIP, MTIP, MEIP, SEIP, VSTIP, and VSEIP from the external interrupt controllers CLINT and IMSIC. It determines whether to respond based on the current privilege level and its global interrupt enable bits, prioritizes the interrupts, and selects the highest-priority interrupt to be handled by the ROB.
 
-The CSR is responsible for receiving Trap information from the ROB, setting the
-privilege level mode (PRVM) and virtualization mode (V) to the level handling
-the Trap based on delegation (m[e|i]deleg and h[e|i]deleg), modifying relevant
-CSR states, and redirecting execution flow to the starting address of the Trap
-Handler corresponding to TVEC.
+The CSR is responsible for receiving Trap information from the ROB, setting the privilege level mode (PRVM) and virtualization mode (V) to the level handling the Trap based on delegation (m[e|i]deleg and h[e|i]deleg), modifying relevant CSR states, and redirecting execution flow to the starting address of the Trap Handler corresponding to TVEC.
 
-CSRs are responsible for storing configuration information controlling
-floating-point and vector execution (Frm, Vstart, Vl, Vtype, Vxrm, etc.), as
-well as additional results generated by floating-point and vector instruction
-execution (Fflags, Vxsat, etc.).
+CSRs are responsible for storing configuration information controlling floating-point and vector execution (Frm, Vstart, Vl, Vtype, Vxrm, etc.), as well as additional results generated by floating-point and vector instruction execution (Fflags, Vxsat, etc.).
 
-The CSR is responsible for interacting with the IMSIC via custom data lines,
-reading and writing the ** and ** registers (external interrupts section)
-configured in the IMSIC's mireg, sireg, and vsireg.
+The CSR interacts with IMSIC through custom data lines to read and write the **subset** of registers (the external-interrupt portion) exposed through mireg, sireg, and vsireg.
 
-The CSR is responsible for configuring and updating TLB-related signals to
-ensure the TLB correctly performs virtual-to-physical address translation. This
-includes detecting changes in ASID and VMID, passing values of registers like
-satp/vsatp/hgatp, transmitting permission and control bits such as mxr/sum from
-mstatus/vsstatus and pmm from menvcfg/henvcfg, selecting virtual memory modes,
-and configuring physical memory protection extensions. Through these
-configurations, the TLB can accurately execute address translations across
-different virtual memory modes.
+The CSR is responsible for configuring and updating TLB-related signals to ensure the TLB correctly performs virtual-to-physical address translation. This includes detecting changes in ASID and VMID, passing values of registers like satp/vsatp/hgatp, transmitting permission and control bits such as mxr/sum from mstatus/vsstatus and pmm from menvcfg/henvcfg, selecting virtual memory modes, and configuring physical memory protection extensions. Through these configurations, the TLB can accurately execute address translations across different virtual memory modes.
 
-The CSR is responsible for setting and passing flags related to illegal and
-virtual instruction decoding based on the current privilege mode and register
-state. These flags indicate whether certain instructions are illegal or virtual
-in specific privilege modes. Through these flags, the hardware can correctly
-handle such instructions during the decode stage.
+The CSR is responsible for setting and passing flags related to illegal and virtual instruction decoding based on the current privilege mode and register state. These flags indicate whether certain instructions are illegal or virtual in specific privilege modes. Through these flags, the hardware can correctly handle such instructions during the decode stage.
+
+## Matrix CSRs
+
+XSAI's matrix CSRs provide matrix control, matrix dimensions, and synchronization resource capacity information. Matrix type configurations are stored in a separate mcfg0–mcfg7 table, accessed through msetcfg/mgetcfg.
+
+Table: Matrix CSRs
+
+| CSR     | Address | Function                                    |
+| ------- | ------- | ------------------------------------------- |
+| mcsr    | 0x802   | Matrix control and status                   |
+| mxrm    | 0x806   | Fixed-point rounding mode; mcsr alias       |
+| msat    | 0x807   | Saturation flag; mcsr alias                 |
+| mfflags | 0x808   | Floating-point exception flags; mcsr alias  |
+| mfrm    | 0x809   | Floating-point rounding mode; mcsr alias    |
+| msaten  | 0x80a   | Saturation enable; mcsr alias               |
+| tlenb   | 0xcc1   | Tile register capacity, TLEN/8 bytes        |
+| trlenb  | 0xcc2   | Tile register row width, TRLEN/8 bytes      |
+| alenb   | 0xcc3   | Accumulator register capacity, ALEN/8 bytes |
+| mtilem  | 0xcc4   | Current M dimension, read-only              |
+| mtilen  | 0xcc5   | Current N dimension, read-only              |
+| mtilek  | 0xcc6   | Current K dimension, read-only              |
+| msync   | 0xcc7   | Number of synchronization counters          |
+
+The addresses above are defined by CSRs in rocket-chip `bb5d63cbddcc`. DefaultMatrixConfig sets TLEN=65536 bits, TRLEN=512 bits, ROWNUM=128, MELEN=32, ARLEN=4096 bits, and ALEN=524288 bits, giving tlenb=8192, trlenb=64, alenb=65536, and msync=32.
+
+### mcsr
+
+Table: mcsr Definition
+
+| Field   | Bit Range | Reset Value | Description                    |
+| ------- | --------- | ----------- | ------------------------------ |
+| MXRM    | [1:0]     | 0           | Fixed-point rounding mode      |
+| MSAT    | 2         | 0           | Fixed-point saturation flag    |
+| MFFLAGS | [7:3]     | 0           | Floating-point exception flags |
+| MFRM    | [10:8]    | 0           | Floating-point rounding mode   |
+| MSATEN  | 11        | 0           | Saturation enable              |
+
+Reads and writes to the alias CSRs map to the corresponding fields in mcsr. The MMA functional unit reads MXRM, MFRM, and MSATEN, packs them into the rm and sat fields of the AMU request, and sends the request to CUTE after commit. CUTE's compute datapath does not yet use these two fields; its rounding behavior is described in [Compute Datapath](../cute/Compute.md). Software writes MSAT and MFFLAGS; no path currently updates them automatically from CUTE computation results.
+
+### Matrix Dimensions and Read-Only Instruction Translation
+
+The msettile instructions write mtilem/n/k in the mx rename domain. DecodeUnit translates reads of these CSRs into reads of the corresponding physical mx entries with integer register writeback; reads of tlenb, trlenb, alenb, and msync become ALU constant reads. These special read paths support out-of-order execution.
+
+The CSR module defines the mtile fields as read-only. Dimension values reside in the mx register file. Backend reads the three dimension states through the architectural mx mappings for observation by the CSR differential-testing interface.
+
+### Matrix Context State {#sec:matrix-context}
+
+MS[26:25] in mstatus, sstatus, and vsstatus resets to Off. The SD aggregation condition includes MS==Dirty. `minit` writes mstatus.MS to Initial through the CSR functional unit, while the mcfg table, CUTE data registers, and synchronization counters retain their values.
+
+CSRPermitModule checks the effective MS state when accessing mcsr and its five aliases; virtualization mode considers both mstatus and vsstatus. A transition between Off and non-Off MS states causes the CSR module to request flushPipe.
+
+The Decode paths for ordinary matrix instructions and translated dimension/capacity reads do not enable the MS=Off illegal-instruction check. ROB generates dirty_ms at commit, but the path that automatically marks mstatus Dirty on this signal or a matrix CSR write is disabled. The automatic Dirty update path for vsstatus remains enabled in virtualization mode.
+
+### Other Privileged State Implementation
+
+CSRConfig resets mstatus.MDT to 0 and mnstatus.NMIE to 1. The write functions for EnvCfg.PMM, EnvCfg.CBIE, hstatus.HUPMM, and mseccfg.PMM are wNoEffect: writes retain the previous values, and their reset values are Disable or Inval as applicable. mtvec uses the CSR module's reset value; the top-level interface has no separate reset_mtvec input.
 
 ## Custom CSR
 
-In addition to the CSRs defined in the RISC-V manual, we have implemented 7
-custom CSRs: sbpctl, spfctl, slvpredctl, smblockctl, srnctl, mcorepwr, and
-mflushpwr.
+In addition to the CSRs defined in the RISC-V manual, we have implemented 7 custom CSRs: sbpctl, spfctl, slvpredctl, smblockctl, srnctl, mcorepwr, and mflushpwr.
 
-Among these, the 5 custom CSRs—sbpctl, spfctl, slvpredctl, smblockctl, and
-srnctl—are defined in HS mode, while the 2 custom CSRs—mcorepwr and
-mflushpwr—are defined in M mode.
+Among these, the 5 custom CSRs—sbpctl, spfctl, slvpredctl, smblockctl, and srnctl—are defined in HS mode, while the 2 custom CSRs—mcorepwr and mflushpwr—are defined in M mode.
 
-Access to these custom CSRs is not only constrained by privilege levels (lower
-privileges cannot access higher ones) but also controlled by the C field in the
-Smstateen/Ssstateen extensions for custom content access.
+Access to these custom CSRs is not only constrained by privilege levels (lower privileges cannot access higher ones) but also controlled by the C field in the Smstateen/Ssstateen extensions for custom content access.
 
 Below are the definitions of each custom CSR.
 
 ### sbpctl
 
-The sbpctl (Speculative Branch Prediction Control register) has an address of
-0x5C0 and is a readable/writable register defined in HS mode.
+The sbpctl (Speculative Branch Prediction Control register) has an address of 0x5C0 and is a readable/writable register defined in HS mode.
 
 Table: Definition of sbpctl
 
@@ -167,8 +160,7 @@ Table: Definition of sbpctl
 
 ### spfctl
 
-The address of spfctl (Speculative Prefetch Control register) is 0x5C1, a
-read-write register defined in HS mode.
+The address of spfctl (Speculative Prefetch Control register) is 0x5C1, a read-write register defined in HS mode.
 
 Table: Definition of spfctl
 
@@ -192,8 +184,7 @@ Table: Definition of spfctl
 
 ### slvpredctl
 
-The address of slvpredctl (Speculative Load Violation Predictor Control
-register) is 0x5C2, a read-write register defined in HS mode.
+The address of slvpredctl (Speculative Load Violation Predictor Control register) is 0x5C2, a read-write register defined in HS mode.
 
 Table: Definition of slvpredctl
 
@@ -208,8 +199,7 @@ Table: Definition of slvpredctl
 
 ### smblockctl
 
-The address of smblockctl (Speculative Memory Block Control register) is 0x5C3,
-which is a read-write register defined in HS-mode.
+The address of smblockctl (Speculative Memory Block Control register) is 0x5C3, which is a read-write register defined in HS-mode.
 
 Table: Definition of smblockctl
 
@@ -226,8 +216,7 @@ Table: Definition of smblockctl
 
 ### srnctl
 
-srnctl (Speculative Runtime Control register) has the address 0x5C4, a
-read-write register defined in HS-mode.
+srnctl (Speculative Runtime Control register) has the address 0x5C4, a read-write register defined in HS-mode.
 
 Table: Definition of srnctl
 
@@ -240,8 +229,7 @@ Table: Definition of srnctl
 
 ### mcorepwr
 
-The address of mcorepwr (Core Power Down Status Enable) is 0xBC0, a read-write
-register defined in M-mode.
+The address of mcorepwr (Core Power Down Status Enable) is 0xBC0, a read-write register defined in M-mode.
 
 Table: Definition of mcorepwr
 
@@ -252,8 +240,7 @@ Table: Definition of mcorepwr
 
 ### mflushpwr
 
-The address of mflushpwr (Flush L2 Cache Enable) is 0xBC1, which is a read-write
-register defined in M-mode.
+The address of mflushpwr (Flush L2 Cache Enable) is 0xBC1, which is a read-write register defined in M-mode.
 
 Table: Definition of mflushpwr
 
@@ -265,31 +252,15 @@ Table: Definition of mflushpwr
 
 ## CSR exception checking
 
-The current permission checking module permitMod in CSR divides permission
-checks into several submodules: xRetPermitMod, mLevelPermitMod, sLevelPermitMod,
-privilegePermitMod, virtualLevelPermitMod, and indirectCSRPermitMod. permitMod
-generates two types of exceptions: EX_II and EX_VI. Additionally, xRetPermitMod
-differs from the other submodules as it corresponds to exceptions generated
-during the execution of the xret instruction, while the other submodules serve
-CSR access instructions. These two parts are mutually exclusive, meaning it is
-impossible to simultaneously generate exceptions for executing the xret
-instruction and CSR access instructions.
+The current permission checking module permitMod in CSR divides permission checks into several submodules: xRetPermitMod, mLevelPermitMod, sLevelPermitMod, privilegePermitMod, virtualLevelPermitMod, and indirectCSRPermitMod. permitMod generates two types of exceptions: EX_II and EX_VI. Additionally, xRetPermitMod differs from the other submodules as it corresponds to exceptions generated during the execution of the xret instruction, while the other submodules serve CSR access instructions. These two parts are mutually exclusive, meaning it is impossible to simultaneously generate exceptions for executing the xret instruction and CSR access instructions.
 
-Among them, xRetPermitMod generates exceptions that may occur when executing
-mnret/mret/sret/dret instructions: EX_II and EX_VI.
+Among them, xRetPermitMod generates exceptions that may occur when executing mnret/mret/sret/dret instructions: EX_II and EX_VI.
 
-The mLevelPermitMod only generates EX_II, where several types of permission
-checks are performed: writing to read-only CSRs; accessing floating-point/vector
-CSRs when fs/vs is not enabled; and a series of accesses to lower-privilege CSRs
-controlled by M-mode CSRs (such as mstateen0 and menvcfg).
+mLevelPermitMod only generates EX_II. It checks writes to read-only CSRs, accesses to floating-point/vector/matrix control CSRs while fs/vs/ms is disabled, and accesses to lower-privilege CSRs controlled by M-mode CSRs such as mstateen0 and menvcfg.
 
-In sLevelPermitMod, only EX_II will be generated, where a series of accesses to
-other lower-privilege CSRs controlled by HS-mode CSRs (such as sstateen0 and
-scounteren) will be performed.
+In sLevelPermitMod, only EX_II will be generated, where a series of accesses to other lower-privilege CSRs controlled by HS-mode CSRs (such as sstateen0 and scounteren) will be performed.
 
-privilegePermitMod ensures that lower privilege modes cannot access higher
-privilege mode CSRs and generates EX_II and EX_VI exceptions based on the
-current privilege level and the target CSR privilege level being accessed.
+privilegePermitMod ensures that lower privilege modes cannot access higher privilege mode CSRs and generates EX_II and EX_VI exceptions based on the current privilege level and the target CSR privilege level being accessed.
 
 Table: Privilege level access permission checks for CSR
 
@@ -301,63 +272,28 @@ Table: Privilege level access permission checks for CSR
 | MODE_HS | EX_II       | OK             | OK          | OK          |
 | MODE_HU | EX_II       | EX_II          | EX_II       | OK          |
 
-virtualLevelPermitMod can generate two types of exceptions, EX_II and EX_VI,
-during which a series of accesses to other CSRs controlled by H-mode CSRs (such
-as hstateen0 and henvcfg) will be performed.
+virtualLevelPermitMod can generate two types of exceptions, EX_II and EX_VI, during which a series of accesses to other CSRs controlled by H-mode CSRs (such as hstateen0 and henvcfg) will be performed.
 
-The indirectCSRPermitMod also generates EX_II and EX_VI exceptions, performing a
-series of permission checks for accessing alias CSRs (mireg, sireg, and vsireg)
-of Alisa.
+The indirectCSRPermitMod also generates EX_II and EX_VI exceptions, performing a series of permission checks for accessing alias CSRs (mireg, sireg, and vsireg) of Alisa.
 
-Additionally, for exceptions generated during CSR access, we prioritize the
-results from mLevelPermitMod, sLevelPermitMod, privilegePermitMod, and
-virtualLevelPermitMod—i.e., the exception results from direct access—before
-considering the exception results from indirect access via indirectCSRPermitMod.
+Additionally, for exceptions generated during CSR access, we prioritize the results from mLevelPermitMod, sLevelPermitMod, privilegePermitMod, and virtualLevelPermitMod—i.e., the exception results from direct access—before considering the exception results from indirect access via indirectCSRPermitMod.
 
-In the exception results generated by direct access, we need to ensure that
-mLevelPermitMod takes the highest priority, followed by sLevelPermitMod, then
-privilegePermitMod, and finally virtualLevelPermitMod. This restriction also
-ensures that EX_II takes precedence over EX_VI.
+In the exception results generated by direct access, we need to ensure that mLevelPermitMod takes the highest priority, followed by sLevelPermitMod, then privilegePermitMod, and finally virtualLevelPermitMod. This restriction also ensures that EX_II takes precedence over EX_VI.
 
 ## Out-of-order execution of CSR read-only instructions
 
-We also support out-of-order execution for CSR read-only instructions. We note
-that for the vast majority of CSRs, CSRR instructions do not need to wait for
-preceding instructions. For all CSRs, CSRR instructions also do not block
-subsequent instructions. It is important to note that isCsrr includes not only
-CSRR instructions but also other CSR instructions that do not require writing to
-CSRs.
+We also support out-of-order execution for CSR read-only instructions. We note that for the vast majority of CSRs, CSRR instructions do not need to wait for preceding instructions. For all CSRs, CSRR instructions also do not block subsequent instructions. It is important to note that isCsrr includes not only CSRR instructions but also other CSR instructions that do not require writing to CSRs.
 
-Currently, CSRR instructions for the following CSRs require waiting for
-preceding instructions to complete, executing in order: fflags, fcsr, vxsat,
-vcsr, vstart, mstatus, sstatus, hstatus, vsstatus, mnstatus, dcsr. This is
-because these CSRs may be modified by user-level instructions without requiring
-a fence, and out-of-order execution could lead to incorrect results. Hence, CSRR
-instructions for these CSRs must be executed sequentially.
+CSRR instructions accessing fflags, fcsr, vxsat, vcsr, vstart, mstatus, sstatus, hstatus, vsstatus, mnstatus, dcsr, mcsr, mxrm, msat, mfflags, mfrm, or msaten must wait for preceding instructions and execute in order. User-level instructions can modify these CSRs without a fence, so out-of-order reads could produce incorrect results.
 
-Additionally, since a fence instruction must be executed before reading any PMC
-CSR, there is no need to enforce instruction ordering for PMC CSR accesses.
+Additionally, since a fence instruction must be executed before reading any PMC CSR, there is no need to enforce instruction ordering for PMC CSR accesses.
 
-CSR instructions were previously executed without pipelining, so the CSR module
-did not require a state machine internally. After adding the optimization to
-pipeline-accelerate certain CSR read-only instructions, a state machine became
-necessary because the integer register file arbiter must allow write requests
-before CSRR instructions can successfully execute.
+CSR instructions were previously executed without pipelining, so the CSR module did not require a state machine internally. After adding the optimization to pipeline-accelerate certain CSR read-only instructions, a state machine became necessary because the integer register file arbiter must allow write requests before CSRR instructions can successfully execute.
 
-This finite state machine has three states: idle (s_idle), waiting for IMSIC
-(s_waitIMSIC), and completion (s_finish).
+This finite state machine has three states: idle (s_idle), waiting for IMSIC (s_waitIMSIC), and completion (s_finish).
 
-When the current state is s_idle, if there is a valid input with a flush signal,
-the next state remains s_idle; if there is a valid input requiring asynchronous
-AIA access, the next state transitions to s_waitIMSIC; if there is a valid
-input, the next state transitions to s_finish; otherwise, it stays in s_idle.
+When the current state is s_idle, if there is a valid input with a flush signal, the next state remains s_idle; if there is a valid input requiring asynchronous AIA access, the next state transitions to s_waitIMSIC; if there is a valid input, the next state transitions to s_finish; otherwise, it stays in s_idle.
 
-When the current state is s_waitIMSIC, if a flush signal is received, the next
-state returns to s_idle; if a valid read signal from AIA is received and the
-output is ready, the next state reverts to s_idle. Otherwise, if the output is
-not ready, the next state transitions to s_finish to await output. In all other
-cases, the state remains s_waitIMSIC.
+In s_waitIMSIC, a flush returns the state to s_idle. On a valid read response from AIA, the state returns to s_idle if the output is ready; otherwise, it moves to s_finish to wait for output. Without a flush or a valid response, it remains in s_waitIMSIC.
 
-When the current state is s_finish, if there is a flush signal or an output
-ready signal, the next state will revert to s_idle; otherwise, it remains in
-s_finish.
+When the current state is s_finish, if there is a flush signal or an output ready signal, the next state will revert to s_idle; otherwise, it remains in s_finish.

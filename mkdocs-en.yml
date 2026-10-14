@@ -58,9 +58,11 @@ nav:
     - Control Block (CtrlBlock): 
       - backend/CtrlBlock/index.md
       - Decode: backend/CtrlBlock/decode.md
+      - Matrix Type Configuration (MCfgGen): backend/CtrlBlock/MCfgGen.md
       - Rename: backend/CtrlBlock/Rename.md
       - Dispatch: backend/CtrlBlock/Dispatch.md
       - Reorder Buffer: backend/CtrlBlock/Rob.md
+      - Matrix Control Buffer (AmuCtrlBuffer): backend/CtrlBlock/AMUCtrlBuffer.md
     - Data Path (DataPath):
       - DataPath: backend/DataPath/DataPath.md
       - Og2ForVector: backend/DataPath/Og2ForVector.md
@@ -79,6 +81,7 @@ nav:
       - Floating-Point Function Unit: backend/FunctionUnit/FpFunctionUnit.md
       - Vector Function Unit: backend/FunctionUnit/VecFunctionUnit.md
       - Memory Function Unit: backend/FunctionUnit/MemFunctionUnit.md
+      - Matrix Control Functional Units: backend/FunctionUnit/MatrixFunctionUnit.md
     - Vector Floating-Point Unit (VFPU): backend/VFPU.md
     - Control and Status Registers (CSR): backend/CSR.md
     - Hardware Performance Monitor (HPM): backend/HPM.md
@@ -89,6 +92,7 @@ nav:
       - Load Unit (LoadUnit): memblock/LSU/LoadUnit.md
       - Store Address Unit (StoreUnit): memblock/LSU/StoreUnit.md
       - Store Data Unit (StdExeUnit): memblock/LSU/StdExeUnit.md
+      - Matrix Memory Instruction Unit (MLSU): memblock/LSU/MLSU.md
       - Atomic Operation Unit (AtomicsUnit): memblock/LSU/AtomicsUnit.md
       - Vector Memory Access:
         - memblock/LSU/VLSU/index.md
@@ -107,6 +111,7 @@ nav:
         - Uncache Load Unit (LoadQueueUncach): memblock/LSU/LSQ/LoadQueueUncache.md
         - Load Exception Buffer (LqExceptionBuffer): memblock/LSU/LSQ/LqExceptionBuffer.md
         - Store Queue (StoreQueue): memblock/LSU/LSQ/StoreQueue.md
+        - Matrix Memory Queue (MLSQ): memblock/LSU/LSQ/MLSQ.md
       - Uncache Handling Unit (Uncache): memblock/LSU/Uncache.md
       - Store Commit Buffer (SBuffer): memblock/LSU/SBuffer.md
       - Load Misaligned Access Unit (LoadMisalignBuffer): memblock/LSU/LoadMisalignBuffer.md
@@ -135,6 +140,8 @@ nav:
   - Cache Subsystem:
     - L2 Cache:
       - L2 Cache (CoupledL2): cache/l2cache/CoupledL2.md
+      - Matrix Memory Extensions (HBL2): cache/l2cache/HBL2.md
+      - Matrix Write Data Buffer (PutBuffer): cache/l2cache/PutBuffer.md
       - Channel A Request Buffer (RequestBuffer): cache/l2cache/ReqBuf.md
       - Request Arbiter and Main Pipeline: cache/l2cache/ReqArb_MainPipe.md
       - Directory (Directory): cache/l2cache/Directory.md
@@ -155,3 +162,11 @@ nav:
         - Link Layer Controller (LinkMonitor): cache/l2cache/downstream/LinkMonitor.md
       - MMIO Bridge (MMIOBridge): cache/l2cache/MMIOBridge.md
       - Error Handling: cache/l2cache/Error.md
+  - Matrix Compute Unit (CUTE):
+    - cute/index.md
+    - Task Control (TaskController): cute/TaskController.md
+    - Matrix Registers (MatrixReg): cute/MatrixReg.md
+    - Matrix Loads and Stores: cute/MemoryLoader.md
+    - Compute Datapath: cute/Compute.md
+    - Memory Interfaces and System Integration: cute/Integration.md
+    - Performance Events and Debugging: cute/Performance.md
