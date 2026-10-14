@@ -192,7 +192,7 @@ CoupledL2 通过 CustomL1Hint 在响应数据返回前发送 Refill Hint，供�
 
 CoupledL2 的硬件预取器接收 BOP 预取请求和 L1 DCache 发送的预取请求，并将这些请求送进各 Slice 的预取队列。传统推测预取使用 OverwriteQueue，满时允许新请求覆盖较老的请求。
 
-可选的矩阵引导预取利用 CUTE 提供的矩阵描述符和需求请求训练生成后续缓存行地址。该来源使用独立的无损队列，队列满时通过 ready 反压地址生成器，并与传统预取队列仲裁后进入 SinkA。`DefaultMatrixPrefetchConfig` 开启矩阵引导预取，`DefaultMatrixOnlyPrefetchConfig` 仅保留该来源；默认矩阵配置不启用。具体控制接口和配置边界见 [矩阵访存通路 HBL2](HBL2.md)。
+可选的矩阵引导预取利用 CUTE 提供的矩阵描述符和需求请求训练生成后续缓存行地址。该来源使用独立的无损队列，队列满时通过 ready 反压地址生成器，并与传统预取队列仲裁后进入 SinkA。`DefaultMatrixPrefetchConfig` 开启矩阵引导预取，`DefaultMatrixOnlyPrefetchConfig` 仅保留该来源；默认矩阵配置不启用。具体控制接口和配置边界见 [可选矩阵引导预取](MatrixPrefetch.md)。
 
 ### 支持请求融合
 
