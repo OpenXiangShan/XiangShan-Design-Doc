@@ -138,9 +138,9 @@ nav:
         - Prefetcher: memblock/MMU/L2TLB/Prefetcher.md
       - PMP & PMA: memblock/MMU/PMP-PMA.md
   - Cache Subsystem:
-    - L2 Cache:
-      - L2 Cache (CoupledL2): cache/l2cache/CoupledL2.md
-      - Matrix Memory Extensions (HBL2): cache/l2cache/HBL2.md
+    - High-Bandwidth L2 Cache:
+      - L2 Cache Base Design (CoupledL2): cache/l2cache/CoupledL2.md
+      - High-Bandwidth Cache Extension Features (HBL2): cache/l2cache/HBL2.md
       - Matrix Write Data Buffer (PutBuffer): cache/l2cache/PutBuffer.md
       - Channel A Request Buffer (RequestBuffer): cache/l2cache/ReqBuf.md
       - Request Arbiter and Main Pipeline: cache/l2cache/ReqArb_MainPipe.md

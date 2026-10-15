@@ -135,9 +135,9 @@ nav:
         - Prefetcher: memblock/MMU/L2TLB/Prefetcher.md
       - PMP & PMA: memblock/MMU/PMP-PMA.md
   - 缓存子系统:
-    - 二级缓存:
-      - 二级缓存 CoupledL2: cache/l2cache/CoupledL2.md
-      - 矩阵访存扩展 HBL2: cache/l2cache/HBL2.md
+    - 高带宽二级缓存:
+      - 二级缓存基础设计 CoupledL2: cache/l2cache/CoupledL2.md
+      - 高带宽缓存扩展特性 HBL2: cache/l2cache/HBL2.md
       - 矩阵写数据缓冲 PutBuffer: cache/l2cache/PutBuffer.md
       - A 通道请求缓冲 RequestBuffer: cache/l2cache/ReqBuf.md
       - 请求仲裁器与主流水线: cache/l2cache/ReqArb_MainPipe.md

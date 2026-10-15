@@ -22,4 +22,4 @@ CUTE 通过 MatrixPrefetchControl 提供 allocate、activate、retire、cStoreSt
 
 矩阵来源使用每 bank 独立的无损队列，ready 反压地址生成器；传统推测预取保留 OverwriteQueue 的覆盖行为。两个来源经过仲裁后发送到各个 Slice 的 SinkA，普通需求请求与 Put 最后一个 beat 优先于预取。
 
-矩阵 Get 命中同地址的未完成预取时更新晚到预取统计，`mergeA` 的需求请求类型限定为 AcquireBlock / AcquirePerm。矩阵预取使用 Hint 事务，Get / Put 需求请求按目录状态完成各自的一致性操作。
+矩阵预取使用 Hint 事务，Get / Put 需求请求按目录状态完成各自的一致性操作。

@@ -1,10 +1,12 @@
-# Level 2 cache CoupledL2
+# L2 Cache Base Design: CoupledL2
 
 ## Submodule List
 
-The top level of CoupledL2 consists of multiple Slices, MMIOBridge, and prefetchers. XSAI's `DefaultMatrixConfig` has 8 Slices, accepts CUTE matrix memory requests alongside the existing L1Cache / PTW paths, and provides a separate matrix read-data response interface for each Slice. This extension is called High Bandwidth L2 Cache (HBL2); see [Matrix memory access path HBL2](HBL2.md).
+The top level of CoupledL2 consists of multiple Slices, MMIOBridge, and prefetchers.
 
-The default prefetchers include the L2-local Best-Offset Prefetch (BOP) and a receiver for L1 DCache prefetch requests. Matrix-guided prefetching is enabled through a separate configuration and is disabled in `DefaultMatrixConfig`.
+XSAI adds the HBL2 matrix memory extension to CoupledL2. Matrix requests enter through TileLink channel A and share CoupledL2's directory, main pipeline, MSHRs, and coherence mechanism; matrix read data returns through a separate MatrixDataOut interface in each Slice. See [Matrix memory access path HBL2](HBL2.md) for detailed specifications, Get/Put flows, and response ordering, and [Optional matrix-guided prefetching](MatrixPrefetch.md) for matrix prefetching.
+
+The default prefetchers include the L2-local Best-Offset Prefetch (BOP) and a receiver for L1 DCache prefetch requests.
 
 MMIOBridge, or MMIO request bridge, converts TileLink bus MMIO requests into CHI requests. It arbitrates between these and cacheable address space CHI requests, accessing the interconnect bus through a unified CHI interface.
 
@@ -16,7 +18,7 @@ The list of submodules in each Slice is as follows:
 | ------------------------- | ---------------------------------------------------------------------------------------------------- |
 | SinkA                     | Upstream TileLink bus A channel controller.                                                          |
 | SinkC                     | Upstream TileLink Bus C Channel Controller                                                           |
-| GrantBuffer               | Upstream TileLink bus D/E channel controller and matrix read-data response controller                |
+| GrantBuffer               | Upstream TileLink bus D/E channel controller                                                         |
 | TXREQ                     | Downstream CHI bus TXREQ channel controller                                                          |
 | TXDAT                     | Downstream CHI bus TXDAT channel controller                                                          |
 | TXRSP                     | Downstream CHI Bus TXRSP Channel Controller                                                          |
@@ -31,13 +33,13 @@ The list of submodules in each Slice is as follows:
 | RequestBuffer             | A-channel request buffer                                                                             |
 | RequestArb                | Request arbiter, main pipeline stages s0~s2.                                                         |
 | MainPipe                  | Main pipeline stages s3~s5.                                                                          |
-| MSHRCtl                   | MSHR (Miss Status Handling Registers) control module, default includes 16 MSHR entries               |
-| CustomL1Hint              | Manages early-wakeup information for upstream responses and pairs it with matrix read-data responses |
+| MSHRCtl                   | MSHR (Miss Status Handling Registers) control module                                                 |
+| CustomL1Hint              | Manages early-wakeup information for upstream responses                                              |
 
 
 ## Design specifications
 
-- Interconnects with the upstream L1Cache / PTW using the TileLink bus protocol; the matrix unit sends Get / PutFullData requests through channel A
+- Interconnects with the upstream L1Cache / PTW using the TileLink bus protocol
 - Uses the CHI bus protocol with downstream HN-F, supporting the three CHI versions B/C/E.b, selected by `CHIIssue`
 - Supports the following CHI Read transactions:
 
@@ -81,17 +83,12 @@ The list of submodules in each Slice is as follows:
     - SnpMakeInvalidStash (B/C/E.b)
     - SnpQuery (E.b)
 
-- `DefaultMatrixConfig` has a total capacity of 2 MiB with 8-way set associativity and 8 Slices; each Slice has 512 sets and 256 KiB capacity
-- Cache-line size is 64 B and TileLink data width is 32 B; a full cache-line transfer requires 2 beats
-- Each Slice has a 512-bit matrix read-response path returning one cache line per handshake; the aggregate interface bandwidth limit across 8 Slices is 512 B/cycle
-- Matrix writes support only full-line PutFullData with all byte-mask bits set; PutPartialData and sub-line writes are unsupported
 - Adopting a MESI-like cache coherence protocol
 - Adopts a strict inclusion policy with DCache and a non-strict inclusion policy with ICache / PTW.
 - Adopts a non-blocking main pipeline structure
-- Configures 8 × 16 MSHR entries; at most 15 entries per Slice can serve channel A requests, including L1Cache / PTW and matrix requests, reserving one free resource for other channels
 - Supports parallel access to requests in the same set.
 - Supports selecting and replacing the replacement way after receiving the refill data for L2 Cache misses.
-- Supports merging an Acquire request with an outstanding prefetch at the same address; matrix Get does not participate in this merging
+- Supports merging an Acquire request with an outstanding prefetch at the same address
 - Supports generating L2 Refill Hint signals for early wake-up of Load instructions.
 - Supports BOP prefetcher
 - Supports handling prefetch requests trained by L1 and backfilled to L2.
@@ -99,18 +96,13 @@ The list of submodules in each Slice is as follows:
 - Supports hardware handling of cache aliasing
 - Supports MMIO request handling. MMIO requests are converted from TileLink to CHI in CoupledL2 and arbitrated with cacheable requests from the Slices
 
-`DefaultMatrixConfig` inherits the 512-set, 8-way structure of `DefaultConfig` and increases the Slice count from 4 to 8. Total capacity is $512 \times 8 \times 64\ \mathrm{B} \times 8 = 2\ \mathrm{MiB}$, determined by the sets per Slice, way count, cache-line size, and Slice count.
-
-The matrix configuration disables DataStorage's MCP2 request-interval restriction. Interface bandwidth is the limit when all Slices are continuously ready without conflicts. Actual throughput also depends on address distribution, queue occupancy, DataStorage contention, and coherence transactions.
-
-
 ## Functional Description
 
-CoupledL2 receives TileLink refill and replacement requests from the Xiangshan core's DCache / ICache / PTW, as well as matrix Get / PutFullData requests from CUTE. It transfers the corresponding data blocks and updates coherence states, while acting as RN-F in the on-chip network to maintain the Xiangshan core's cache coherence in the on-chip interconnect.
+CoupledL2 receives TileLink refill and replacement requests from the Xiangshan core's DCache / ICache / PTW. It transfers the corresponding data blocks and updates coherence states, while acting as RN-F in the on-chip network to maintain the Xiangshan core's cache coherence in the on-chip interconnect.
 
 The CoupledL2 module receives requests through the upstream TileLink channel controllers (SinkA / SinkC) and converts them into internal requests. The requests enter the main pipeline through request arbitration, read the directory to obtain the cache block state, and determine whether they can be processed based on the cache block state and request information:
 
-- If this cache level can directly process the request, it continues with data reads, directory updates, and other operations in the main pipeline, then enters GrantBuffer. AccessAckData for a matrix Get returns through the separate matrix interface; other responses return through TileLink channel D.
+- If this cache level can directly process the request, it continues with data reads, directory updates, and other operations in the main pipeline, then enters GrantBuffer.
 - If interaction with other caches is required to process the request, an MSHR is allocated. The MSHR sends sub-requests to upper and lower-level caches as needed. Upon receiving responses and meeting release conditions, the task is released back into the main pipeline for operations like reading buffers, reading/writing data, and updating the directory. It then proceeds to the channel controller module, converting into a TileLink bus response.
 
 When all operations required by a request are completed in the MSHR, the MSHR is released and waits to receive a new request.
@@ -157,12 +149,6 @@ The Release request processing flow is as follows:
 3. s3 obtains the directory lookup result (since L1 DCache and L2 have a strict inclusion relationship, Release will always hit); s3 writes the directory, and if there is dirty data, it needs to be written into DataStorage at s3
 4. s3 generates a ReleaseAck response, which exits the pipeline at one of the stages between s3 and s5, enters the GrantBuffer, and returns the ReleaseAck to L1.
 
-#### Matrix Get / PutFullData Request Processing Flow
-
-SinkA converts matrix requests to internal tasks, which pass through RequestBuffer and RequestArb into the main pipeline. A Get hit that does not need to obtain the latest data from an upper-level cache reads DataStorage. A miss allocates an MSHR to send ReadNotSharedDirty downstream. A TRUNK hit with an upper-level copy obtains the latest data through Probe. The returned AccessAckData carries the matrix task index and channel number and is sent by GrantBuffer through a separate 512-bit interface.
-
-The two PutFullData beats first enter PutBuffer; the final beat also produces an internal task. On a hit in a writable state with no upper-level copy, the main pipeline writes the new data directly to DataStorage. Otherwise, the data moves to the corresponding MSHR's RefillBuffer, awaiting the required MakeUnique and Probe toN before the write. Put returns AccessAck on TileLink channel D. See [Request arbiter and main pipeline](ReqArb_MainPipe.md) and [MSHR](MSHR.md) for the full classification and data flow.
-
 ### Replace path selection and replacement are performed after receiving the refill data.
 
 When the cache receives a new request but the set is full, according to conventional logic, it first needs to select a replacement way, write it to the lower-level cache to free up space for the upcoming refill of missing data, then wait for the new data block to be refilled from the lower-level cache before writing it in. However, this approach can lead to certain issues:
@@ -171,7 +157,7 @@ When the cache receives a new request but the set is full, according to conventi
 
 2. On the other hand, if during this period the upper-level cache attempts to access the replaced data block again, since the data block has already been released, it can only be fetched again from the lower-level cache, significantly increasing the access latency.
 
-CoupledL2 delays the selection of the replacement way and the release of the replaced data until the refill data is received. Specifically, when a request enters the cache, directory information is read to determine whether it is a hit. If it is a hit, the data is read and returned (standard process). If it is a miss, CoupledL2 does not select a replacement block based on the directory read result or schedule the release of the replacement block. Instead, it only allocates an MSHR entry and sends a request to the lower-level cache to fetch the data. After the lower level returns the refill data, the MSHR task reads the directory again, at which point the replacement block is selected, the data of the replacement block is read from the data storage unit, and released to the lower-level cache. Finally, the new data block is written into the storage unit. For a full-line Put, the request already carries the data, so it waits for the permission response to MakeUnique before using the same replacement-way query and old-line release mechanism.
+CoupledL2 delays the selection of the replacement way and the release of the replaced data until the refill data is received. Specifically, when a request enters the cache, directory information is read to determine whether it is a hit. If it is a hit, the data is read and returned (standard process). If it is a miss, CoupledL2 does not select a replacement block based on the directory read result or schedule the release of the replacement block. Instead, it only allocates an MSHR entry and sends a request to the lower-level cache to fetch the data. After the lower level returns the refill data, the MSHR task reads the directory again, at which point the replacement block is selected, the data of the replacement block is read from the data storage unit, and released to the lower-level cache. Finally, the new data block is written into the storage unit.
 
 Since interaction with DataStorage only occurs at stage s3 of the MainPipe, and the SRAM in DataStorage is single-ported, we cannot use a single MSHR Task to simultaneously (1) read out the content of the replaced data block and release it to the lower-level cache, and (2) write the new data block. Therefore, these two operations need to be divided into two tasks: MSHR Refill and MSHR Release, with Refill being issued before Release. Based on two additional considerations: (1) reading the old data must occur before writing the new data, and (2) data must be returned to L1 as quickly as possible, we assign the following tasks to the two MSHR Tasks respectively:
 
@@ -186,15 +172,11 @@ CoupledL2 supports parallel access for multiple requests to the same set. For mu
 
 CoupledL2 sends Refill Hints through CustomL1Hint before returning response data, allowing the core's LoadQueue to wake Loads waiting for refill. Hints and responses are processed in queue order; their actual separation depends on the pipeline and response-channel handshakes.
 
-Matrix AccessAckData also occupies a Hint queue entry to preserve response order, but sends no regular Hint to L1. Slice allows matrix data to return only when its matching matrix entry reaches the Hint queue head. The matrix interface handshake releases that Hint entry at the same time; see [GrantBuffer](upstream/GrantBuffer.md).
-
 ### Supports hardware prefetching
 
 CoupledL2's hardware prefetcher receives BOP prefetch requests and requests from L1 DCache and sends them to each Slice's prefetch queue. Conventional speculative prefetching uses OverwriteQueue, allowing new requests to overwrite older ones when full.
 
-Optional matrix-guided prefetching generates subsequent cache-line addresses from matrix descriptors supplied by CUTE and training on demand requests. This source uses a separate lossless queue that backpressures the address generator through ready when full, then arbitrates with the conventional prefetch queue before entering SinkA. `DefaultMatrixPrefetchConfig` enables matrix-guided prefetching; `DefaultMatrixOnlyPrefetchConfig` retains only this source. The default matrix configuration leaves it disabled. See [Matrix memory access path HBL2](HBL2.md) for the control interface and configuration boundaries.
-
-### Supports request merging
+### Supports request merging {#sec:coupledl2-request-merge}
 
 Experimental observations reveal that a significant portion of untimely prefetches exist in the L2 Cache. Although the prefetcher predicts future data needs, the requests are sent too late. When the cache miss caused by prefetching is still waiting for data from the lower-level cache in the MSHR, an Acquire request for the same address has already arrived at L2. To prevent such Acquire requests from being blocked at the RequestBuffer entry, which would occupy the L2 entry and prevent subsequent requests from entering, the current L2 design implements a mechanism to merge untimely Prefetch requests with subsequent Acquire requests for the same address. The request merging functionality is implemented as follows:
 
@@ -202,8 +184,6 @@ Experimental observations reveal that a significant portion of untimely prefetch
 2.  If the merge conditions are met, the new request does not need to enter the queue and be blocked. Instead, it directly enters the MSHR entry corresponding to the same-address Prefetch, marks the entry with mergeA, and adds a series of new request status information to include the contents of both requests.
 3.  When the target data returns from L3, the MSHR entry is awakened, and a task is sent to the main pipeline for processing. In the main pipeline, a replacement way is selected and new data is backfilled, while the meta of the data block is updated to the state after the Acquire request is processed. At the same time, the request also passes information to the prefetcher as training.
 4.  When processing request responses, this merge request enters the GrantBuffer from the main pipeline. For Prefetch requests, L2 returns a prefetch response; for Acquire requests, L2 returns data and responses to the upstream node that issued the Acquire via the grantQueue queue.
-
-When a matrix Get matches an outstanding prefetch at the same address, RequestBuffer updates late-prefetch statistics and continues waiting according to request conflict conditions. Demand request types eligible for `mergeA` are limited to AcquireBlock / AcquirePerm.
 
 ### Supports hardware handling of cache aliasing
 
