@@ -26,6 +26,7 @@ extra:
 
 nav:
   - 首页: index.md
+  - 总体架构: overview.md
   - 前端:
     - 分支预测单元:
       - frontend/BPU/index.md

@@ -29,6 +29,7 @@ extra:
 
 nav:
   - Home: index.md
+  - Architecture Overview: overview.md
   - Frontend:
     - Branch Prediction Unit:
       - frontend/BPU/index.md
