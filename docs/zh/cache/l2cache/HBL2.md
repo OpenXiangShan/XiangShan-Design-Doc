@@ -86,6 +86,6 @@ Put 响应为普通 D 通道 AccessAck，source 对应 TileLink source，用户�
 
 CustomL1Hint 为矩阵 AccessAckData 保存 isMatrixData 项。该项位于 Hint 队头时，Slice 才允许 MatrixDataOut 发送；矩阵数据握手同步释放该 Hint 项。矩阵项不向 L1 发出普通 Hint，也不占普通 D 通道的两个数据 beat。接收端背压会保留矩阵响应，并最终通过响应队列容量检查阻塞后续主流水线请求。详细规则见 [GrantBuffer](upstream/GrantBuffer.md)。
 
-## 可选矩阵引导预取
+## 矩阵引导预取
 
-矩阵引导预取利用 CUTE 提供的矩阵描述符和需求请求训练生成后续缓存行地址。`DefaultMatrixConfig` 默认关闭该功能，`DefaultMatrixPrefetchConfig` 开启该功能，`DefaultMatrixOnlyPrefetchConfig` 仅保留该预取来源。具体控制接口、地址生成、调度和队列行为见 [可选矩阵引导预取](MatrixPrefetch.md)。
+矩阵引导预取利用 CUTE 提供的矩阵描述符和需求请求训练生成后续缓存行地址。`DefaultMatrixConfig` 默认关闭该功能，`DefaultMatrixPrefetchConfig` 开启该功能，`DefaultMatrixOnlyPrefetchConfig` 仅保留该预取来源。具体控制接口、地址生成、调度和队列行为见 [矩阵引导预取](MatrixPrefetch.md)。

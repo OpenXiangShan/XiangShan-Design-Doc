@@ -86,6 +86,6 @@ Regular channel D responses containing data are sent in two beats. If the second
 
 CustomL1Hint records an isMatrixData entry for matrix AccessAckData. Slice allows MatrixDataOut to send only when that entry is at the head of the Hint queue, and the matrix-data handshake releases the matching Hint entry. Matrix entries send no regular Hint to L1 and do not use the two data beats on regular channel D. Receiver backpressure retains the matrix response and eventually blocks later main-pipeline requests through response-queue capacity checks. See [GrantBuffer](upstream/GrantBuffer.md) for the detailed rules.
 
-## Optional Matrix-Guided Prefetching
+## Matrix-Guided Prefetching
 
-Matrix-guided prefetching generates subsequent cache-line addresses from matrix descriptors supplied by CUTE and training on demand requests. `DefaultMatrixConfig` disables this feature by default, `DefaultMatrixPrefetchConfig` enables it, and `DefaultMatrixOnlyPrefetchConfig` retains only this prefetch source. See [Optional matrix-guided prefetching](MatrixPrefetch.md) for the control interface, address generation, scheduling, and queue behavior.
+Matrix-guided prefetching generates subsequent cache-line addresses from matrix descriptors supplied by CUTE and training on demand requests. `DefaultMatrixConfig` disables this feature by default, `DefaultMatrixPrefetchConfig` enables it, and `DefaultMatrixOnlyPrefetchConfig` retains only this prefetch source. See [Matrix-guided prefetching](MatrixPrefetch.md) for the control interface, address generation, scheduling, and queue behavior.

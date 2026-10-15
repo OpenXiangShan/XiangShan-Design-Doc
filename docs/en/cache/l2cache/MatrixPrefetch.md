@@ -1,4 +1,4 @@
-# Optional Matrix-Guided Prefetching
+# Matrix-Guided Prefetching
 
 Matrix-guided prefetching is enabled jointly by MatrixPrefetchParameters in L2 and EnableMatrixPrefetch in CUTE.
 

@@ -4,7 +4,7 @@
 
 The top level of CoupledL2 consists of multiple Slices, MMIOBridge, and prefetchers.
 
-XSAI adds the HBL2 matrix memory extension to CoupledL2. Matrix requests enter through TileLink channel A and share CoupledL2's directory, main pipeline, MSHRs, and coherence mechanism; matrix read data returns through a separate MatrixDataOut interface in each Slice. See [Matrix memory access path HBL2](HBL2.md) for detailed specifications, Get/Put flows, and response ordering, and [Optional matrix-guided prefetching](MatrixPrefetch.md) for matrix prefetching.
+XSAI adds the HBL2 matrix memory extension to CoupledL2. Matrix requests enter through TileLink channel A and share CoupledL2's directory, main pipeline, MSHRs, and coherence mechanism; matrix read data returns through a separate MatrixDataOut interface in each Slice. See [Matrix memory access path HBL2](HBL2.md) for detailed specifications, Get/Put flows, and response ordering, and [Matrix-guided prefetching](MatrixPrefetch.md) for matrix prefetching.
 
 The default prefetchers include the L2-local Best-Offset Prefetch (BOP) and a receiver for L1 DCache prefetch requests.
 

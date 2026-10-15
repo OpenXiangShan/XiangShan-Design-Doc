@@ -4,7 +4,7 @@
 
 CoupledL2 顶层分为多个 Slice、MMIOBridge 和预取器。
 
-XSAI 在 CoupledL2 上增加了 HBL2 矩阵访存扩展。矩阵请求通过 TileLink A 通道进入，共享 CoupledL2 的目录、主流水线、MSHR 和一致性机制；矩阵读数据通过每个 Slice 的独立 MatrixDataOut 返回。详细规格、Get/Put 流程和响应顺序见 [矩阵访存通路 HBL2](HBL2.md)，矩阵预取见 [可选矩阵引导预取](MatrixPrefetch.md)。
+XSAI 在 CoupledL2 上增加了 HBL2 矩阵访存扩展。矩阵请求通过 TileLink A 通道进入，共享 CoupledL2 的目录、主流水线、MSHR 和一致性机制；矩阵读数据通过每个 Slice 的独立 MatrixDataOut 返回。详细规格、Get/Put 流程和响应顺序见 [矩阵访存通路 HBL2](HBL2.md)，矩阵预取见 [矩阵引导预取](MatrixPrefetch.md)。
 
 默认预取器包括 L2 本地的预取器 Best-Offset Prefetch（BOP），以及接收 L1 DCache 预取请求的接收器。
 

@@ -1,4 +1,4 @@
-# 可选矩阵引导预取
+# 矩阵引导预取
 
 矩阵引导预取通过 L2 的 MatrixPrefetchParameters 与 CUTE 的 EnableMatrixPrefetch 配置联合启用。
 
