@@ -104,4 +104,4 @@ AB loader 按每逻辑行两个 entry 的固定间距写入，DataController 按
 
 ## 实现对应
 
-本章对应 [XSAI DefaultMatrixConfig](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85/src/main/scala/top/Configs.scala)、[CUTE 参数定义](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTEParameters.scala) 和 [CUTE 顶层连接](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTETOP.scala)。
+本章对应 [XSAI DefaultMatrixConfig](https://github.com/OpenXiangShan/XSAI/blob/ee268923b717/src/main/scala/top/Configs.scala)、[CUTE 参数定义](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTEParameters.scala) 和 [CUTE 顶层连接](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTETOP.scala)。

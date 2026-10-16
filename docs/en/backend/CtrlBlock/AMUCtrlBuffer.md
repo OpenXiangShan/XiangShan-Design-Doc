@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## Glossary of Terms
 
@@ -73,4 +73,4 @@ On a redirect, the buffer clears affected entries directly according to the circ
 
 Illegal matrix parameters and memory exceptions enter the ROB through the exception path. A redirect clears the control information of the faulting instruction. A software protocol handles matrix-register save/restore and completion synchronization for committed tasks.
 
-The implementation is in [AMUCtrlBuffer.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/rob/AMUCtrlBuffer.scala).
+The implementation is in [AMUCtrlBuffer.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/rob/AMUCtrlBuffer.scala).

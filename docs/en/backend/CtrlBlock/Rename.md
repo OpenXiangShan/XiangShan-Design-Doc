@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 The Rename module receives instruction decode information from the Decode module and allocates robIdx and physical registers based on the decode information, querying the corresponding physical registers for operands. Simultaneously, the module maintains the state of the freeList according to the instruction decode information, instruction commit information, and register release information from RenameTable. It also sends write requests to RenameTable to update the register mapping state during speculative execution, based on the instruction decode and commit information. Additionally, the module handles redirect requests from the ROB, updating the freeList state according to the redirect information. After renaming, Rename sends the renamed instruction information to the Dispatch module.
 

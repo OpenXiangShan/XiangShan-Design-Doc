@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## 术语说明
 
@@ -1183,4 +1183,4 @@ Table: YunSuan VfExp2 流水线
 
 wrapper 根据 mask 与 VL 生成 fflagsEn，汇总参与计算的元素异常标志；该表达式未按 vstart 排除元素。MGU 根据 vstart、VL、mask 和尾部策略合并结果数据。exp2 使用分段二次多项式近似，未提供全输入误差上界或正确舍入保证。
 
-实现见 [VFExp2 wrapper](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/wrapper/VFExp2.scala) 和 XSAI 固定依赖版本的 [YunSuan VfExp2](https://github.com/OpenXiangShan/YunSuan/blob/64e5cf98bc12d7a393aeb8102978ddcda72b7206/src/main/scala/yunsuan/vector/VfExp2.scala)。
+实现见 [VFExp2 wrapper](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/fu/wrapper/VFExp2.scala) 和 XSAI 固定依赖版本的 [YunSuan VfExp2](https://github.com/OpenXiangShan/YunSuan/blob/64e5cf98bc12d7a393aeb8102978ddcda72b7206/src/main/scala/yunsuan/vector/VfExp2.scala)。

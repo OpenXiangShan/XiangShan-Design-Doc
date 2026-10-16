@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## 术语说明
 
@@ -72,4 +72,4 @@ Table: MCfgGen 接口
 | walkMcfg | 输入 | CommitWidth 路配置 walk 信息 |
 | mcfg | 输出 | 当前译码使用的配置表 |
 
-实现见 [MCfgGen.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/decode/MCfgGen.scala) 和 [MCfgBuffer.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/rob/MCfgBuffer.scala)。
+实现见 [MCfgGen.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/decode/MCfgGen.scala) 和 [MCfgBuffer.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/rob/MCfgBuffer.scala)。

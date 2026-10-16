@@ -104,4 +104,4 @@ The AB loader writes with a fixed spacing of two entries per logical row, while 
 
 ## Implementation References
 
-This chapter corresponds to [XSAI DefaultMatrixConfig](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85/src/main/scala/top/Configs.scala), [CUTE parameter definitions](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTEParameters.scala), and [CUTE top-level connections](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTETOP.scala).
+This chapter corresponds to [XSAI DefaultMatrixConfig](https://github.com/OpenXiangShan/XSAI/blob/ee268923b717/src/main/scala/top/Configs.scala), [CUTE parameter definitions](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTEParameters.scala), and [CUTE top-level connections](https://github.com/OpenXiangShan/CUTE/blob/d27b93d61c359478f4202f8f42cbfe82c830912a/src/main/scala/CUTETOP.scala).

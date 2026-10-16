@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 The scalar memory functional units include ldu, stu, and mou. XSAI adds MLSU0 to the Mem scheduling and execution path to check addresses and parameters for matrix memory control requests. The instructions supported by each functional unit are listed below:
 
@@ -104,4 +104,4 @@ The control core can decode all instructions above and generate memory descripto
 
 MLSU writes its control results to [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md), which sends them to CUTE for data movement after ROB commit. See [MLSU](../../memblock/LSU/MLSU.md) for matrix memory queues, cross-page checks, and translation paths.
 
-See [MlsUnit.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/pipeline/MlsUnit.scala).
+See [MlsUnit.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/pipeline/MlsUnit.scala).

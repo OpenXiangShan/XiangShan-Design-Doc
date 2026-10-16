@@ -80,7 +80,7 @@ MLSQ 管理地址准备和 TLB 缺失重发，未实现矩阵访存的 RAW / RAR
 
 ## 对应实现
 
-- [MlsQueue.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/lsqueue/MlsQueue.scala)
-- [VirtualMlsQueue.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/lsqueue/VirtualMlsQueue.scala)
-- [MlsQueueReplay.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/lsqueue/MlsQueueReplay.scala)
-- [LsqWrapper.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/lsqueue/LsqWrapper.scala)
+- [MlsQueue.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/lsqueue/MlsQueue.scala)
+- [VirtualMlsQueue.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/lsqueue/VirtualMlsQueue.scala)
+- [MlsQueueReplay.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/lsqueue/MlsQueueReplay.scala)
+- [LsqWrapper.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/lsqueue/LsqWrapper.scala)

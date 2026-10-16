@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## Basic Information
 
@@ -107,7 +107,7 @@ MemBlock appends the 12 CUTE memory events after the memory unit, DTLB, PTW, and
 
 `rob_commitInstr` counts control-core instruction commits, while `amu_retire` counts retirement from CUTE's task window. After ROB commit, a matrix operation passes through request delivery, CUTE scheduling, and execution; it contributes to `amu_retire` when it completes at the window head.
 
-See [Backend.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/Backend.scala) and [MemBlock.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/MemBlock.scala).
+See [Backend.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/Backend.scala) and [MemBlock.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/MemBlock.scala).
 
 ### HPerfMonitor Counter Organization Module
 

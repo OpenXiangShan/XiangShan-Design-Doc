@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## 功能
 
@@ -29,4 +29,4 @@ MfScheduler 按配置监听整数和 mx 写回。MMA 等待三个规模源 ready
 
 来自 CtrlBlock 的 flush、DataPath 的 OG0/OG1 取消和标量 load dependency 取消均接入 MfScheduler。LdExuCnt 统计包括 MLSU 在内的访存执行资源；LdWakeupCnt、LdPfTrainCnt 统计产生标量 load 结果的标量 load 与混合访存单元。
 
-实现见 [Scheduler.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/issue/Scheduler.scala)。
+实现见 [Scheduler.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/issue/Scheduler.scala)。

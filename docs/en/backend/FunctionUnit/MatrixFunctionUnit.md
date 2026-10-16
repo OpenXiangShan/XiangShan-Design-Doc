@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## Design Specifications
 
@@ -73,4 +73,4 @@ With 9-bit dimension fields, the effective payload is 53 bits for MMA, 126 bits 
 
 See [MLSU](../../memblock/LSU/MLSU.md) for address translation and replay of matrix memory operations. CUTE handles data movement, task scheduling, and completion returns. The Fence implementation of matrix synchronization instructions is described in [IntFunctionUnit](./IntFunctionUnit.md#sec:matrix-sync).
 
-See [Mma.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/wrapper/Mma.scala) and the [matrix interface bundles](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/matrix/Bundles.scala).
+See [Mma.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/fu/wrapper/Mma.scala) and the [matrix interface bundles](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/fu/matrix/Bundles.scala).

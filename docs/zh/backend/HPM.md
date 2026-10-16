@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## 基本信息
 
@@ -107,7 +107,7 @@ MemBlock 将 12 个 CUTE 访存事件追加在访存单元、DTLB、PTW 和 ldDe
 
 `rob_commitInstr` 统计控制核指令提交，`amu_retire` 统计 CUTE 任务窗口退休。矩阵操作从 ROB 提交后，经过请求发送、CUTE 调度和执行，在窗口头完成时计入 `amu_retire`。
 
-实现见 [Backend.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/Backend.scala) 和 [MemBlock.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/MemBlock.scala)。
+实现见 [Backend.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/Backend.scala) 和 [MemBlock.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/MemBlock.scala)。
 
 ### HPerfMonitor 计数器组织模块
 

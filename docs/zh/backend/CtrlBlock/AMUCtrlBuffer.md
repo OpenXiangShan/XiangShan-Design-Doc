@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## 术语说明
 
@@ -73,4 +73,4 @@ valid && needAMU && writebacked && committed && !canDeq
 
 矩阵指令的参数非法或访存异常通过异常通路进入 ROB。发生异常的指令在重定向时清除其控制信息。矩阵寄存器的保存恢复与已提交任务的完成同步由软件协议处理。
 
-实现见 [AMUCtrlBuffer.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/rob/AMUCtrlBuffer.scala)。
+实现见 [AMUCtrlBuffer.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/rob/AMUCtrlBuffer.scala)。

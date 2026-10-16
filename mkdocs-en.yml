@@ -13,6 +13,9 @@ theme:
 markdown_extensions:
   replace_variables:
       yaml_file: docs/variables-en.yml
+  crossref:
+    figPrefix: "this figure"
+    tblPrefix: "this table"
 
 extra:
   scope: /
@@ -21,10 +24,10 @@ extra:
     title: Back to XiangShan Documentation Home
   alternate:
     - name: 中文
-      link: https://docs.xiangshan.cc/projects/design/zh-cn/latest/
+      link: https://docs.xiangshan.cc/projects/design/zh-cn/kunminghu-v2r2a/
       lang: zh
     - name: English
-      link: https://docs.xiangshan.cc/projects/design/en/latest/
+      link: https://docs.xiangshan.cc/projects/design/en/kunminghu-v2r2a/
       lang: en
 
 nav:

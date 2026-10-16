@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 The integer functional units include jmp, brh, i2f, i2v, f2v, csr, alu, mul, div, fence, bku, and the dimension-setting, type-configuration, and release-request units added by the matrix extension. Matrix multiply-accumulate and zeroing requests are generated in the Mf execution block; see [MatrixFunctionUnit](./MatrixFunctionUnit.md). The instructions supported by each functional unit are listed below:
 
@@ -254,7 +254,7 @@ Table: Fence Matrix Synchronization Behavior
 
 If the index cleared by msyncregreset conflicts with a set bit in the same-cycle return vector, the current implementation performs the clear and suppresses all increments from that return vector, including increments to other counters. With no conflict, every set bit increments its counter independently.
 
-`mfence` completes when the scalar SBuffer is drained; CUTE tasks may remain in flight. mrelease/macquire waits for earlier Store tasks and their dependency chains to complete, while unrelated Load or Compute tasks may continue. See [Release Synchronization Semantics](../../cute/TaskController.md#sec:cute-release) and [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/Fence.scala).
+`mfence` completes when the scalar SBuffer is drained; CUTE tasks may remain in flight. mrelease/macquire waits for earlier Store tasks and their dependency chains to complete, while unrelated Load or Compute tasks may continue. See [Release Synchronization Semantics](../../cute/TaskController.md#sec:cute-release) and [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/fu/Fence.scala).
 
 ## bku
 

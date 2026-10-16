@@ -18,10 +18,10 @@ extra:
     title: 回到香山文档首页
   alternate:
     - name: 中文
-      link: https://docs.xiangshan.cc/projects/design/zh-cn/latest/
+      link: https://docs.xiangshan.cc/projects/design/zh-cn/kunminghu-v2r2a/
       lang: zh
     - name: English
-      link: https://docs.xiangshan.cc/projects/design/en/latest/
+      link: https://docs.xiangshan.cc/projects/design/en/kunminghu-v2r2a/
       lang: en
 
 nav:

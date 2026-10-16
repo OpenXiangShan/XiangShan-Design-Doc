@@ -8,6 +8,12 @@
 
 [查看完整架构图](figure/xsai-architecture.svg)
 
+[@fig:xsai-overview-comparison] 以 50% 透明度显示沿用昆明湖 V2 的部分，突出 XSAI 新增与调整的部分。
+
+![XSAI 与昆明湖 V2 的架构对比](figure/xsai-architecture-comparison.svg){#fig:xsai-overview-comparison}
+
+[查看完整架构对比图](figure/xsai-architecture-comparison.svg)
+
 ## 控制核 {#sec:overview-core}
 
 控制核沿用昆明湖 V2 的取指和乱序执行结构。前端由分支预测单元、取指目标队列、指令缓存、取指单元和指令缓冲组成，向后端提供指令流。后端完成译码、重命名、分派、调度、执行和退休，整数、浮点和向量执行资源各自配有发射队列与物理寄存器文件。

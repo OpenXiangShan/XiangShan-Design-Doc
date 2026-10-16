@@ -3,7 +3,7 @@
 - Version: V2R2A
 - Status: OK
 - Date: 2026/10/13
-- commit: [XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit: [XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 ## Glossary of Terms
 
@@ -1183,4 +1183,4 @@ The pipeline's fixed latency parameter is 6. sNaN produces canonical NaN and set
 
 The wrapper generates fflagsEn from mask and VL and aggregates exception flags from participating elements; this expression does not exclude elements based on vstart. MGU merges result data according to vstart, VL, mask, and tail policy. exp2 uses a piecewise quadratic approximation and provides neither a full-input error bound nor a guarantee of correct rounding.
 
-See the [VFExp2 wrapper](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/wrapper/VFExp2.scala) and the XSAI-pinned [YunSuan VfExp2](https://github.com/OpenXiangShan/YunSuan/blob/64e5cf98bc12d7a393aeb8102978ddcda72b7206/src/main/scala/yunsuan/vector/VfExp2.scala).
+See the [VFExp2 wrapper](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/fu/wrapper/VFExp2.scala) and the XSAI-pinned [YunSuan VfExp2](https://github.com/OpenXiangShan/YunSuan/blob/64e5cf98bc12d7a393aeb8102978ddcda72b7206/src/main/scala/yunsuan/vector/VfExp2.scala).

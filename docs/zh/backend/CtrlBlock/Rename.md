@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 Rename 模块接收来自 Decode 模块的指令译码信息，并根据译码信息为指令分配 robIdx 和物理寄存器，通过操作数查询对应的物理寄存器。同时，该模块还会根据指令译码信息、指令提交信息和来自 RenameTable 的寄存器释放信息维护 freeList 的状态，以及根据指令译码信息和指令提交信息向 RenameTable 发送写请求，以更新推测执行时的寄存器映射状态。此外，该模块还会处理来自 ROB 的重定向请求，根据重定向信息重新更新 freeList 的状态。在完成重命名后，Rename 将重命名后的指令信息发送至 Dispatch 模块。
 

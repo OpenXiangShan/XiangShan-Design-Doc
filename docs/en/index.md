@@ -1,15 +1,19 @@
 # Preface {.unnumbered .unlisted}
 
-This document is _XiangShan Open-Source Processor Design Document_, providing a detailed introduction to the microarchitecture design and implementation of {{processor_name}}.
+XiangShan's native AI processor, XiangShan AI (XSAI), is an AICPU that integrates high-performance general-purpose computing and AI inference.
 
-You can obtain the latest version of this document from:
+This document, _XiangShan Native AI Processor Design Document_, describes the microarchitecture and implementation of the XSAI processor IP.
 
-* Website: [https://docs.xiangshan.cc/projects/design/](https://docs.xiangshan.cc/projects/design/)
-* PDF file: [https://github.com/OpenXiangShan/XiangShan-Design-Doc/releases](https://github.com/OpenXiangShan/XiangShan-Design-Doc/releases)
+XSAI builds on the Kunminghu V2 microarchitecture. Its main components are the control core, the CUTE matrix compute unit, and the high-bandwidth L2 cache (HBL2). The control core handles general-purpose computing, vector operations, and matrix task control. CUTE performs matrix computation, and HBL2 provides coherent memory access for the control core and CUTE. See [Architecture Overview](overview.md) for the main modules and their relationships.
+
+The online documentation and PDF releases are available at:
+
+* Website: [Kunminghu V2R2A (XSAI) Design Document](https://docs.xiangshan.cc/projects/design/en/kunminghu-v2r2a/)
+* PDF releases: [XiangShan-Design-Doc Releases](https://github.com/OpenXiangShan/XiangShan-Design-Doc/releases)
 
 You can visit the XiangShan Documentation website [docs.xiangshan.cc](https://docs.xiangshan.cc/) for more documents.
 
-The original language of this document is Chinese. It is hosted on GitHub and collaboratively translated using the Weblate platform. You are welcome to join us in proofreading, correcting errors, and contributing to the translation to help improve the documentation!
+Chinese is the source language of this document. The source files are hosted on GitHub, and the English version is updated alongside the Chinese content. You are welcome to help improve the documentation through proofreading, corrections, and translation.
 
 ## Notice {.unnumbered .unlisted}
 
@@ -21,16 +25,16 @@ This document provides interim information and may be updated periodically as ne
 
 ## Version Information {.unnumbered .unlisted}
 
-XSAI builds on the Kunminghu V2 control core, integrates the CUTE matrix compute unit, and extends instruction decode, matrix configuration, task scheduling, and memory paths. The XSAI design described here corresponds to the following source versions:
+The {{processor_name}} design described here corresponds to the following source versions. XSAI uses the remote `origin/master` commit verified on 2026-10-16; CUTE and XSAICache use the submodule pointers recorded by that commit:
 
 | Repository                                              | Branch or Integration Source | Source Commit                              |
 | ------------------------------------------------------- | ---------------------------- | ------------------------------------------ |
-| [XSAI](https://github.com/OpenXiangShan/XSAI)           | `master`                     | `e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f` |
-| [CUTE](https://github.com/OpenXiangShan/CUTE)           | XSAI-pinned commit           | `d27b93d61c359478f4202f8f42cbfe82c830912a` |
-| [XSAICache](https://github.com/OpenXiangShan/XSAICache) | XSAI-pinned commit           | `1186ab336ad130767f6e86fd6afc7cd1d24d1098` |
+| [XSAI](https://github.com/OpenXiangShan/XSAI) | `origin/master` | [`ee268923b717`](https://github.com/OpenXiangShan/XSAI/commit/ee268923b7175d79a9d0183a0181a684ccec9487) |
+| [CUTE](https://github.com/OpenXiangShan/CUTE) | XSAI submodule pointer | [`d27b93d61c35`](https://github.com/OpenXiangShan/CUTE/commit/d27b93d61c359478f4202f8f42cbfe82c830912a) |
+| [XSAICache](https://github.com/OpenXiangShan/XSAICache) | XSAI submodule pointer | [`1186ab336ad1`](https://github.com/OpenXiangShan/XSAICache/commit/1186ab336ad130767f6e86fd6afc7cd1d24d1098) |
 
 This document uses `DefaultMatrixConfig`: each AB matrix register holds 8 KiB, each C accumulator register holds 64 KiB, AB rows are 64 B wide, and L2 has 8 banks. CUTE uses the compute array parameters of `CUTE_8Tops_128SCP`, with tensor dimensions set from the control core's matrix parameters. Matrix prefetching is disabled in this configuration; the relevant chapters describe configurations with matrix prefetching, standalone CUTE presets, and the parameters and interfaces of other loaders.
 
 | Date       | Version         | Description                                                   |
 | ---------- | --------------- | ------------------------------------------------------------- |
-| 2026-10-13 | kunminghu-v2r2a | XSAI control core, matrix memory paths, HBL2, and CUTE design |
+| 2026-10-16 | kunminghu-v2r2a | XSAI control core, matrix memory paths, HBL2, and CUTE design |

@@ -8,6 +8,12 @@ This chapter uses `DefaultMatrixConfig` to introduce the main XSAI modules and t
 
 [View the full architecture diagram](figure/xsai-architecture.svg)
 
+In [@fig:xsai-overview-comparison], components retained from Kunminghu V2 appear at 50% opacity to highlight XSAI additions and modifications.
+
+![Architecture comparison between XSAI and Kunminghu V2](figure/xsai-architecture-comparison.svg){#fig:xsai-overview-comparison}
+
+[View the full architecture comparison diagram](figure/xsai-architecture-comparison.svg)
+
 ## Control Core {#sec:overview-core}
 
 The control core retains the instruction-fetch and out-of-order execution structure of Kunminghu V2. Its frontend comprises the branch prediction unit, fetch target queue, instruction cache, instruction fetch unit, and instruction buffer, supplying the backend with instructions. The backend handles decode, rename, dispatch, scheduling, execution, and retirement. Integer, floating-point, and vector execution resources each have issue queues and physical register files.

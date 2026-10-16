@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 标量访存功能单元包括 ldu, stu, mou；XSAI 另在 Mem 调度与执行通路增加 MLSU0，负责矩阵访存控制请求的地址和参数检查。每个功能单元支持的指令如下表：
 
@@ -104,4 +104,4 @@ whole 形式在 MlsUnit 中按寄存器物理几何确定规模和步长。有�
 
 MLSU 的控制结果写入 [AmuCtrlBuffer](../CtrlBlock/AMUCtrlBuffer.md)，待 ROB 提交后送往 CUTE 执行数据搬运。矩阵访存的队列、跨页检查和翻译路径见 [MLSU](../../memblock/LSU/MLSU.md)。
 
-实现见 [MlsUnit.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/mem/pipeline/MlsUnit.scala)。
+实现见 [MlsUnit.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/mem/pipeline/MlsUnit.scala)。

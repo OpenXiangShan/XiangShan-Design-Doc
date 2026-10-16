@@ -3,7 +3,7 @@
 - 版本：V2R2A
 - 状态：OK
 - 日期：2026/10/13
-- commit：[XSAI e8fb1a14](https://github.com/OpenXiangShan/XSAI/tree/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f)
+- commit：[XSAI ee268923](https://github.com/OpenXiangShan/XSAI/tree/ee268923b7175d79a9d0183a0181a684ccec9487)
 
 整数功能单元包括 jmp, brh, i2f, i2v, f2v, csr, alu, mul, div, fence, bku，以及矩阵扩展增加的规模设置、类型配置和 release 请求生成单元。矩阵乘加与置零请求在 Mf 执行块中生成，见 [MatrixFunctionUnit](./MatrixFunctionUnit.md)。每个功能单元支持的指令如下表：
 
@@ -254,7 +254,7 @@ Table: Fence 矩阵同步行为
 
 若 msyncregreset 清零的索引与同周期返回向量中的置位项冲突，当前实现执行清零，并抑制该次返回向量的全部加一操作，包括其他索引。若没有这个冲突，则对所有置位项分别加一。
 
-`mfence` 以标量 SBuffer 排空作为完成条件，CUTE 任务可以继续在途。mrelease/macquire 等待此前 Store 及其依赖链完成，无关 Load 或 Compute 可以继续执行，详见 [Release 的同步语义](../../cute/TaskController.md#sec:cute-release)。实现见 [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/e8fb1a14fc85e05696e8b69a4ebfd2ca7cd1672f/src/main/scala/xiangshan/backend/fu/Fence.scala)。
+`mfence` 以标量 SBuffer 排空作为完成条件，CUTE 任务可以继续在途。mrelease/macquire 等待此前 Store 及其依赖链完成，无关 Load 或 Compute 可以继续执行，详见 [Release 的同步语义](../../cute/TaskController.md#sec:cute-release)。实现见 [Fence.scala](https://github.com/OpenXiangShan/XSAI/blob/ee268923b7175d79a9d0183a0181a684ccec9487/src/main/scala/xiangshan/backend/fu/Fence.scala)。
 
 ## bku
 
