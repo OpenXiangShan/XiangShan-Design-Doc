@@ -1,10 +1,5 @@
 # XiangShan ICache 设计文档
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/03/07
-- commit：[4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345](https://github.com/OpenXiangShan/XiangShan/tree/4b2c87ba1d7965f6f2b0a396be707a6e2f6fb345)
-
 ## 术语说明
 
 | 缩写 | 全称 | 描述 |
@@ -102,7 +97,7 @@ FTQ 分别把（预）取指请求发送到（预）取指流水线进行处理�
 
 #### 硬件预取与软件预取
 
-V2R2 后，ICache 可能接受两个来源的预取请求：
+当前实现中，ICache 可能接受两个来源的预取请求：
 
 1. 来自 Ftq 的硬件预取请求，基于 FDIP 算法。
 2. 来自 Memblock 中 LoadUint 的软件预取请求，其本质是 Zicbop 扩展中的 prefetch.i 指令，请参考 RISC-V CMO 手册。
@@ -149,7 +144,7 @@ ICache 负责对取指请求的地址进行权限检查（通过 ITLB 和 PMP）
 | PMP | mmio | 物理地址为 mmio 空间 | 禁止取指，标记取指块为 mmio，由 IFU 进行**非推测性**取指 |
 | ITLB | pbmt.NC | 页属性为不可缓存、幂等 | 禁止取指，由 IFU 进行**推测性**取指 |
 | ITLB | pbmt.IO | 页属性为不可缓存、非幂等 | 同 pmp mmio |
-| MainPipe | ECC error | 主流水检查发现 MetaArray/DataArray ECC 错误 | 见[ECC 一节](#sec:icache-ecc)，旧版同 ITLB af，新版做自动重取 |
+| MainPipe | ECC error | 主流水检查发现 MetaArray/DataArray ECC 错误 | 见[ECC 一节](#sec:icache-ecc)，通过失效和重取恢复 |
 
 ### DataArray 分 bank 的低功耗设计 {#sec:icache-dataarray-per-bank-lowpower}
 
@@ -223,7 +218,7 @@ ITLB 的冲刷比较特殊，其缓存的页表项仅需要在执行 `sfence.vma
 
 ### ECC {#sec:icache-ecc}
 
-首先需要指出，ICache 在默认参数下使用 parity code，其仅具备 1 bit 错误检测能力，不具备错误恢复能力，严格意义上不能算是 ECC（Error Correction Code）。但一方面，其可以配置为使用 secded code；另一方面，我们在代码中大量使用 ECC 来命名错误检测与错误恢复相关的功能（`ecc_error`、`ecc_inject`等）。因此本文档仍将使用 ECC 一词来指代错误检测、错误恢复、错误注入相关功能以保证与代码的一致性。
+ICache 在默认参数下使用 parity code，可以检测奇数个比特错误，但不具备直接纠错能力。编码参数可以配置为使用 SECDED code。代码和本文档使用 ECC 指代错误检测、错误恢复和错误注入相关功能（`ecc_error`、`ecc_inject` 等）。
 
 ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] 能力的一部分，可以参考 RISC-V RERI[^reri] 手册，由 CtrlUnit 进行控制。
 
@@ -235,7 +230,7 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 在 MissUnit 向 MetaArray 和 DataArray 重填数据时，会计算 meta 和 data 的校验码，前者和 meta 一起存储在 Meta SRAM 中，后者存储在单独的 Data Code SRAM 中。
 
-当取指请求读取 SRAM 时，会同步读取出校验码，在 MainPipe 的 s1/s2 流水级中分别对 meta/data 进行校验。软件可以通过向 CSR 中相应位置写入特定的值来使能/关闭这一功能，在 6-12 月的版本中为自定义 CSR `sfetchctl`，后续换成 mmio-mapped CSR，详见 [CtrlUnit 文档](./CtrlUnit.md)。
+当取指请求读取 SRAM 时，会同步读取出校验码，在 MainPipe 的 s1/s2 流水级中分别对 meta/data 进行校验。软件通过 MMIO 映射的 `eccctrl.enable` 使能或关闭这一功能；未实例化 CtrlUnit 时，检查默认开启，详见 [CtrlUnit 文档](./CtrlUnit.md)。
 
 在校验码设计方面，ICache 使用的校验码可由参数控制，默认使用的是 parity code，即校验码为对数据做规约异或 $code = \oplus data$。检查时只需将校验码和数据一起做规约异或 $error = (\oplus data) \oplus code$，结果为 1 则发生错误，反之**认为没有**错误（可能出现偶数个错误，但此处检查不出来）。
 
@@ -243,34 +238,16 @@ ICache 支持错误检测、错误恢复、错误注入功能，是 RAS[^ras] �
 
 为了减少检查不出的情况，目前将 data 划分成 DataCodeUnit（默认为 64bit）的单元分别进行奇偶校验，因此对每个 64B 的缓存行，总计会计算 $8(data) + 1(meta) = 9$ 个校验码。
 
-当 MainPipe 的 s1/s2 流水级检查到错误时，会进行以下处理：
+当 MainPipe 的 s1/s2 流水级检查到本地错误时，会进行以下处理：
 
-在 6 月至 11 月的版本中：
-
-1. 错误处理：引起 access fault 异常，由软件处理。
-2. 错误报告：向 BEU 报告错误，后者会引起中断向软件报告错误。
-3. 取消请求：当 MetaArray 被检查出错误时，其读出的 ptag 不可靠，进而对 hit 与否的判断不可靠，因此无论是否 hit 都不向 L2 Cache 发送请求，而是直接将异常传递到 IFU、进而传递到后端处理。
-
-在后续版本（[#3899](https://github.com/OpenXiangShan/XiangShan/pull/3899) 后）实现了错误自动恢复机制，故只需进行以下处理：
-
-1. 错误处理：从 L2 Cache 重新取指，见[下节](#sec:icache-recover-from-error)。
-2. 错误报告：同上向 BEU 报告错误。
+1. 向 BEU 报告错误；是否形成 NMI 取决于 BEU 掩码和 RNMI 接收条件。
+2. 失效出错项，并重新从 L2 Cache 取指，见[下节](#sec:icache-recover-from-error)。如果重新取指收到下级 TL corrupt，则产生 Instruction Access Fault。
 
 #### 错误自动恢复 {#sec:icache-recover-from-error}
 
-注意到，ICache 与 DCache 不同，是只读的，因此其数据必然不是 dirty 的，这意味着我们总是可以从下级存储结构（L2/3 Cache、memory）中重新获取正确的数据。因此，ICache 可以通过向 L2 Cache 重新发起 miss 请求来实现错误自动恢复。
+ICache 是只读缓存，不持有需要保留的唯一 dirty 数据副本，因此可以通过向 L2 Cache 重新发起 miss 请求来尝试恢复。是否能够完全恢复仍取决于下级返回的数据是否可靠，以及本地是否存在持续故障。
 
-实现重取功能本身只需要复用现有的 miss 取指路径，走 MainPipe -> MissUnit -> MSHR --tilelink-> L2 Cache 的请求路径。MissUnit 向 SRAM 重填数据时会自然地计算新的校验码并存储，因此在重取后会回到无错误的状态而不需要额外的处理。
-
-6-11 月和后续代码行为差异的伪代码示意如下：
-
-```diff
-- exception = itlb_exception || pmp_exception || ecc_error
-+ exception = itlb_exception || pmp_exception
-
-- should_fetch = !hit && !exception
-+ should_fetch = (!hit || ecc_error) && !exception
-```
+重取复用现有的 miss 路径：MainPipe → MissUnit → MSHR → L2 Cache。MissUnit 重填 SRAM 时会重新计算并存储校验码；在下级返回无错误数据且本地没有持续故障时，重填可恢复对应缓存内容。
 
 需要留意的是：为了避免重取后出现 multi-hit（即，同一个 set 内存在多个 way 的 ptag 相同），需要在重取前将 metaArray 对应位置的 valid 清空：
 
@@ -289,11 +266,10 @@ ICache 的错误注入功能由 CtrlUnit 控制，通过向 mmio-mapped CSR 中�
 - 向 MetaArray 或 DataArray 注入
 - 当 ECC 校验功能本身未使能时，注入失败
 
-软件注入流程示意如下：
+软件注入流程示意如下。示例假定地址恒等映射，因此同一地址可同时作为执行地址和 `ecciaddr` 的物理地址；非恒等映射环境需要分别保存目标虚拟地址和物理地址。
 
 ```asm
 inject_target:
-  # maybe do something
   ret
 
 test:
@@ -301,24 +277,32 @@ test:
   la t1, inject_target  # 载入注入目标地址
   jalr ra, 0(t1)        # 跳转到注入目标以保证其加载到 ICache
   sd t1, 8(t0)          # 向 CSR 写入注入目标地址
-  la t2, ($TARGET << 2 | 1 << 1 | 1 << 0)  # 设置注入目标、注入使能、校验使能
-  sd t1, 0(t0)          # 向 CSR 写入注入请求
+  li t2, ($TARGET << 2 | 1 << 1 | 1 << 0)  # 设置注入目标、注入使能、校验使能
+  sd t2, 0(t0)          # 向 CSR 写入注入请求
+  fence iorw, iorw      # 确保注入配置对后续读取可见
 loop:
-  ld t1, 0(t0)          # 读取 CSR
-  andi t1, t1, (0b11 << (4+1)) # 读取注入状态
-  beqz t1, loop         # 如果注入未完成，继续等待
+  ld t3, 0(t0)          # 保存完整快照；终态读取后硬件会清零
+  srli t4, t3, 4
+  andi t4, t4, 7        # istatus = (t3 >> 4) & 7
+  li t5, 2
+  beq t4, t5, done      # 注入完成
+  li t5, 7
+  beq t4, t5, error     # 注入失败
+  j loop
 
-  addi t1, t1, -1
-  bnez t1, error        # 如果注入失败，跳转到错误处理
-
-  jalr ra, 0(t1)        # 注入成功，跳转到注入目标地址以触发错误
+done:
+  jalr ra, 0(t1)        # 使用保留的目标地址触发错误检查
   j    finish           # 结束
 
 error:
-  # handle error
+  srli t5, t3, 7        # 从同一次快照读取 ierror
+  andi t5, t5, 7
+  # 根据 ierror 处理失败
 finish:
   # finish
 ```
+
+`eccctrl.istatus` 为 2 时表示注入完成，为 7 时表示失败；这两个终态在被读取后清零，因此应使用同一次读取的快照同时判断 `istatus` 和 `ierror`。目标代码加载后仍可能被替换，所以注入可能以“目标地址未命中”失败。
 
 我们编写了一个测试用例，见[此仓库](https://github.com/OpenXiangShan/nexus-am/pull/48)，其测试了如下情况：
 

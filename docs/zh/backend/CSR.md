@@ -1,10 +1,5 @@
 # CSR
 
-- 版本：V2R2
-- 状态：OK
-- 日期：2025/01/20
-- commit：[xxx](https://github.com/OpenXiangShan/XiangShan/tree/xxx)
-
 ## 术语说明
 
 Table: 术语说明
@@ -152,11 +147,13 @@ Table: smblockctl 的定义
 | SBUFFER_THRESHOLD                | [3:0]    | 7      | 控制 sbuffer 的 flush 阈值                              |
 | LDLD_VIO_CHECK_ENABLE            | 4        | 1      | 控制是否开启 ld-ld 违例检查，设 1 代表开启              |
 | SOFT_PREFETCH_ENABLE             | 5        | 1      | 控制是否开启 soft prefetch，设 1 代表开启               |
-| CACHE_ERROR_ENABLE               | 6        | 1      | 控制是否上报 cache 发生的 ecc 错误，设 1 代表开启       |
+| CACHE_ERROR_ENABLE               | 6        | 1      | DCache/Uncache 错误报告及部分执行单元错误处理使能，设 1 开启 |
 | UNCACHE_WRITE_OUTSTANDING_ENABLE | 7        | 0      | 控制是否支持 uncache 的 outstanding 访问，设 1 代表开启 |
 | HD_MISALIGN_ST_ENABLE            | 8        | 1      | 控制是否启用硬件非对齐 store                            |
 | HD_MISALIGN_LD_ENABLE            | 9        | 1      | 控制是否启用硬件非对齐 load                             |
 |                                  | [63:10]  | 0      | 保留                                                    |
+
+`CACHE_ERROR_ENABLE` 当前控制 DCache/Uncache 到 BEU 的错误报告，也用于可选精确 Load 错误和部分原子操作的错误处理。它并非全部缓存 ECC 的总开关：ICache 检查由 `eccctrl.enable` 控制，L2 检查由编译配置控制，BEU 本地/全局中断掩码及 `mnstatus.NMIE` 分别控制后续中断。
 
 ### srnctl
 

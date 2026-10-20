@@ -4,9 +4,9 @@
 
 ## mmio-mapped CSR
 
-CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地址可由参数 `cacheCtrlAddressOpt` 配置，默认地址为`0x38022080`。总大小为 128B。
+CtrlUnit 内实现了一组 MMIO 映射的 CSR，连接在 TileLink 总线上。地址由 `SoCParameters.ICacheCtrlRange` 配置，默认基址为 `0x38022080`，总大小为 128B；`SoCParameters.EnableICacheCtrl` 控制是否实例化。
 
-当参数 `cacheCtrlAddressOpt` 为 `None` 时，CtrlUnit **不会实例化**。此时 ECC 校验使能**默认开启**，软件不可控制关闭；软件不可控制错误注入。
+当 `SoCParameters.EnableICacheCtrl=false` 时，CtrlUnit **不会实例化**。此时 ECC 校验使能**默认开启**，软件不可控制关闭，也不可控制错误注入。
 
 目前实现的 CSR 如下：
 
@@ -23,8 +23,8 @@ CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地
 | eccctrl | enable | ECC 错误校验使能，原 `sfetchctl(0)` |
 | eccctrl | inject | ECC 错误注入使能，写 1 开始注入，读恒 0 |
 | eccctrl | itarget | ECC 错误注入目标，见后表 |
-| eccctrl | istatus | ECC 错误注入状态（read-only），见后表 |
-| eccctrl | ierror | ECC 错误原因（read-only），仅在`eccctrl.istatus===error`时有效，见后表 |
+| eccctrl | istatus | ECC 错误注入状态（只读），见后表 |
+| eccctrl | ierror | ECC 错误原因（只读），仅在 `eccctrl.istatus === error` 时有效，见后表 |
 | ecciaddr | paddr | ECC 错误注入物理地址 |
 
 `eccctrl.itarget`:
@@ -53,6 +53,8 @@ CtrlUnit 内实现了一组 mmio-mapped CSR，连接在 tilelink 总线上，地
 | 1 | inject 目标 SRAM 无效 (i.e. `eccctrl.itarget==rsvd`) |
 | 2 | inject 目标地址 (i.e. `ecciaddr.paddr`) 不在 ICache 中 |
 | 3-7 | rsvd |
+
+读取 `eccctrl` 时会返回当前字段快照。如果 `istatus` 为 `injected` 或 `error`，该次读取会将 `istatus` 和 `ierror` 清零，因此软件必须从同一次读取结果中同时解析状态和失败原因。
 
 ## 错误校验使能
 
