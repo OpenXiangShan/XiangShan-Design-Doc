@@ -2,7 +2,7 @@
 
 ## 功能描述
 
-CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一个memory map的寄存器控制的控制器，每一个支持ECC的硬件单元设置一个Control Bank。通过MMIO访存指令读写CtrlUnit中的配置寄存器。寄存器配置完成之后，L1 DCache会对第一次读取DCache触发ecc错误（比如load指令或者MainPipe）。
+CtrlUnit 用于控制 DCache 的 ECC 错误注入。每个核的 L1 DCache 配置一个 MMIO 寄存器控制器，每个支持 ECC 的硬件单元设置一个 Control Bank。软件通过 MMIO 访存指令读写配置寄存器。配置完成后，L1 DCache 会在后续读访问（例如 Load 或 MainPipe）中触发注入的错误。具体支持范围和限制见[ECC、总线错误与 RNMI](../../ras.md)。
 
 ### 特性 1：地址空间
 
@@ -50,7 +50,7 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
 
 ### 特性 3: Bus Error Unit控制器
 
-* DCache的ECC错误将统一发送到Bus Error Unit控制器处理。Bus Error Unit控制器保存信息有：
+* DCache 检测到的本地 ECC 错误在满足报告条件时发送到 Bus Error Unit 控制器处理。Bus Error Unit 控制器保存的信息有：
 
   Table: Bus Error Unit保存的信息
 
@@ -58,10 +58,14 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
   |---------------------|------------------------|--------------|------------|
   | cause               | 错误事件的原因           |   0          | 0x38010000 |
   | value               | 错误事件的物理地址        |  未定义       | 0x38010008 |
-  | enable              | 事件有效掩码             |  1           | 0x38010010 |
+  | enable              | 事件捕获有效掩码         |  0xF         | 0x38010010 |
   | global_interrupt    | 全局中断使能掩码          |  0           | 0x38010018 |
   | accrued             | 累积事件掩码             |  0           | 0x38010020 |
   | local_interrupt     | Hart 本地中断启用掩码     |  0           | 0x38010028 |
+
+  `enable` 只控制事件是否有资格更新 `cause` 和 `value`，不直接控制 `accrued` 的更新或中断输出。当前四个事件源依次为 I_ECC、D_ECC、U_ECC 和 L2_ECC，因此其复位值均为 1 时，寄存器低四位为 `0xF`。本地中断条件为 `(accrued & local_interrupt) != 0`，全局中断条件为 `(accrued & global_interrupt) != 0`；两种中断掩码复位值均为 0。事件被记录后是否产生 NMI，还取决于对应的掩码和 `mnstatus.NMIE`。
+
+  `cause` 和 `value` 只保存一份记录，而 `accrued` 按事件源累积。当前 I_ECC 的事件编号也是 0，且硬件仅在 `cause == 0` 时接受新的记录，因此 `cause == 0` 不能独立表示没有错误；软件应同时检查 `accrued`。`accrued` 按普通读写寄存器访问。
 
   * 地址空间
 
@@ -72,6 +76,8 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
     * ICache Ecc Error
 
     * DCache Ecc Error
+
+    * Uncache Ecc Error（U_ECC，报告 Uncache Store 返回的 denied/corrupt）
 
     * L2Cache Ecc Error
 
@@ -86,7 +92,7 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
 
 * 报告错误
 
-  * Tag ECC 错误：只要某一路出现 ECC 错误，就判断出现了 ECC 错误。
+  * Tag ECC 错误：在需要 Tag 的访问路径中，只要参与判断的 way 出现 ECC 错误，就认为该请求发生 Tag ECC 错误；实际报告还受操作类型限制。
 
     Table: Tag ECC错误与Tag命中关系
 
@@ -102,15 +108,13 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
 
     * Data ECC 错误：命中行如果出现 ECC 错误，则认为出现 ECC 错误，如果不命中则不处理。
 
-    * 如果指令访问触发 ECC 错误，则认为出现 Hardware error 并报告异常。
+    * 本地 ECC 错误是否生成精确同步异常取决于访问路径。对于普通 Load，`EnableAccurateLoadError` 默认关闭，此时本地 ECC 主要通过 BEU 报告；开启并满足 `cache_error_enable` 等条件后才使用延迟错误形成 Hardware Error。来自下级总线的 denied/corrupt 使用独立路径，不受该参数控制。
 
-    * 只要出发错误，都需要向 BEU 发送错误信息。
-    硬件检测到错误时，报送给 BEU，触发 NMI 外部中断
+    * 有效的本地 ECC 错误需要向 BEU 发送错误信息，但部分非 miss Store 和非 LR Atomic 路径会抑制 MainPipe 的报告。错误事件被 BEU 记录后，还须满足本地中断掩码和 RNMI 接收条件才可能产生 NMI。
 
 * 普通访存指令
 
-  * 对于普通的访存指令，例如 Load 指令，在执行时只会触发tag或者data的ECC 错误，并将错误
-  报送给 BEU，并且报告 Hardware Error(19)。
+  * 对于普通 Load，本地 Tag/Data ECC 错误会发送到 BEU。精确的 Hardware Error（19）路径受 `EnableAccurateLoadError` 控制，且当前默认关闭。下级 TL denied 产生 Load Access Fault（5），仅 corrupt 产生 Hardware Error（19）。
 
 * Probe/Snoop
 
@@ -136,13 +140,15 @@ CtrlUnit用于控制DCache的ECC错误注入。每一个核的L1DCache配置一�
 
     * 如果出现 data ecc error，则直接写入数据，不向 l2 报送错误
 
+    * 当前 StorePipe 地址试探路径的 `error` 和响应中的 `tag_error` 固定为 0。非 miss Store 进入 MainPipe 时也会抑制该次本地错误报告。
+
 * Atomics
 
-  * 对于 Atomic，报告异常，但是不向 l2 报送错误
+  * 对于 Atomic，下级 TL denied 按操作类型产生 Load/Store Access Fault，仅 corrupt 产生 Hardware Error。MainPipe 的本地 ECC 位于独立错误字段，当前 AtomicsUnit 不直接消费该字段，不能将本地 ECC 与下级 TL 错误统一描述。
 
 * 多错误选择
 
-  * 如果同时出现多个错误，则优先级为ldu0 > ldu1 > ldu2 > MainPipe
+  * 如果同时出现多个错误，当前汇聚优先级为 MainPipe > ldu0 > ldu1 > ldu2；硬件选择一条错误信息送往 BEU。
 
 \newpage
 ## 整体框图

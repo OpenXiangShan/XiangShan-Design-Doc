@@ -140,7 +140,7 @@ Page Cache 会 根据不同情况向 LLPTW、PTW、HPTW 或 Miss Queue 转发请
 
 ### 支持 ecc 校验
 
-Page Cache 支持 ecc 校验，当访问 l0 或 l1 项时会同时进行 ecc 检查。如果 ecc 检查报错，并不会报例外，而是会向 L2 TLB 发送该请求 miss 信号。同时 Page Cache 将 ecc 报错的项刷新，重新发送 PTW 请求。其余行为和 Page Cache miss 时相同。ecc 检查采用 secded 策略。
+Page Cache 的 l0/l1 SRAM 项支持可选 SECDED 校验，但 `enablePTWECC` 默认关闭，关闭时不会实例化相应 ECC 字段。开启后，访问这些项时会同时进行 ECC 检查；如果检查报错，不会直接产生同步异常，而是向 L2 TLB 返回 miss、失效对应 set 的全部 way，并重新发送 PTW 请求。后续 Page Walk 中的其他访问异常仍按原流程处理。整体报告关系见[ECC、总线错误与 RNMI](../../../ras.md)。
 
 ### 支持 sfence 刷新
 
@@ -183,5 +183,3 @@ Page Cache 的信号列表主要可以归纳成如下 3 类：
 ## 接口时序
 
 Page Cache 通过 valid-ready 方式与 L2 TLB 中的其他模块进行交互，涉及到的信号较为琐碎，且没有特别需要关注的时序关系，因此不再赘述。
-
-
