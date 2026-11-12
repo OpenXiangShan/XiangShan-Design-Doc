@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0" pages="9">
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0" pages="10">
   <diagram id="37E5Edcin12c_BSkEWew" name="pipeline">
-    <mxGraphModel dx="878" dy="565" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1368" dy="754" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -1516,6 +1516,44 @@
             <mxPoint x="20" y="45" as="sourcePoint" />
             <mxPoint x="20" y="-5" as="targetPoint" />
           </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="T8AEWkUL-W6A2ShqsxqV" name="ECC">
+    <mxGraphModel dx="547" dy="302" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Noto Sans SC;" value="cacheline 0" vertex="1">
+          <mxGeometry height="20" width="80" x="80" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Noto Sans SC;" value="cacheline 1" vertex="1">
+          <mxGeometry height="20" width="80" x="160" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Noto Sans SC;" value="Fetch Block" vertex="1">
+          <mxGeometry height="20" width="70" x="120" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-6" edge="1" parent="1" source="VYXJjaPF1lDu4TUYXjCX-7" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0;entryDx=0;entryDy=0;exitX=0.25;exitY=1;exitDx=0;exitDy=0;fontFamily=Noto Sans SC;" target="VYXJjaPF1lDu4TUYXjCX-2" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="160" y="220" as="sourcePoint" />
+            <mxPoint x="160" y="220" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Noto Sans SC;" value="ECC failure" vertex="1">
+          <mxGeometry height="20" width="80" x="140" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-8" edge="1" parent="1" source="VYXJjaPF1lDu4TUYXjCX-10" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.25;exitY=1;exitDx=0;exitDy=0;fontFamily=Noto Sans SC;" target="VYXJjaPF1lDu4TUYXjCX-1" value="">
+          <mxGeometry height="50" relative="1" width="50" as="geometry">
+            <mxPoint x="120" y="210" as="sourcePoint" />
+            <mxPoint x="250" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-9" parent="1" style="shape=curlyBracket;whiteSpace=wrap;html=1;rounded=1;flipH=1;labelPosition=right;verticalLabelPosition=middle;align=left;verticalAlign=middle;legacyAnchorPoints=0;rotation=90;fontFamily=Noto Sans SC;" value="" vertex="1">
+          <mxGeometry height="70" width="20" x="145" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="VYXJjaPF1lDu4TUYXjCX-10" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontFamily=Noto Sans SC;" value="Hardware Error xepc" vertex="1">
+          <mxGeometry height="20" width="120" x="90" y="190" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
