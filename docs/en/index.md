@@ -14,10 +14,7 @@ You can obtain an latest version of this document from:
 You could visist XiangShan Document Center
 [docs.xiangshan.cc](https://docs.xiangshan.cc/) to get more documents.
 
-The original language of this document is Chinese. It is hosted on GitHub and
-collaboratively translated using the Weblate platform. You are welcome to join
-us in proofreading, correcting errors, and contributing to the translation to
-help improve the documentation!
+The original language of this document is Chinese. It is hosted on GitHub. You are welcome to join us in proofreading, correcting errors, and contributing to the translation to help improve the documentation!
 
 ## Notice {.unnumbered .unlisted}
 
