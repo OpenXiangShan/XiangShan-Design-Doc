@@ -13,16 +13,20 @@ define aligned(addr, alignSize=32):
 
 ## 参数列表 {#sec:bpu-mbtb-params}
 
-| 参数 | 默认值 | 描述 | 要求 |
-| ------ | --- | --------- | ------ |
-| `NumEntries` | 8192 | 表项总数 | 2 的幂次 |
-| `NumWay` | 4 | 组相联度 | 2 的幂次 |
-| `NumInternalBank` | 4 | 内部 bank 数 | 2 的幂次 |
-| `TagWidth` | 16 | tag 位宽 | |
-| `TargetWidth` | 20 | 跳转目标地址地位位宽 | |
-| `WriteBufferSize` | 4 | 写缓冲大小 | 大于等于 `NumWay` |
-| `Replacer` | "Lru" | 替换器 | "Lru" 或 "Plru" |
-| `TakenCntWidth` | 2 | 饱和计数器位宽 | |
+| 参数                    | 默认值                                  | 描述                             | 要求                                   |
+| ----------------------- | --------------------------------------- | -------------------------------- | -------------------------------------- |
+| `NumEntries`          | 8192                                    | 表项总数                         | 2 的幂次                               |
+| `NumWay`              | 4                                       | 组相联度                         | 2 的幂次                               |
+| `NumInternalBank`     | 4                                       | 内部 bank 数                     | 2 的幂次                               |
+| `TagWidth`            | 16                                      | tag 位宽                         |                                        |
+| `TargetWidth`         | 20                                      | 跳转目标地址地位位宽             |                                        |
+| `WriteBufferSize`     | 4                                       | 写缓冲大小                       | 大于等于`NumWay`                     |
+| `Replacer`            | "Lru"                                   | 替换器                           | "Lru" 或 "Plru"                        |
+| `TakenCntWidth`       | 2                                       | 饱和计数器位宽                   |                                        |
+| `NumVictimBtbEntries` | 32                                      | 所有 align bank 的 VBTB 表项总数 | 必须能被`NumAlignBanks` 整除         |
+| `VictimBtbReplacer`   | "plru"                                  | VBTB 全相联替换策略              | 传递给`ReplacementPolicy.fromString` |
+| `NumVictimBtbWays`    | `NumVictimBtbEntries / NumAlignBanks` | 每个 align bank 的 VBTB 表项数   | 大于 0                                 |
+| `NumBtbResultEntries` | `(NumWay + 1) * NumBtbAlignBanks`     | MainBTB 对外输出的结果 lane 总数 | 每个 align bank 新增一个 VBTB lane     |
 
 ## 表索引 {#sec:bpu-mbtb-index}
 
@@ -52,8 +56,8 @@ MainBtb:
 - `tag`：tag
 - `replacerSetIdx`：替换器索引，和 setIdx 一样长，但最低位与 internalBankIdx 对齐，达成面积开销与替换准确度的权衡
 - `targetLower`：跳转目标地址的低位
- - `position`：cfi 指令在当前 region 中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
- - `cfiPosition`：cfi 指令在整个取指块中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
+- `position`：cfi 指令在当前 region 中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
+- `cfiPosition`：cfi 指令在整个取指块中的位置，另请参考 [@sec:bpu-mbtb-half-align] [Half-align](#sec:bpu-mbtb-half-align) 小节
 
 ## 表项结构 {#sec:bpu-mbtb-entry}
 
@@ -66,6 +70,19 @@ MainBtb:
 - `takenCnt`：饱和计数器[^takenCnt]
 
 [^takenCnt]: 在逻辑上是 mbtb 表项的一部分，但在物理上单独存储，因为表项的其余属性通常在分配后不会被更新，而饱和计数器会被频繁更新，这样设计可以减少访问冲突和功耗。
+    
+### VBTB 表项 {#sec:bpu-mbtb-vbtb-entry}
+
+VBTB 是 MainBTB 的 victim cache，采用每个 align bank 内共享的全相联表结构。其表项复用 `MainBtbEntry` 的分支元数据，并额外保存原表项的 `setIdx` 和 `internalBankIdx`，以标识其在 MainBTB 中的来源位置。
+
+- `setIdx`：表项在原 MainBTB 中所属的 set，位宽为 `SetIdxLen = log2Ceil(NumSets)`
+- `internalBankIdx`：表项来源的 MainBTB internal bank，位宽为 `InternalBankIdxLen = log2Ceil(NumInternalBanks)`
+- `entry.tag`：与请求地址 tag 比较，用于 block-level raw hit，位宽为 `TagWidth`
+- `entry.attribute`：分支属性，类型为 `BranchAttribute`；`None` 表示表项无效
+- `entry.position`：相对 aligned start address 的分支位置，用于候选项选择，位宽为 `CfiAlignedPositionWidth`
+- `entry.targetLowerBits`：跳转目标低位，位宽为 `TargetWidth`
+- `entry.targetCarry`：跳转目标低位进位/借位标记，仅在 `EnableTargetFix` 为真时存在，与当前 `startPc` 一起参与完整 target 重构
+- `counter`：条件分支方向预测的饱和计数器，类型为 `TakenCounter`，位宽为 `TakenCntWidth`；新插入表项初始化为 `WeakPositive`
 
 ## 层级结构 {#sec:bpu-mbtb-hierarchy}
 
@@ -94,12 +111,15 @@ MainBtb:
 
 顶层内实例化 `NumAlignBank = FetchBlockSize / FetchBlockAlignSize`（默认为 2）个 AlignBank。
 
+每个 AlignBank 输出 `NumWay` 个 MainBTB 结果和 1 个 VBTB 结果。MainBtb 顶层将所有 AlignBank 的结果展平后送入后续预测器，并把最终预测得到的 VBTB lane taken 位在 s3 反馈给对应 AlignBank。
+
 ### 中层 AlignBank {#sec:bpu-mbtb-hierarchy-alignbank}
 
 - 处理每个 half-align 的 bank 内的事务
 - 过滤训练请求
 - 选择需要预测/训练的 InternalBank
-- 与 replacer 交互
+- 与 MainBTB replacer 和 VBTB replacer 交互
+- 管理 VBTB 预测结果、训练请求和 snapshot 仲裁
 
 在预测流水级上：
 
@@ -112,11 +132,12 @@ MainBtb:
 
 - t1：接收来自顶层的训练请求，过滤掉不需要训练的情况（命中且元数据无误则不需要更新 entry；命中且不是条件分支则不需要更新 counter），选择需要训练的 InternalBank 并送入 InternalBank
 
-AlignBank 内实例化 `NumInternalBank`（默认为 4）个 InternalBank；以及一个 replacer。
+AlignBank 内实例化 `NumInternalBank`（默认为 4）个 InternalBank、一个 MainBTB replacer 和一个 VBTB。VBTB 由该 align bank 下的所有 InternalBank 共享，使用全相联寄存器阵列保存从 MainBTB SRAM 中换出的表项。
 
 ### 底层 InternalBank {#sec:bpu-mbtb-hierarchy-internalbank}
 
 - 处理实际与各个物理 SRAM（entrySram，counterSram）和写缓冲交互的事务。
+- 通过 WriteBuffer 管理 MainBTB entry 写回；分配未命中覆盖有效表项时，在写回前生成 VBTB snapshot。
 
 对读请求：
 
@@ -127,6 +148,8 @@ AlignBank 内实例化 `NumInternalBank`（默认为 4）个 InternalBank；以�
 
 - 第 0 周期：接收来自 AlignBank 的写请求，送入写缓冲
 - 第 x 周期：当 SRAM 可写（即当前没有读请求访问 SRAM）时，写缓冲回写到 SRAM。
+
+对于 VBTB snapshot，每个 MainBTB way 有独立的 snapshot 状态和槽位。`MainBtbInternalBank` 在覆盖 SRAM 前读出旧表项形成 `evicted`，保存待写入表项形成 `incoming`，并在 snapshot 被 VBTB 接收前禁止覆盖原 SRAM 内容。同一 InternalBank 内的多个 way 通过 round-robin arbiter 选择一个 snapshot 输出；如果 snapshot 发送时 SRAM 写端口尚未可用，则等待端口空闲后再写入 `incoming`。命中写不需要 snapshot。
 
 ## Half-align {#sec:bpu-mbtb-half-align}
 
@@ -162,6 +185,126 @@ mbtb 采用 Region-BTB 格式，即将整个地址空间划分成多个 region�
 2. 当跨页时，丢弃来自请求的第二个 alignBank 的分支，即 `cfiPc >= aligned(start+64)` 的分支 [^drop-cross-alignbank]
 
 [^drop-cross-alignbank]: 由于页大小 4KB，region 大小 32B，因此页边界一定也是 region 边界，所以当取指块跨页时，需要查询的两个 region 一定分别属于两个页，因此来自第二个 alignBank 的分支一定是超范围的。此处的“第二个”不是指物理下标，而是指 rotate 后的第二个请求进入的 alignBank。
+    
+## VBTB 子模块 {#sec:bpu-mbtb-vbtb}
+
+VBTB 是 MainBTB 的 victim cache，不是独立的 BPU 预测器。它按 align bank 划分，每个 align bank 包含一个由该 align bank 下所有 InternalBank 共享的全相联寄存器阵列。VBTB 保存 MainBTB 分配未命中时从 SRAM 中替换出的旧表项，并与 MainBTB 结果并行参与 MBTB 预测。
+
+### 预测流程 {#sec:bpu-mbtb-vbtb-prediction}
+
+VBTB 使用 MBTB 的公共 s0–s3 流水级；以下描述的是 VBTB 在各级中的参与方式。
+
+#### s0：准备查询条件 {#sec:bpu-mbtb-vbtb-prediction-s0}
+
+VBTB 在 s0 没有独立的 SRAM 读操作，也不锁存 VBTB 表项。`MainBtb` 根据 fetch block 的 `startPc` 为每个 align bank 生成对应的地址、position 高位和 `crossPage` 信息，并按照起始 align bank 对请求进行旋转。`AlignBank` 从地址中提取 `setIdx` 和 `internalBankIdx`，只向选中的 InternalBank 发起 MainBTB SRAM 读请求。上述地址和对齐信息经过 s0 到 s1 的流水寄存，供 VBTB 使用；VBTB 的寄存器阵列在后续阶段对这些查询条件做组合比较。
+
+#### s1：全相联匹配并选择候选项 {#sec:bpu-mbtb-vbtb-prediction-s1}
+
+s1 时，MainBTB 接收 InternalBank 的 SRAM 读结果并形成 `s1_rawEntries`，VBTB 同时使用对齐后的 `startPc` 进行全相联搜索。VBTB 表项满足以下条件时产生 block-level raw hit：
+
+```text
+entry.valid
+&& entry.internalBankIdx == request.internalBankIdx
+&& entry.setIdx          == request.setIdx
+&& entry.tag             == request.tag
+```
+
+raw hit 还要经过预测资格过滤：
+
+```text
+entry.position >= alignedInstOffset
+&& !crossPage
+```
+
+VBTB 允许同一个 fetch block 中不同 position 的多个表项同时 raw hit，但对外只选择一个表项：先选择最小的 `position`，position 相同时选择物理 way 编号较小的表项。
+
+选中的 VBTB 表项生成一个 `Prediction`：`cfiPosition` 由 `posHigherBits` 与保存的 position 拼接得到，target 由当前 `startPc`、保存的 target 低位和可选的 carry 重构，`attribute` 直接来自表项，`taken` 由 VBTB 的 `counter.isPositive` 给出。VBTB 同时通过 `s1_position` 将选中位置提前送给 BPU 的位置比较逻辑，与 MainBTB 的位置一起参与后续最早 taken 分支的选择。
+
+#### s2：锁存结果并输出 VBTB lane {#sec:bpu-mbtb-vbtb-prediction-s2}
+
+在 `s1_fire` 时，VBTB 锁存候选项 hit mask、选中项 one-hot way mask、选中表项内容和已生成的预测结果。s2 输出 `s2_prediction` 和 `s2_meta`，其中 `s2_meta.rawHit` 只表示 VBTB 选中了可预测表项，不等价于最终预测方向为 taken。
+
+`AlignBank` 将 `NumWay` 个 MainBTB 结果和 1 个 VBTB 结果拼接后输出，并为每个 lane 生成对应的训练 metadata。若 VBTB 候选项与某个有效 MainBTB 结果处于相同 position，VBTB 在该周期把对应表项置为无效。该清除只影响下一状态，不回滚已经生成的 s2 预测，也不重新进行当拍的结果仲裁，从而避免同一分支长期同时驻留在 MainBTB 和 VBTB 中。
+
+#### s3：根据最终预测结果更新替换状态 {#sec:bpu-mbtb-vbtb-prediction-s3}
+
+s3 不重新读取或改写 VBTB 表项，主要用于更新 VBTB replacer 的访问状态。BPU 综合 MainBTB、TAGE 和 SC 的结果生成最终 `s3_takenMask`，`MainBtb` 将每个 align bank 的 VBTB lane 对应的最终 taken 位反馈给该 AlignBank。只有同时满足以下条件时，VBTB 才 touch 被选中的物理 way：
+
+```text
+s3_fire && s3_vbtbTaken && s3_selectOH.orR
+```
+
+这里的 `s3_vbtbTaken` 是最终预测结果，不是 VBTB counter 的局部结果；单纯命中但最终未被采用的 VBTB 表项不会被 touch。
+
+### WriteBuffer 替换与 VBTB snapshot {#sec:bpu-mbtb-vbtb-snapshot}
+
+`InternalBank` 通过 WriteBuffer 暂存 MainBTB entry 写请求。当请求从 WriteBuffer 输出并准备写入 SRAM 时，根据请求携带的 `hit` 标志选择写回路径。该标志表示待更新分支是否命中 MainBTB 原有表项，与请求是否命中 WriteBuffer 内部缓存无关。
+
+| `hit`   | MainBTB 写回含义                             | VBTB 操作                                               |
+| --------- | -------------------------------------------- | ------------------------------------------------------- |
+| `true`  | 更新已有的 MainBTB 表项。                    | 写回 SRAM，不保存被覆盖项。                             |
+| `false` | 为新表项分配 MainBTB way，可能覆盖原有表项。 | 写入前读取旧表项作为`evicted`，并发送 VBTB snapshot。 |
+
+VBTB snapshot 只用于保护 MainBTB 分配未命中时被 SRAM 覆盖的旧表项。覆盖前，`InternalBank` 依次读出旧 SRAM 内容形成 `evicted`、保留待写入的新表项形成 `incoming`、发送 `setIdx`、`internalBankIdx`、`evicted` 和 `incoming`，并等待 snapshot 被 VBTB 接收后再允许写入 `incoming`。因此 snapshot 仲裁等待期间，MainBTB 不会覆盖保存旧表项所需的 SRAM 内容。
+
+每个 MainBTB way 有独立的 snapshot 状态和槽位。状态转换如下：
+
+| 状态          | 主要动作                                                                             |
+| ------------- | ------------------------------------------------------------------------------------ |
+| `Idle`      | 检测 WriteBuffer 中的 pending miss，记录`setIdx` 和 `incoming`。                 |
+| `ReadSram`  | 读取将被覆盖 way 的 SRAM 内容并保存为`evicted`。                                   |
+| `SendVbtb`  | 通过 InternalBank 内的 way arbiter 发送 snapshot；在 snapshot fire 前禁止覆盖 SRAM。 |
+| `WriteSram` | snapshot 发送时 SRAM 写端口不可用时，等待端口空闲后写入`incoming`。                |
+
+同一 InternalBank 内的多个 way 先通过 round-robin arbiter 选择一个 snapshot 输出；然后 `AlignBank` 再在多个 InternalBank 之间进行 round-robin 仲裁。最终被选中的 snapshot 送入共享 VBTB，AlignBank 仲裁器对 VBTB 接口保持 ready，因此最终仲裁输出的 `Valid` 请求就是 VBTB 的接收事件。若 snapshot 发送的同时 SRAM 写端口已经可用，`incoming` 可以在 snapshot fire 的周期写入；命中写不需要 snapshot。
+
+#### evicted 与 incoming {#sec:bpu-mbtb-vbtb-snapshot-entry}
+
+`evicted` 是覆盖前从 MainBTB SRAM 读出的旧表项。VBTB 只在 `evicted.valid` 为真且 `evicted` 与 `incoming` 不是同一个逻辑表项时保存它。插入位置按以下优先级决定：
+
+1. VBTB 中已存在相同 `internalBankIdx + setIdx + tag + position` 的 evicted 项，复用该物理 way；
+2. 否则，VBTB 中已存在 incoming 的副本，复用该副本所在的物理 way；
+3. 否则优先选择最低编号的无效 way；
+4. 如果 VBTB 已满，使用 VBTB replacer 选择 victim way。
+
+写入 evicted 时，同时写入来源的 `setIdx`、`internalBankIdx` 和完整的 `MainBtbEntry`，方向 counter 初始化为 `WeakPositive`。当前实现不保存 MainBTB 被替换项原有的方向 counter。
+
+`incoming` 不作为独立 victim 保存，而用于查找 VBTB 中是否已有相同逻辑表项的旧副本；如果存在，则将该副本置为无效，避免同一分支同时存在于 MainBTB 和 VBTB。如果 evicted 与 incoming 的 tag 和 position 相同，说明这次覆盖没有产生需要保存的不同 victim，VBTB 不插入 evicted。
+
+#### snapshot 与其他更新的并发优先级 {#sec:bpu-mbtb-vbtb-snapshot-priority}
+
+同一个 VBTB way 在同一周期可能同时受到 snapshot、预测重复清除和训练更新。最终寄存器写入优先级从高到低为：
+
+1. `evicted` snapshot 插入；
+2. incoming 已存在于 VBTB 时的重复项失效；
+3. s2 检测到 MainBTB/VBTB 同位置重复时的失效；
+4. 普通 VBTB entry 或 counter 训练。
+
+snapshot 插入优先于清除，可以保证刚从 MainBTB 踢出的有效旧项不会因同周期的重复检测而丢失。VBTB 对 incoming、evicted 和训练完整键的命中 mask 都有 one-hot 约束，用于检查同一逻辑表项出现多个物理副本的错误状态。
+
+### MainBTB 训练时 VBTB 的参与方式 {#sec:bpu-mbtb-vbtb-training}
+
+MainBTB 的训练分为 t0 和 t1：t0 根据训练 PC 预读 MainBTB replacer 状态，为可能的 MainBTB 分配准备 victim way；t1 锁存训练信息并执行 entry、counter 和 VBTB 更新。
+
+MainBTB 的训练 metadata 中包含每个 align bank 的 MainBTB 和 VBTB 结果 lane，但 AlignBank 对 VBTB 训练不直接依赖保存的 VBTB lane metadata。t1 时根据训练地址重新计算 `setIdx`、`internalBankIdx` 和 tag，并读取当前 VBTB 寄存器阵列，以当前状态进行精确匹配：
+
+```text
+entry.valid
+&& entry.internalBankIdx == trainInternalBankIdx
+&& entry.setIdx          == trainSetIdx
+&& entry.tag             == trainTag
+&& entry.position        == mispredict.cfiPosition
+```
+
+该命中 mask 有至多 one-hot 断言。
+
+#### VBTB 命中与未命中 {#sec:bpu-mbtb-vbtb-training-hit}
+
+如果 mispredict 分支精确命中 VBTB，`t1_vbtbHit` 为真。此时 MainBTB entry 写请求被抑制，VBTB 直接承担该表项的修正和方向训练，不会把同一逻辑表项再次分配到 MainBTB SRAM。
+
+VBTB 的 entry 修正和 counter 更新相互独立：`needIttage` 分支或 branch attribute 不一致时，用当前训练得到的 tag、position、attribute、target 等字段覆盖命中的 entry，并将对应 counter 重置为 `WeakPositive`；如果已解析的 branch 是条件分支且 position 匹配，则独立根据实际 `taken` 结果更新 counter。因此一次 VBTB 训练可能只更新 counter、只更新 entry，或同时更新二者。
+
+如果训练没有精确命中 VBTB，VBTB 不会因为训练 miss 直接分配新表项，而是继续使用 MainBTB 的原有路径：MainBTB 未命中时分配新 entry，MainBTB 命中但需要修正时更新原 way；如果写入覆盖了有效 MainBTB SRAM entry，则由 WriteBuffer snapshot 流程将被踢出的旧项送入 VBTB。VBTB 的新增项来源始终是 MainBTB SRAM 替换产生的 evicted 项。
 
 ## Replacer {#sec:bpu-mbtb-replacer}
 
@@ -215,3 +358,9 @@ cbfde: b761     j      cbf66 <cselib_invalidate_rtx.lto_priv.0+0x54>
 [^mbtb-touch-taken]: 包括无条件跳转或者预测为跳转的分支
 
 [^mbtb-touch-fall]: fallThrough 可以为不跳转的分支提供预测，因此将它们存在 mbtb 中价值不大
+
+### VBTB replacer {#sec:bpu-mbtb-vbtb-replacer}
+
+VBTB 在每个 align bank 内使用独立的全相联 replacer，其策略由 `VictimBtbReplacer` 配置。VBTB replacer 统一接受预测 touch 和训练 touch：预测路径只有 s3 最终采用 VBTB lane 且结果为 taken 时 touch；训练路径优先 touch snapshot 插入的 way，没有 snapshot 插入时，若发生 entry 更新则 touch entry way，否则 touch counter 更新对应的 way。
+
+VBTB 分配时始终优先使用无效 way，只有所有 way 有效时才使用策略选择的 victim。replacer 只维护替换优先级，不改变 VBTB 表项有效位。预测 touch 在逻辑上先于训练 touch，保证同周期事件的替换状态更新顺序确定。
