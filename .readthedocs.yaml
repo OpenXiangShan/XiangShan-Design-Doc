@@ -3,9 +3,6 @@
 
 version: 2
 
-submodules:
-  include: all
-
 # Set the OS, Python version, and other tools you might need
 build:
   os: ubuntu-24.04
@@ -21,4 +18,4 @@ mkdocs:
 # See https://docs.readthedocs.io/en/stable/guides/reproducible-builds.html
 python:
    install:
-   - requirements: utils/requirements.txt
+   - requirements: requirements.txt

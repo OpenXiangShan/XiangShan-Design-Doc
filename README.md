@@ -1,6 +1,6 @@
 # XiangShan Design Document
 
-![build via pandoc](https://github.com/OpenXiangShan/XiangShan-User-Guide/actions/workflows/build-pandoc.yml/badge.svg)
+![build via pandoc](https://github.com/OpenXiangShan/XiangShan-Design-Doc/actions/workflows/build-pandoc.yml/badge.svg)
 
 Documentation for XiangShan Design
 
@@ -18,17 +18,22 @@ We use Pandoc and MkDocs to build the document.
 
 Pandoc is used to build PDF and single-page HTML documents.
 
-```bash
-# Install dependencies
-bash ./utils/dependency.sh
+With Docker installed, use the [docs-utils](https://github.com/OpenXiangShan/docs-utils) build environment:
 
+```bash
+docker run --rm -it -v "$(pwd):/work" ghcr.io/openxiangshan/docs-utils:latest
+```
+
+Run the commands below inside the container, or locally with the Pandoc/TeX dependencies installed:
+
+```bash
 # Build PDF
 make pdf
 
 # Build PDF for print
 make pdf TWOSIDE=1
 
-# Build HTML (not ready)
+# Build HTML
 make html
 
 # Build default format (PDF)
@@ -45,7 +50,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
-pip install -r ./utils/requirements.txt
+pip install -r requirements.txt
 
 # Preview the website
 mkdocs serve -f mkdocs-zh.yml
@@ -54,8 +59,16 @@ mkdocs serve -f mkdocs-zh.yml
 mkdocs build -f mkdocs-zh.yml
 ```
 
+## Template updates
+
+Commit `.copier-answers.yml` to record the template source and version. A scheduled workflow opens draft PRs for updates; from a clean working tree, update manually with:
+
+```bash
+copier update --vcs-ref=master --defaults --conflict rej
+```
+
 ## LICENSE
 
-This document is licensed under CC BY 4.0.
+This document is licensed under CC BY 4.0. Files under `tools/` use the licenses and notices recorded there.
 
 Copyright © 2024 The XiangShan Team, Beijing Institute of Open Source Chip

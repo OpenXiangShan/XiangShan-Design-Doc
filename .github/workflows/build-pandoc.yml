@@ -5,7 +5,17 @@ on:
     branches: [ kunminghu-v3 ]
   pull_request:
     branches: [ kunminghu-v3 ]
+  workflow_dispatch:
   workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
 
 jobs:
   build:
@@ -23,14 +33,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          submodules: true
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
           fetch-tags: true
 
       - name: Build PDFs
         env:
           HOME: /root
         run: |
-          git config --global --add safe.directory $(pwd)
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           make pdf-one LANG=${{ matrix.lang }}
           make pdf-one LANG=${{ matrix.lang }} TWOSIDE=1
 
@@ -41,3 +52,4 @@ jobs:
           path: |
             xiangshan-design-doc-${{ matrix.lang }}.pdf
             xiangshan-design-doc-twoside-${{ matrix.lang }}.pdf
+          if-no-files-found: error

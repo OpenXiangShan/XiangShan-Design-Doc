@@ -16,17 +16,22 @@
 
 Pandoc 用于构建 PDF 和单页 HTML 格式的文档。
 
-```bash
-# 安装依赖
-bash ./utils/dependency.sh
+安装 Docker 后，可使用 [docs-utils](https://github.com/OpenXiangShan/docs-utils) 构建环境：
 
+```bash
+docker run --rm -it -v "$(pwd):/work" ghcr.io/openxiangshan/docs-utils:latest
+```
+
+在容器内，或本机已安装 Pandoc/TeX 依赖时，可以执行以下构建命令：
+
+```bash
 # 构建 PDF
 make pdf
 
 # 构建用于打印的 PDF
 make pdf TWOSIDE=1
 
-# 构建 HTML（暂不可用）
+# 构建 HTML
 make html
 
 # 执行默认构建（PDF）
@@ -52,8 +57,16 @@ mkdocs serve -f mkdocs-zh.yml
 mkdocs build -f mkdocs-zh.yml
 ```
 
+## 模板更新
+
+提交 `.copier-answers.yml` 以记录模板来源和版本。定时工作流会为模板更新创建 draft PR，也可以在工作区干净时手动更新：
+
+```bash
+copier update --vcs-ref=master --defaults --conflict rej
+```
+
 ## 许可协议
 
-这份文档采用知识共享署名 4.0 协议授权。
+这份文档采用知识共享署名 4.0 协议授权。 `tools/` 下的文件遵循其中记录的独立许可和声明。
 
 版权所有 © 香山团队·北京开源芯片研究院

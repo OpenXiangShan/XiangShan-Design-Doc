@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block site_meta %}
+  {{ super() }}
+
+  <!-- ReadTheDocs Version Addon -->
+  {% if config.extra.readthedocs_version %}
+    <meta name="readthedocs-addons-api-version" content="1" />
+  {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+
+  <!-- ReadTheDocs Version Addon -->
+  {% if config.extra.readthedocs_version %}
+    <script src="{{ 'assets/javascripts/readthedocs.js' | url }}"></script>
+  {% endif %}
+{% endblock %}

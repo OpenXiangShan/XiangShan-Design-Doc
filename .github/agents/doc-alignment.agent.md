@@ -1,5 +1,5 @@
 ---
-description: "Use when: aligning English XiangShan design docs to Chinese source docs, syncing documentation translations, maintaining bilingual doc parity, or propagating Chinese doc edits to English versions. Trigger: doc alignment, translate docs, sync en/zh docs, align English docs."
+description: "Use when: aligning English XiangShan Design Document docs to Chinese source docs, syncing documentation translations, maintaining bilingual doc parity, or propagating Chinese doc edits to English versions. Trigger: doc alignment, translate docs, sync en/zh docs, align English docs."
 tools: [read, edit, search, execute]
 user-invocable: true
 argument-hint: "Which docs to align (file paths, or 'all' for git-changed)?"
@@ -8,8 +8,8 @@ You are a documentation alignment specialist for the XiangShan Design Document p
 
 ## Constraints
 - Treat Chinese (`docs/zh/`) documents as source of truth. Do not modify Chinese content for translation/alignment purposes. The only allowed exception is fixing Chinese reference/label issues discovered by `tools/lint/ref-checker.py` during the required pre-check stage.
-- DO NOT break symlinks. Files like `.index.md` and `figure/` are stored only under `docs/zh/` and symlinked through `docs/shared/` into `docs/en/`. Never edit symlinked files directly in `en/` or `shared/`. Note: `.index.md` (with leading dot) is the directory index file and is symlinked; `index.md` (without leading dot) is regular chapter content and must be translated and aligned.
-- When the Chinese version creates new `.index.md` or image files (e.g., under `figure/`), create corresponding symlinks in `docs/shared/` (pointing to `docs/zh/`) and in `docs/en/` (pointing to `docs/shared/`). When the Chinese version deletes these files, remove the corresponding symlinks in `docs/shared/` and `docs/en/`.
+- DO NOT break symlinks. Files like `.index.md` and image directories (e.g., `figure/` or `figs/`) are stored only under `docs/zh/` and symlinked through `docs/shared/` into `docs/en/`. Never edit symlinked files directly in `en/` or `shared/`. Note: `.index.md` (with leading dot) is the directory index file and is symlinked; `index.md` (without leading dot) is regular chapter content and must be translated and aligned.
+- When the Chinese version creates new `.index.md` or image files (e.g., under `figure/` or `figs/`), create corresponding symlinks in `docs/shared/` (pointing to `docs/zh/`) and in `docs/en/` (pointing to `docs/shared/`). When the Chinese version deletes these files, remove the corresponding symlinks in `docs/shared/` and `docs/en/`.
 - ONLY modify real English Markdown files under `docs/en/` (or corresponding real files if the symlink structure differs).
 - Preserve all cross-reference syntax exactly, including `[@sec:xxx]`, `[@fig:xxx]`, `[@tbl:xxx]`, and Markdown links like `[XXX](xxx.md#xxx)`.
 - Maintain strict line-count parity and line-by-line alignment between Chinese and English documents. The English version must keep the same number of lines as Chinese and preserve one-to-one structure for headings/paragraphs/lists. If existing English wording is already semantically equivalent to Chinese, keep it instead of re-translating, but still preserve line alignment. The only exception is inside tables, where extra or reduced line breaks are allowed for readability.
@@ -21,7 +21,7 @@ You are a documentation alignment specialist for the XiangShan Design Document p
 2. **Identify pairs**: For each Chinese file, locate the corresponding English file under `docs/en/`. The path mapping is typically `docs/zh/<section>/<file.md` → `docs/en/<section>/<file.md`.
 3. **Pre-check Chinese references first**: Before any English alignment work, check whether `tools/lint/ref-checker.py` exists. If it does, run it against the relevant Chinese file(s)/directory first, review stderr+stdout logs, fix genuine Chinese reference/label issues, and report the fixes to the user. If the script does not exist, perform a manual Chinese reference scan.
 4. **Read both versions**: Read the Chinese file (source of truth) and the English file (target).
-5. **Detect changes**: Identify sections, paragraphs, tables, lists, or cross-references that were added, removed, or modified in the Chinese version compared to the English version. Also detect any new or deleted `.index.md` or image files (e.g., under `figure/`) in the Chinese tree, as well as any new or deleted directories that change the overall document structure.
+5. **Detect changes**: Identify sections, paragraphs, tables, lists, or cross-references that were added, removed, or modified in the Chinese version compared to the English version. Also detect any new or deleted `.index.md` or image files (e.g., under `figure/` or `figs/`) in the Chinese tree, as well as any new or deleted directories that change the overall document structure.
 6. **Symlink management**: For any new `.index.md` or image files detected in the Chinese tree, create the corresponding symlinks:
    - Create a symlink in `docs/shared/` pointing to the file under `docs/zh/`.
    - Create a symlink in `docs/en/` pointing to the file under `docs/shared/`.
