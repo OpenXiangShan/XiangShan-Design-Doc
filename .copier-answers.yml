@@ -1,0 +1,14 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY.
+_commit: b5445c4
+_src_path: https://github.com/OpenXiangShan/docs-utils.git
+default_branch: kunminghu-v3
+description_en: Documentation for XiangShan Design
+description_zh: 香山开源处理器设计文档
+docs_project_slug: design
+document_slug: xiangshan-design-doc
+github_owner: OpenXiangShan
+include_starter_docs: false
+pdf_top_level_division: part
+repository_name: XiangShan-Design-Doc
+site_name_en: XiangShan Design Document
+site_name_zh: 香山开源处理器设计文档

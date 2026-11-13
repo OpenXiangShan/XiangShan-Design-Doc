@@ -1,20 +1,83 @@
-INHERIT: utils/mkdocs-base.yml
-
-docs_dir: 'docs/zh'
-site_dir: 'site/zh'
-
 site_name: 香山开源处理器设计文档
+
 repo_url: https://github.com/OpenXiangShan/XiangShan-Design-Doc
+
 repo_name: XiangShan-Design-Doc
 
+docs_dir: docs/zh
+
+site_dir: site/zh
+
+copyright: |
+  <div>XiangShan Documents are licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</div>
+  <div>Copyright © 2024 - 2026 The XiangShan Team, Beijing Institute of Open Source Chip</div>
+
+theme:
+  name: material
+  custom_dir: tools/mkdocs_theme
+  features:
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - content.action.edit
+    - content.action.view
+  language: zh
+
+extra_css:
+  - assets/stylesheets/table_fix.css
+
+extra_javascript:
+  - assets/javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
 markdown_extensions:
+  admonition: {}
+  pymdownx.details: {}
+  pymdownx.superfences: {}
+  pymdownx.arithmatex:
+    generic: true
+  footnotes: {}
+  abbr: {}
+  pymdownx.snippets: {}
+  attr_list: {}
+  md_in_html: {}
+  def_list: {}
+  markdown_grid_tables: {}
+  markdown_captions: {}
+  table_captions: {}
+  crossref:
+    enable_ref_group: false
+    enable_ref_number: false
+    remove_ref_types:
+      - sec
+    figPrefix: 此图
+    tblPrefix: 此表
+    secPrefix: 此节
+    refDelim: 、
+    groupDelim: 、
+  remove_include: {}
   replace_variables:
-      yaml_file: docs/variables-zh.yml
+    yaml_file: docs/variables-zh.yml
+
+plugins:
+  search:
+    lang: zh
 
 extra:
-  scope: /
+  social:
+    - icon: fontawesome/solid/house
+      link: https://xiangshan.cc/
+      name: XiangShan Homepage
+    - icon: material/file-document-multiple
+      link: https://docs.xiangshan.cc
+      name: XiangShan Documents
+    - icon: fontawesome/brands/github
+      link: https://github.com/OpenXiangShan
+      name: XiangShan on GitHub
+  readthedocs_version: true
   back_to_home:
     url: https://docs.xiangshan.cc/
+    icon: material/file-document-multiple
     title: 回到香山文档首页
   alternate:
     - name: 中文
@@ -23,6 +86,7 @@ extra:
     - name: English
       link: https://docs.xiangshan.cc/projects/design/en/latest/
       lang: en
+  scope: /
 
 nav:
   - 首页: index.md

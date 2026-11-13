@@ -11,4 +11,8 @@ venv/
 *.tex
 *.html
 
+!tools/mkdocs_theme/**/*.html
+!tools/pandoc/figs/*.pdf
+!tools/pandoc/template.tex
+
 *.drawio:Zone.Identifier

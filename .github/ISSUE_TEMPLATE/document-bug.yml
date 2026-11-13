@@ -9,8 +9,8 @@ body:
         Thank you for reporting a documentation issue! You could use English or Chinese to open an issue.
         感谢您提交文档问题！您可以使用中文或英文提交议题。
 
-        This template is intended only for reporting issues of XiangShan Documentation (Design-Doc). If your issue concerns other parts of the documentation or the Xiangshan processor cores themselves, please go back and select a different option.
-        此模板仅用于提报香山文档（设计文档）本身的问题。如果您的问题涉及文档的其他部分，或与香山处理器核本身相关，请返回并选择其他选项。
+        This template is intended only for reporting issues of XiangShan Design Document. If your issue concerns other parts of the documentation or the Xiangshan processor cores themselves, please go back and select a different option.
+        此模板仅用于提报香山开源处理器设计文档本身的问题。如果您的问题涉及文档的其他部分，或与香山处理器核本身相关，请返回并选择其他选项。
         
         Please provide as much detail as possible to help us locate and fix it quickly.
         请尽可能详细填写以下信息，以帮助我们快速定位和修复。

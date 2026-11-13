@@ -1,0 +1,19 @@
+.md-typeset table:not([class]) {
+    display: table;
+}
+
+.md-typeset caption {
+	font-style: normal;
+	font-size: .72rem;
+	margin: 1em auto;
+	max-width: 24rem;
+}
+
+.md-typeset figcaption {
+	font-size: .72rem;
+	font-style: normal;
+}
+
+.md-typeset__table {
+    text-align: center;
+}

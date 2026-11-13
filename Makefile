@@ -11,24 +11,24 @@ LANGS := zh en
 VERSION := $(shell git describe --always)
 
 # Public dependencies
-DEPS := $(wildcard utils/*.lua) utils/template.tex
+DEPS := $(wildcard tools/pandoc/filters/*.lua) tools/pandoc/template.tex
 
 # Pandoc flags
 PANDOC_FLAGS += --variable=version:"$(VERSION)"
 PANDOC_FLAGS += --from=markdown+table_captions+multiline_tables+grid_tables+header_attributes-implicit_figures
 PANDOC_FLAGS += --table-of-contents
 PANDOC_FLAGS += --number-sections
-PANDOC_FLAGS += --lua-filter=include-files.lua
+PANDOC_FLAGS += --lua-filter=tools/pandoc/filters/include-files.lua
 PANDOC_FLAGS += --metadata=include-auto
-PANDOC_FLAGS += --lua-filter=utils/pandoc_filters/replace_variables.lua
-PANDOC_FLAGS += --lua-filter=utils/pandoc_filters/remove_md_links.lua
+PANDOC_FLAGS += --lua-filter=tools/pandoc/filters/replace_variables.lua
+PANDOC_FLAGS += --lua-filter=tools/pandoc/filters/remove_md_links.lua
 PANDOC_FLAGS += --filter pandoc-crossref
 
 # Pandoc LaTeX flags
 PANDOC_LATEX_FLAGS += --top-level-division=part
 PANDOC_LATEX_FLAGS += --pdf-engine=xelatex
-PANDOC_LATEX_FLAGS += --lua-filter=utils/pandoc_filters/svg_to_pdf.lua
-PANDOC_LATEX_FLAGS += --template=utils/template.tex
+PANDOC_LATEX_FLAGS += --lua-filter=tools/pandoc/filters/svg_to_pdf.lua
+PANDOC_LATEX_FLAGS += --template=tools/pandoc/template.tex
 
 ifneq ($(TWOSIDE),)
 	PANDOC_LATEX_FLAGS += --variable=twoside
@@ -55,10 +55,6 @@ clean:
 	rm -f preface-,*.txt
 	rm -f *.aux *.log *.toc *.lof *.lot
 	rm -rf build
-
-# Initialize submodules
-init:
-	git submodule update --init
 
 # Multi-language template
 define PER_LANG_RULES
@@ -111,5 +107,5 @@ pdf-one:
 html-one:
 	@$(MAKE) html-$(LANG)
 
-.PHONY: default clean init pdf html pdf-one html-one
+.PHONY: default clean pdf html pdf-one html-one
 .PHONY: $(addprefix pdf-,$(LANGS)) $(addprefix html-,$(LANGS))

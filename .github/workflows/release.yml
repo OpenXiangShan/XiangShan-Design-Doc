@@ -8,6 +8,10 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+  packages: read
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
@@ -17,20 +21,23 @@ jobs:
 
       - name: Set tag name
         id: vars
-        run: echo "TAG_NAME=${{ github.event.inputs.release_name }}" >> $GITHUB_ENV
+        env:
+          RELEASE_NAME: ${{ github.event.inputs.release_name }}
+        run: echo "TAG_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
 
       - name: Create tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin master
-          git checkout master
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
+          git fetch origin "kunminghu-v3"
+          git tag "$TAG_NAME" "origin/kunminghu-v3"
+          git push origin "refs/tags/$TAG_NAME"
 
   trigger-build:
     needs: create-release
     uses: ./.github/workflows/build-pandoc.yml
+    with:
+      ref: ${{ github.event.inputs.release_name }}
     secrets: inherit
 
   publish-release:
